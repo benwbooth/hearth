@@ -9,6 +9,7 @@ import ".."
 // month calendar.
 Indicator {
     id: root
+    ipcName: "clock"
     implicitWidth: col.implicitWidth + 16
 
     SystemClock {
@@ -69,7 +70,8 @@ Indicator {
             delegate: Label {
                 required property string shortName
                 horizontalAlignment: Text.AlignHCenter
-                text: shortName
+                text: shortName.substring(0, 2)
+                elide: Text.ElideNone
                 color: Theme.fgDim
                 font.pointSize: Theme.smallFontSize
             }
@@ -77,6 +79,7 @@ Indicator {
 
         MonthGrid {
             Layout.fillWidth: true
+            Layout.preferredHeight: 6 * 34
             month: cal.shown.getMonth()
             year: cal.shown.getFullYear()
             locale: Qt.locale("en_GB")

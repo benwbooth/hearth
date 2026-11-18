@@ -16,4 +16,5 @@ ShellRoot {
     NotificationPopups {}
     Osd {}
     PolkitDialog {}
+    BtPairDialog {}
 }

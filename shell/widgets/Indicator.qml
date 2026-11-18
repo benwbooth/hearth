@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell.Io
 import ".."
 
 // A tray indicator: a BarButton that opens `popupContent` on left click.
@@ -8,6 +9,9 @@ BarButton {
     property Component popupContent: null
     property alias popup: pop
     property bool shown: true
+    // When set, `hearth-ipc call indicator-<ipcName> toggle` opens the popup
+    // (for Hyprland binds and for headless testing).
+    property string ipcName: ""
     signal rightClicked()
     signal middleClicked()
     signal scrolled(int delta)
@@ -21,6 +25,14 @@ BarButton {
         else if (mouse.button === Qt.MiddleButton) root.middleClicked();
     }
     onWheel: w => root.scrolled(w.angleDelta.y !== 0 ? w.angleDelta.y : w.angleDelta.x)
+
+    IpcHandler {
+        target: root.ipcName ? "indicator-" + root.ipcName : ""
+        enabled: root.ipcName !== ""
+        function toggle(): void { if (root.popupContent) pop.toggle(); }
+        function open(): void { if (root.popupContent) pop.open = true; }
+        function close(): void { pop.close(); }
+    }
 
     BarPopup {
         id: pop

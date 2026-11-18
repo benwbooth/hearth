@@ -21,20 +21,20 @@ Row {
         delegate: TrayItem {}
     }
 
-    Clipboard {}
-    Media {}
-    Zones {}
-    Network {}
-    Rdp {}
-    Camera {}
-    Drives {}
-    Weather {}
-    Keyboard {}
-    Battery {}
-    Bluetooth {}
-    Brightness {}
-    Volume {}
-    Notifications {}
+    Clipboard { ipcName: "clipboard" }
+    Media { ipcName: "media" }
+    Zones { ipcName: "zones" }
+    Network { ipcName: "network" }
+    Rdp { ipcName: "rdp" }
+    Camera { ipcName: "camera" }
+    Drives { ipcName: "drives" }
+    Weather { ipcName: "weather" }
+    Keyboard { ipcName: "keyboard" }
+    Battery { ipcName: "battery" }
+    Bluetooth { ipcName: "bluetooth" }
+    Brightness { ipcName: "brightness" }
+    Volume { ipcName: "volume" }
+    Notifications { ipcName: "notifications" }
 
     Indicator {
         id: more

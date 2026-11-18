@@ -9,6 +9,8 @@ Singleton {
     id: root
     property bool launcherOpen: false
     property bool doNotDisturb: false
+    // The open BarPopup, so opening one closes the others.
+    property var activePopup: null
 
     IpcHandler {
         target: "launcher"
