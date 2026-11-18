@@ -58,7 +58,6 @@ Indicator {
     onMiddleClicked: if (sink?.audio) sink.audio.muted = !sink.audio.muted
 
     popupContent: ColumnLayout {
-        implicitWidth: 380
         spacing: 4
 
         PwObjectTracker { objects: root.sinks.concat(root.sources, root.streams) }
@@ -126,6 +125,7 @@ Indicator {
         readonly property real vol: node?.audio?.volume ?? 0
         readonly property bool mute: node?.audio?.muted ?? false
         Layout.fillWidth: true
+        Layout.preferredWidth: 380
         spacing: 0
 
         Label {
