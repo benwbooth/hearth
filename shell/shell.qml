@@ -18,7 +18,6 @@ ShellRoot {
 
     NotificationPopups {}
     Osd {}
-    PolkitDialog {}
     BtPairDialog {}
     ZoneOverlay {}
     Switcher {}

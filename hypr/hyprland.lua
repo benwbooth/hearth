@@ -106,6 +106,8 @@ hl.on("hyprland.start", function()
     -- Night light on a schedule (~/.config/hypr/hyprsunset.conf); hearth's
     -- brightness popup overrides it live.
     hl.exec_cmd("uwsm app -- hyprsunset")
+    -- Password prompts for admin actions: KDE's own polkit agent.
+    hl.exec_cmd("systemctl --user start plasma-polkit-agent.service")
     -- KDE Connect's tray icon (in Plasma it was a panel widget).
     hl.exec_cmd("uwsm app -- kdeconnect-indicator")
 end)
