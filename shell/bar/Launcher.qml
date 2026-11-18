@@ -20,15 +20,27 @@ BarButton {
         id: pop
         anchorItem: root
         padding: 10
-        open: ShellState.launcherOpen
+        // Not a binding: closing the popup assigns `open`, which would break
+        // it and leave the shortcut unable to reopen the launcher.
+        Connections {
+            target: ShellState
+            function onLauncherOpenChanged() {
+                const here = ShellState.isActiveScreen(root.QsWindow.window ? root.QsWindow.window.screen : null);
+                pop.open = ShellState.launcherOpen && here;
+            }
+        }
         onOpenChanged: {
-            ShellState.launcherOpen = open;
+            if (!open && ShellState.launcherOpen) ShellState.launcherOpen = false;
             if (open) { search.text = ""; list.currentIndex = 0; search.forceActiveFocus(); }
         }
 
-        ColumnLayout {
+        // Layouts compute their own implicit size, so the fixed popup size
+        // lives on a plain Item around it.
+        Item {
             implicitWidth: 520
             implicitHeight: 640
+        ColumnLayout {
+            anchors.fill: parent
             spacing: 8
 
             Rectangle {
@@ -184,4 +196,5 @@ BarButton {
             }
         }
     }
+        }
 }

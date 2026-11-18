@@ -67,8 +67,8 @@ PopupWindow {
             id: body
             anchors.fill: parent
             anchors.margins: popup.padding
-            implicitWidth: children.length > 0 ? children[0].implicitWidth : 0
-            implicitHeight: children.length > 0 ? children[0].implicitHeight : 0
+            implicitWidth: { let w = 0; for (const c of children) if (c.visible) w = Math.max(w, c.implicitWidth); return w; }
+            implicitHeight: { let h = 0; for (const c of children) if (c.visible) h = Math.max(h, c.implicitHeight); return h; }
         }
 
         Keys.onEscapePressed: popup.close()

@@ -1,5 +1,7 @@
 import QtQuick
+import Quickshell
 import Quickshell.Io
+import "../services"
 import ".."
 
 // A tray indicator: a BarButton that opens `popupContent` on left click.
@@ -12,6 +14,7 @@ BarButton {
     // When set, `hearth-ipc call indicator-<ipcName> toggle` opens the popup
     // (for Hyprland binds and for headless testing).
     property string ipcName: ""
+    readonly property bool ipcHere: ShellState.isActiveScreen(root.QsWindow.window ? root.QsWindow.window.screen : null)
     signal rightClicked()
     signal middleClicked()
     signal scrolled(int delta)
@@ -27,8 +30,8 @@ BarButton {
     onWheel: w => root.scrolled(w.angleDelta.y !== 0 ? w.angleDelta.y : w.angleDelta.x)
 
     IpcHandler {
-        target: root.ipcName ? "indicator-" + root.ipcName : ""
-        enabled: root.ipcName !== ""
+        target: root.ipcName && root.ipcHere ? "indicator-" + root.ipcName : ""
+        enabled: target !== ""
         function toggle(): void { if (root.popupContent) pop.toggle(); }
         function open(): void { if (root.popupContent) pop.open = true; }
         function close(): void { pop.close(); }

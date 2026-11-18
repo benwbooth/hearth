@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
 import "../widgets"
@@ -19,7 +20,7 @@ BarButton {
     onClicked: toggle()
 
     IpcHandler {
-        target: "desktop"
+        target: ShellState.isActiveScreen(QsWindow.window ? QsWindow.window.screen : null) ? "desktop" : ""
         function toggle(): void { root.toggle(); }
     }
 

@@ -21,6 +21,9 @@ Row {
     // [{ key, entry, windows: [Toplevel] }]: pins first, in order, then
     // unpinned running apps in the order they appeared.
     readonly property var groups: {
+        // Desktop entries load asynchronously: depend on the list so the
+        // pins resolve once it's filled.
+        void DesktopEntries.applications.values;
         const pins = Pins.ids;
         const tops = ToplevelManager.toplevels.values;
         const byKey = {};
@@ -39,12 +42,13 @@ Row {
             byKey[k].windows.push(t);
         }
         // Drop pins whose desktop entry no longer exists and isn't running.
-        return order.map(k => byKey[k]).filter(g => g.entry || g.windows.length > 0);
+        const out = order.map(k => byKey[k]).filter(g => g.entry || g.windows.length > 0);
+        return out;
     }
 
     // Super+N (Plasma's "activate task manager entry N").
     IpcHandler {
-        target: "tasks"
+        target: ShellState.isActiveScreen(QsWindow.window ? QsWindow.window.screen : null) ? "tasks" : ""
         function activate(n: int): void {
             const item = repeater.itemAt(n - 1);
             if (item) item.trigger();

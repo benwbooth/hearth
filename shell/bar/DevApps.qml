@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import "../widgets"
+import "../services"
 import ".."
 
 // The panel's Dev apps button (ported from devloop's org.devloop.devapps
@@ -26,7 +27,7 @@ Indicator {
     tooltipSub: summary()
 
     IpcHandler {
-        target: "devapps"
+        target: ShellState.isActiveScreen(QsWindow.window ? QsWindow.window.screen : null) ? "devapps" : ""
         function toggle(): void { root.popup.toggle(); }
         function open(): void { root.popup.open = true; }
         function close(): void { root.popup.close(); }

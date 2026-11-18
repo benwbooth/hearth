@@ -44,6 +44,16 @@ daemon() {
   for _ in $(seq 20); do [[ -s $pidfile ]] && break; sleep 0.05; done
 }
 
+# The hearth package's runtime PATH (ddcutil, cliphist, python with dbus...).
+runtime_path() {
+  local f=$XDG_RUNTIME_DIR/hearth-test/.runtime-path
+  if [[ ! -s $f ]]; then
+    local p; p=$(nix build --no-link --print-out-paths "$repo#hearth" | tail -1)
+    grep -oE "'/nix/store/[^']+/bin'" "$p/bin/hearth" | tr -d "'" | sort -u | paste -sd: > "$f"
+  fi
+  cat "$f"
+}
+
 hypr_sig() { cat "$dir/sig"; }
 hypr_wayland() { cat "$dir/wayland"; }
 
@@ -81,7 +91,7 @@ run)
   [[ -f $dir/qs.pid ]] && kill "$(cat "$dir/qs.pid")" 2>/dev/null || true
   sleep 0.3
   HYPRLAND_INSTANCE_SIGNATURE=$(hypr_sig) WAYLAND_DISPLAY=$(hypr_wayland) QT_QPA_PLATFORM=wayland \
-    PATH="$repo/helpers:$PATH" XDG_STATE_HOME="$dir/state" \
+    PATH="$repo/helpers:$(runtime_path):$(tool hyprland)/bin:$PATH" XDG_STATE_HOME="$dir/state" \
     daemon "$dir/qs.pid" "$dir/qs.log" "$(quickshell)/bin/quickshell" -p "$repo/shell"
   sleep 3
   grep -E 'ERROR|WARN|error' "$dir/qs.log" | grep -vE 'accessibility|host portal|Empty key' || true

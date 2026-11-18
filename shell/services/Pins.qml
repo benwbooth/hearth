@@ -19,7 +19,8 @@ Singleton {
         "ns-usbloader", "com.benwbooth.treetop"
     ]
 
-    property list<string> ids: []
+    // Defaults until (and unless) the saved file loads.
+    property list<string> ids: defaults
 
     function isPinned(id) { return ids.indexOf(id) >= 0; }
     function pin(id) { if (!isPinned(id)) { ids = ids.concat([id]); save(); } }

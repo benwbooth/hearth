@@ -45,7 +45,6 @@ hl.config({
         resize_on_border = true,
         extend_border_grab_area = 12,
         hover_icon_on_border = true,
-        layout = "dwindle",
     },
     decoration = {
         rounding = 6,
@@ -102,9 +101,18 @@ end)
 ---- LAYOUTS ---------------
 ----------------------------
 
--- Super+Space cycles tiling layouts; the bar's zones picker sets "zones"
--- (hypr/fanzyzones.lua) when that's loaded.
-local layouts = { "dwindle", "master", "scrolling" }
+-- FanzyZones (zones, macsimize, dynamic workspaces); fanzyzones.lua is
+-- installed next to this file. Its keys: Ctrl+Alt+Left/Right next/prev
+-- zone, Super+Ctrl+1..9 snap to zone, Super+Shift+PgUp/PgDn layouts,
+-- Super+Space snap all floating, Super+Shift+Space snap focused,
+-- Ctrl+Alt+C overlay; Shift while dragging snaps into a zone.
+local fz = require("fanzyzones")
+fz.setup()
+fz.bind_keys()
+hl.config({ general = { layout = "lua:fanzyzones" } })
+
+-- Super+Alt+Space cycles the tiling algorithm: zones and Hyprland's own.
+local layouts = { "lua:fanzyzones", "dwindle", "master", "scrolling" }
 local function cycle_layout()
     local cur = hl.get_config("general.layout")
     local nxt = layouts[1]
@@ -145,7 +153,7 @@ hl.bind(M .. " + Page_Down", hl.dsp.window.move({ workspace = "special:minimized
 hl.bind(M .. " + SHIFT + Page_Down", hl.dsp.workspace.toggle_special("minimized"))
 hl.bind(M .. " + V", hl.dsp.exec_cmd(hearth_ipc .. "indicator-clipboard toggle"))
 hl.bind(M .. " + T", hl.dsp.window.float({ action = "toggle" }))
-hl.bind(M .. " + SPACE", cycle_layout)
+hl.bind(M .. " + ALT + SPACE", cycle_layout)
 hl.bind(M .. " + J", hl.dsp.layout("togglesplit"))
 
 -- Quick tile (KDE Meta+arrows) = move the window that way in the layout.
