@@ -22,5 +22,6 @@ ShellRoot {
     BtPairDialog {}
     ZoneOverlay {}
     Switcher {}
+    Overview {}
     WallpaperInfo {}
 }
