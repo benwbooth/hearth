@@ -1,6 +1,630 @@
 import QtQuick
+import QtQuick.Layouts
+import QtQuick.Window
+import Quickshell
+import Quickshell.Io
+import "../widgets"
+import ".."
 
-// TODO: SysMonitor port (stub so the bar loads).
-Item {
-    visible: false
+// treetop's panel widget, KStats-style: CPU, memory, the main GPU and its
+// VRAM as small history graphs with the value inside, network rates, and
+// CPU/GPU temperatures. Ported from ~/src/treetop/plasmoid; the numbers come
+// straight from /proc and sysfs (amdgpu/hwmon) instead of ksystemstats.
+// Clicking shows/hides the treetop window; hovering an item asks treetop
+// (over D-Bus) which programs are using it.
+MouseArea {
+    id: root
+
+    // ---- settings (Ben's Plasma config: hiddenGpus=1,2,3, labels=stacked,
+    // showDisk=false; the rest are the plasmoid's defaults) ---------------
+    readonly property int updateRate: 1000
+    readonly property int historyLength: 30
+    readonly property var hiddenGpus: ["1", "2", "3"]   // display positions, "0" = GPU1
+    readonly property bool hideIdleGpus: true
+    readonly property bool showVram: true
+    readonly property bool showNetwork: true
+    readonly property bool showTemps: true
+    readonly property real graphWidth: 0.9
+    // Item height: the panel's thickness less Plasma's panel margins.
+    readonly property real h: Theme.barHeight - 8
+
+    // Same palette as the treetop app and its tray bars.
+    readonly property var palette: ({ cpu: "#43c96b", mem: "#d6b23e", gpu: "#c06fd8", vram: "#d070a8", disk: "#4fb3d9", net: "#4f8fe0", temp: "#e0894f", warn: "#e05a4f" })
+
+    implicitWidth: strip.implicitWidth + 8
+    implicitHeight: Theme.barHeight
+    hoverEnabled: true
+    acceptedButtons: Qt.LeftButton
+    onClicked: toggleTreetop()
+
+    // ---- open treetop ----------------------------------------------------
+    // Show/hide treetop over D-Bus (works however it was started); if it
+    // isn't running, start it (through devloop when that manages it).
+    function toggleTreetop() {
+        Quickshell.execDetached(["sh", "-c",
+            "busctl --user call com.benwbooth.treetop /treetop com.benwbooth.treetop Toggle >/dev/null 2>&1"
+            + " || \"$HOME/.local/bin/devloop\" start treetop >/dev/null 2>&1"
+            + " || exec setsid treetop >/dev/null 2>&1"]);
+    }
+
+    // ---- hardware discovery ------------------------------------------------
+    // GPUs (cards with amdgpu's busy/VRAM files), their edge temperature,
+    // whether they drive a connected display and their name; the CPU's hwmon
+    // temperature; the physical network interfaces. Re-read now and then
+    // for monitor hotplugs.
+    property var gpus: []          // [{card, dev, temp, display, vramTotal, name}], treetop's order
+    property string cpuTempPath: ""
+    property var netIfaces: []
+
+    Process {
+        id: discover
+        running: true
+        command: ["sh", "-c", `
+for c in /sys/class/drm/card[0-9]*; do
+  case \${c##*/} in *-*) continue;; esac
+  d=$(readlink -f $c/device)
+  [ -r $d/gpu_busy_percent ] || continue
+  h=$(ls -d $d/hwmon/hwmon* 2>/dev/null | head -n1)
+  t=""
+  for l in $h/temp*_label; do [ -r "$l" ] && [ "$(cat $l)" = edge ] && t=\${l%_label}_input; done
+  [ -z "$t" ] && [ -n "$h" ] && t=$h/temp1_input
+  conn=0; grep -qx connected $c-*/status 2>/dev/null && conn=1
+  name=""
+  if command -v lspci >/dev/null; then
+    name=$(lspci -vmm -s \${d##*/} 2>/dev/null | awk -F'\\t' '/^Device:/{d=$2} /^SDevice:/{s=$2} END{printf "%s", d; if (s!="") printf " (%s)", s}')
+  fi
+  printf 'gpu\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' "\${c##*/card}" "$d" "$t" "$conn" "$(cat $d/mem_info_vram_total 2>/dev/null || echo 0)" "$name"
+done
+for h in /sys/class/hwmon/hwmon*; do
+  case $(cat $h/name) in k10temp|coretemp|zenpower|cpu_thermal) printf 'cpu\\t%s\\n' $h/temp1_input; break;; esac
+done
+for n in /sys/class/net/*; do
+  case $(readlink -f $n) in */virtual/*) continue;; esac
+  printf 'net\\t%s\\n' \${n##*/}
+done`]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const gpus = [], ifaces = [];
+                let cpu = "";
+                for (const line of text.split("\n")) {
+                    const f = line.split("\t");
+                    if (f[0] === "gpu") gpus.push({ card: Number(f[1]), dev: f[2], temp: f[3], display: f[4] === "1", vramTotal: Number(f[5]) || 0, name: f[6] || "" });
+                    else if (f[0] === "cpu") cpu = f[1];
+                    else if (f[0] === "net") ifaces.push(f[1]);
+                }
+                // Like the treetop app: the one driving the display first,
+                // then by VRAM, so "GPU1" is the same card everywhere.
+                gpus.sort((a, b) => (b.display - a.display) || (b.vramTotal - a.vramTotal));
+                if (JSON.stringify(gpus) !== JSON.stringify(root.gpus)) root.gpus = gpus;
+                root.cpuTempPath = cpu;
+                if (JSON.stringify(ifaces) !== JSON.stringify(root.netIfaces)) root.netIfaces = ifaces;
+            }
+        }
+    }
+    Timer {
+        interval: 30000; running: true; repeat: true
+        onTriggered: discover.running = true
+    }
+
+    // ---- sampling ----------------------------------------------------------
+    component SysFile: FileView {
+        blockLoading: true
+        printErrors: false
+        function read() { reload(); return text(); }
+    }
+    SysFile { id: statFile; path: "/proc/stat" }
+    SysFile { id: memFile; path: "/proc/meminfo" }
+    SysFile { id: netFile; path: "/proc/net/dev" }
+    SysFile { id: cpuTempFile; path: root.cpuTempPath }
+
+    Instantiator {
+        id: gpuFiles
+        model: root.gpus
+        delegate: QtObject {
+            required property var modelData
+            property SysFile busy: SysFile { path: modelData.dev + "/gpu_busy_percent" }
+            property SysFile vram: SysFile { path: modelData.dev + "/mem_info_vram_used" }
+            property SysFile temp: SysFile { path: modelData.temp }
+            // Latest sample and histories (0..1).
+            property real usage: 0
+            property real vramUsed: 0
+            property real tempC: 0
+            property var hist: []
+            property var vhist: []
+        }
+    }
+
+    property real cpuUsage: 0      // %
+    property real cpuTempC: 0
+    property real memPercent: 0
+    property real memUsed: 0       // bytes
+    property real memTotal: 0
+    property real netDown: 0       // bytes/s
+    property real netUp: 0
+    property var hCpu: []
+    property var hMem: []
+    property real peakNet: 1
+    property int tick: 0
+    property var lastCpu: null
+    property var lastNet: null
+
+    function push(a, v) { const b = a.slice(a.length >= historyLength ? 1 : 0); b.push(Math.max(0, v || 0)); return b; }
+
+    function sample() {
+        // CPU: busy share of the jiffies since the last sample.
+        const cl = statFile.read().split("\n", 1)[0].trim().split(/\s+/).slice(1).map(Number);
+        if (cl.length >= 4) {
+            const idle = cl[3] + (cl[4] || 0);
+            const total = cl.reduce((s, x, i) => i < 8 ? s + x : s, 0);
+            if (lastCpu && total > lastCpu.total)
+                cpuUsage = Math.max(0, Math.min(100, 100 * (1 - (idle - lastCpu.idle) / (total - lastCpu.total))));
+            lastCpu = { idle: idle, total: total };
+        }
+        // Memory: used = total - available, like ksystemstats.
+        const mi = {};
+        for (const line of memFile.read().split("\n")) {
+            const m = line.match(/^(\w+):\s+(\d+)/);
+            if (m) mi[m[1]] = Number(m[2]) * 1024;
+        }
+        if (mi.MemTotal) {
+            memTotal = mi.MemTotal;
+            memUsed = mi.MemTotal - (mi.MemAvailable !== undefined ? mi.MemAvailable : mi.MemFree);
+            memPercent = 100 * memUsed / memTotal;
+        }
+        // Network: physical interfaces' byte counters.
+        let rx = 0, tx = 0;
+        for (const line of netFile.read().split("\n")) {
+            const m = line.match(/^\s*([^:\s]+):\s*(.*)$/);
+            if (!m || netIfaces.indexOf(m[1]) < 0) continue;
+            const f = m[2].trim().split(/\s+/).map(Number);
+            rx += f[0]; tx += f[8];
+        }
+        const now = Date.now();
+        if (lastNet && now > lastNet.t && rx >= lastNet.rx && tx >= lastNet.tx) {
+            const dt = (now - lastNet.t) / 1000;
+            netDown = (rx - lastNet.rx) / dt;
+            netUp = (tx - lastNet.tx) / dt;
+        }
+        lastNet = { t: now, rx: rx, tx: tx };
+        cpuTempC = cpuTempPath ? (Number(cpuTempFile.read()) || 0) / 1000 : 0;
+
+        hCpu = push(hCpu, cpuUsage / 100);
+        hMem = push(hMem, memPercent / 100);
+        peakNet = Math.max(131072, netDown + netUp, peakNet * 0.98);
+        for (let i = 0; i < gpuFiles.count; i++) {
+            const g = gpuFiles.objectAt(i);
+            if (!g) continue;
+            g.usage = Number(g.busy.read()) || 0;
+            g.vramUsed = Number(g.vram.read()) || 0;
+            g.tempC = (Number(g.temp.read()) || 0) / 1000;
+            g.hist = push(g.hist, g.usage / 100);
+            g.vhist = push(g.vhist, g.vramUsed / Math.max(1, g.modelData.vramTotal));
+        }
+        tick++;
+    }
+    Timer {
+        interval: root.updateRate; running: true; repeat: true; triggeredOnStart: true
+        onTriggered: root.sample()
+    }
+
+    // Idle for the last ~30 samples and not driving a display: folded away.
+    function gpuIdle(k) {
+        const g = gpuFiles.objectAt(k);
+        if (!hideIdleGpus || !g || g.modelData.display) return false;
+        if (g.hist.length < 20) return false;
+        return Math.max(...g.hist) < 0.03 && g.vramUsed / Math.max(1, g.modelData.vramTotal) < 0.1;
+    }
+    // Shown GPUs, as positions in `gpus` (hiddenGpus holds positions too).
+    readonly property var gpuIndexes: {
+        tick;
+        const out = [];
+        for (let k = 0; k < gpus.length; k++)
+            if (hiddenGpus.indexOf(String(k)) < 0 && !gpuIdle(k)) out.push(k);
+        return out;
+    }
+    readonly property real gpuTempC: {
+        tick;
+        const k = gpuIndexes.length ? gpuIndexes[0] : (gpus.length ? 0 : -1);
+        const g = k >= 0 ? gpuFiles.objectAt(k) : null;
+        return g ? g.tempC : 0;
+    }
+
+    // ---- formatting --------------------------------------------------------
+    function fmtRate(bytes) {
+        bytes = Number(bytes) || 0;
+        const u = ["B", "K", "M", "G"];
+        let i = 0;
+        while (bytes >= 1024 && i < 3) { bytes /= 1024; i++; }
+        return (bytes < 10 && i > 0 ? bytes.toFixed(1) : bytes.toFixed(0)) + u[i];
+    }
+    function fmtBytes(bytes) {
+        bytes = Number(bytes) || 0;
+        const u = ["B", "KiB", "MiB", "GiB", "TiB"];
+        let i = 0;
+        while (bytes >= 1024 && i < 4) { bytes /= 1024; i++; }
+        return bytes.toFixed(i > 0 ? 1 : 0) + " " + u[i];
+    }
+    readonly property font monoFont: Qt.font({ family: "monospace", pixelSize: Math.round(root.h * 0.3) })
+    readonly property font monoBold: Qt.font({ family: "monospace", pixelSize: Math.round(root.h * 0.3), bold: true })
+    function tempColor(t) { return t >= 80 ? "#e05a4f" : (t >= 60 ? "#e3c25a" : "#43c96b"); }
+    function pct(v) { return (Number(v) || 0).toFixed(0) + "%"; }
+
+    // ---- KStats-style pieces ---------------------------------------------
+    // A label written top to bottom with each letter upright, on rows that
+    // land on whole device pixels so fractional scaling can't round them
+    // unevenly. Rows are sized for four letters so every label matches.
+    component StackedLabel: Item {
+        id: sl
+        property string text
+        property real h: 22
+        property color color
+        readonly property real dpr: Screen.devicePixelRatio > 0 ? Screen.devicePixelRatio : 1
+        readonly property real row: Math.max(1, Math.floor(h * 0.92 / 4 * dpr)) / dpr
+        implicitWidth: Math.ceil(fm.advanceWidth("W") + 1)
+        implicitHeight: row * text.length
+
+        FontMetrics { id: fm; font: probe.font }
+        Label { id: probe; visible: false; font: Qt.font({ family: Theme.fontFamily, pixelSize: Math.max(5, Math.floor(sl.row * 0.8 * sl.dpr) / sl.dpr), bold: true }) }
+
+        Repeater {
+            model: sl.text.length
+            Label {
+                required property int index
+                x: 0
+                y: Math.round(index * sl.row * sl.dpr) / sl.dpr
+                width: sl.implicitWidth
+                height: sl.row
+                horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideNone
+                text: sl.text.charAt(index)
+                color: sl.color
+                font: probe.font
+            }
+        }
+    }
+
+    // One panel item: coloured stacked label and a small framed history
+    // graph with the value in its lower-left corner.
+    component KStat: RowLayout {
+        id: stat
+        property string label
+        property string kind
+        property color color: "#43c96b"
+        property string value
+        property var history: []       // 0..1
+        property real h: 22
+        spacing: Math.round(h * 0.06)
+
+        HoverHandler { onHoveredChanged: root.setHover(stat.kind, hovered) }
+
+        StackedLabel {
+            Layout.alignment: Qt.AlignVCenter
+            text: stat.label
+            h: stat.h
+            color: stat.color
+        }
+        Rectangle {
+            Layout.alignment: Qt.AlignVCenter
+            Layout.preferredWidth: Math.max(valueProbe.implicitWidth + 4, Math.round(stat.h * 1.56 * root.graphWidth))
+            Layout.preferredHeight: Math.round(stat.h * 0.8)
+            color: "transparent"
+            border.color: Qt.rgba(stat.color.r, stat.color.g, stat.color.b, 0.55)
+            border.width: 1
+            radius: 1
+            // Only measures the value's width; the canvas paints it.
+            Label {
+                id: valueProbe
+                visible: false
+                text: stat.value
+                font: Qt.font({ family: "monospace", pixelSize: Math.round(stat.h * 0.3), bold: true })
+            }
+            Canvas {
+                id: graph
+                anchors.fill: parent
+                anchors.margins: 1
+                onPaint: {
+                    const ctx = getContext("2d");
+                    ctx.reset();
+                    const w = width, hh = height;
+                    const v = stat.history;
+                    if (v && v.length >= 2) {
+                        const n = v.length;
+                        const y = i => hh - Math.min(1, Math.max(0, v[i])) * hh;
+                        ctx.beginPath();
+                        ctx.moveTo(0, hh);
+                        for (let i = 0; i < n; i++) ctx.lineTo(i / (n - 1) * w, y(i));
+                        ctx.lineTo(w, hh);
+                        ctx.closePath();
+                        ctx.fillStyle = Qt.rgba(stat.color.r, stat.color.g, stat.color.b, 0.6);
+                        ctx.fill();
+                        ctx.beginPath();
+                        for (let i = 0; i < n; i++) {
+                            if (i === 0) ctx.moveTo(0, y(i)); else ctx.lineTo(i / (n - 1) * w, y(i));
+                        }
+                        ctx.strokeStyle = Qt.lighter(stat.color, 1.25);
+                        ctx.lineWidth = 1.5;
+                        ctx.stroke();
+                    }
+                    // Light digits with a dark halo, lower left (over the
+                    // oldest history, leaving the current end in view).
+                    ctx.font = "bold " + Math.round(stat.h * 0.3) + "px monospace";
+                    ctx.textAlign = "left";
+                    ctx.textBaseline = "bottom";
+                    const bg = Theme.bg;
+                    ctx.lineJoin = "round";
+                    ctx.lineWidth = 3;
+                    ctx.strokeStyle = Qt.rgba(bg.r * 0.6, bg.g * 0.6, bg.b * 0.6, 0.92);
+                    ctx.strokeText(stat.value, 1, hh + 1);
+                    ctx.fillStyle = Qt.lighter(Theme.fg, 1.1);
+                    ctx.fillText(stat.value, 1, hh + 1);
+                }
+            }
+        }
+        onHistoryChanged: graph.requestPaint()
+        onValueChanged: graph.requestPaint()
+    }
+
+    // ---- the strip ---------------------------------------------------------
+    RowLayout {
+        id: strip
+        anchors.centerIn: parent
+        spacing: Math.round(root.h * 0.16)
+
+        KStat {
+            h: root.h; label: "CPU"; kind: "cpu"; color: root.palette.cpu
+            value: root.pct(root.cpuUsage)
+            history: root.hCpu
+        }
+        KStat {
+            h: root.h; label: "MEM"; kind: "mem"; color: root.palette.mem
+            value: root.pct(root.memPercent)
+            history: root.hMem
+        }
+        Repeater {
+            model: root.gpuIndexes
+            RowLayout {
+                id: gpuItem
+                required property int modelData
+                readonly property var g: { root.tick; return gpuFiles.objectAt(modelData); }
+                readonly property string n: root.gpuIndexes.length > 1 ? String(modelData + 1) : ""
+                spacing: Math.round(root.h * 0.16)
+                KStat {
+                    h: root.h; label: "GPU" + gpuItem.n; kind: "gpu"; color: root.palette.gpu
+                    value: gpuItem.g ? root.pct(gpuItem.g.usage) : "–"
+                    history: gpuItem.g ? gpuItem.g.hist : []
+                }
+                // GPU memory: history of VRAM use, share used inside.
+                KStat {
+                    visible: root.showVram
+                    h: root.h; label: "VRAM" + gpuItem.n; kind: "vram"; color: root.palette.vram
+                    value: gpuItem.g ? root.pct(100 * gpuItem.g.vramUsed / Math.max(1, gpuItem.g.modelData.vramTotal)) : "–"
+                    history: gpuItem.g ? gpuItem.g.vhist : []
+                }
+            }
+        }
+        // Network: stacked label and two stacked rates, like KStats.
+        RowLayout {
+            visible: root.showNetwork
+            spacing: Math.round(root.h * 0.08)
+            HoverHandler { onHoveredChanged: root.setHover("net", hovered) }
+            StackedLabel {
+                Layout.alignment: Qt.AlignVCenter
+                text: "NET"
+                h: root.h
+                color: root.palette.net
+            }
+            Column {
+                Layout.alignment: Qt.AlignVCenter
+                spacing: -2
+                Label { text: "↑" + root.fmtRate(root.netUp); font: root.monoFont }
+                Label { text: "↓" + root.fmtRate(root.netDown); font: root.monoFont }
+            }
+        }
+        // Temperatures: CPU over GPU, each coloured by heat.
+        RowLayout {
+            visible: root.showTemps && (root.cpuTempC > 0 || root.gpuTempC > 0)
+            spacing: Math.round(root.h * 0.08)
+            HoverHandler { onHoveredChanged: root.setHover("temp", hovered) }
+            StackedLabel {
+                Layout.alignment: Qt.AlignVCenter
+                text: "TEMP"
+                h: root.h
+                color: root.palette.temp
+            }
+            Column {
+                Layout.alignment: Qt.AlignVCenter
+                spacing: -2
+                Label {
+                    visible: root.cpuTempC > 0
+                    text: "CPU " + root.cpuTempC.toFixed(0) + "°"
+                    color: root.tempColor(root.cpuTempC)
+                    font: root.monoBold
+                }
+                Label {
+                    visible: root.gpuTempC > 0
+                    text: "GPU " + root.gpuTempC.toFixed(0) + "°"
+                    color: root.tempColor(root.gpuTempC)
+                    font: root.monoBold
+                }
+            }
+        }
+    }
+
+    // ---- tooltips: summary, or "who's using it" ----------------------------
+    // Hovering an item asks the treetop app (over D-Bus) for the top
+    // programs using that resource, refreshed while the pointer stays.
+    property string hoverKind: ""
+    property var topData: null
+    function setHover(kind, on) {
+        if (on) hoverKind = kind;
+        else if (hoverKind === kind) hoverKind = "";
+    }
+    Process {
+        id: topProbe
+        command: ["busctl", "--user", "--json=short", "call", "com.benwbooth.treetop", "/treetop", "com.benwbooth.treetop", "Top"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try { root.topData = JSON.parse(JSON.parse(text).data[0]); }
+                catch (e) { root.topData = null; }
+            }
+        }
+    }
+    Timer {
+        interval: 1500; repeat: true; triggeredOnStart: true
+        running: root.hoverKind !== ""
+        onTriggered: topProbe.running = true
+    }
+
+    function fmtTop(kind, v) {
+        if (kind === "cpu" || kind === "gpu") return v.toFixed(v < 10 ? 1 : 0) + "%";
+        if (kind === "mem" || kind === "vram") return fmtRate(v);
+        return fmtRate(v) + "/s";
+    }
+    readonly property var kindTitle: ({ cpu: "CPU", mem: "Memory", gpu: "GPU", vram: "VRAM", disk: "Disk I/O", net: "Network", temp: "Temperatures & fans" })
+    readonly property var kindColor: ({ cpu: palette.cpu, mem: palette.mem, gpu: palette.gpu, vram: palette.vram, disk: palette.disk, net: palette.net })
+    function esc(t) { return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+    function c(color, t) { return "<font color='" + color + "'>" + t + "</font>"; }
+    function row(label, color, value, detail) {
+        return "<tr><td>" + c(color, "<b>" + label + "</b>") + "</td><td align='right'>&nbsp;<b>" + value + "</b></td><td>&nbsp;&nbsp;"
+            + c(Theme.fgDim, detail || "") + "</td></tr>";
+    }
+    // Every temperature and fan, grouped by device (from the treetop app).
+    function sensorsText() {
+        const list = topData && topData.sensors ? topData.sensors : null;
+        if (!list || !list.length) {
+            let t = "<table cellspacing='1'>";
+            if (cpuTempC > 0) t += "<tr><td><b>CPU</b></td><td align='right'>&nbsp;&nbsp;" + c(tempColor(cpuTempC), "<b>" + cpuTempC.toFixed(0) + "°C</b>") + "</td></tr>";
+            if (gpuTempC > 0) t += "<tr><td><b>GPU</b></td><td align='right'>&nbsp;&nbsp;" + c(tempColor(gpuTempC), "<b>" + gpuTempC.toFixed(0) + "°C</b>") + "</td></tr>";
+            return t + "</table><br>" + c(Theme.fgDim, "Open treetop for every sensor and fan.");
+        }
+        let t = "<table cellspacing='1'>";
+        let last = "";
+        for (const x of list) {
+            const v = x.kind === "fan"
+                ? c(palette.net, "<b>" + x.value.toFixed(0) + " rpm</b>")
+                : c(tempColor(x.value), "<b>" + x.value.toFixed(0) + "°C</b>");
+            t += "<tr><td>" + (x.dev !== last ? "<b>" + esc(x.dev) + "</b>" : "") + "</td><td>&nbsp;&nbsp;"
+                + c(Theme.fgDim, esc(x.label)) + "</td><td align='right'>&nbsp;&nbsp;" + v + "</td></tr>";
+            last = x.dev;
+        }
+        return t + "</table>";
+    }
+    // When the GPU is busier than its programs add up to, say so, and name
+    // the programs holding ROCm compute queues (work fdinfo can't see).
+    function gpuUnattributedText() {
+        const un = topData.gpuUnattributed || 0;
+        if (un < 20) return "";
+        let t = c(palette.warn, "<b>" + un.toFixed(0) + "%</b> busy isn't from any program listed.");
+        const holders = topData.gpuCompute || [];
+        if (holders.length) {
+            t += "<br>" + c(Theme.fgDim, "Holding ROCm compute queues (not measured per program):") + "<table cellspacing='1'>";
+            for (const x of holders)
+                t += "<tr><td align='right'>" + c(palette.vram, "<b>" + fmtRate(x.v) + "</b>") + "</td><td>&nbsp;&nbsp;" + esc(x.name)
+                    + "</td><td>&nbsp;" + c(Theme.fgDim, x.n > 1 ? "×" + x.n : "") + "</td></tr>";
+            t += "</table>";
+        } else {
+            t += "<br>" + c(Theme.fgDim, "Other users' work (turn on root in treetop) or a stuck GPU job.");
+        }
+        return t;
+    }
+    function topText(kind) {
+        if (kind === "temp") return sensorsText();
+        if (!topData || !topData[kind]) return c(Theme.fgDim, "Open treetop to see which programs are using this.");
+        const list = topData[kind];
+        const extra = kind === "gpu" ? gpuUnattributedText() : "";
+        if (!list.length) return extra || c(Theme.fgDim, "Nothing is using it right now.");
+        let t = "<table cellspacing='1'>";
+        for (const x of list)
+            t += "<tr><td align='right'>" + c(kindColor[kind], "<b>" + fmtTop(kind, x.v) + "</b>") + "</td><td>&nbsp;&nbsp;" + esc(x.name)
+                + "</td><td>&nbsp;" + c(Theme.fgDim, x.n > 1 ? "×" + x.n : "") + "</td></tr>";
+        t += "</table>";
+        if (kind === "net" || kind === "disk")
+            t += c(Theme.fgDim, "<br>Other users' processes need root access in treetop.");
+        return t + (extra ? "<br>" + extra : "");
+    }
+    // Short GPU name: "Navi 31 [Radeon RX 7900 XT/...] (TUF Gaming Radeon RX
+    // 7900 XTX OC)" -> "Radeon RX 7900 XTX"; "Raphael [Radeon 610M]" -> "Radeon 610M".
+    function shortGpuName(n) {
+        n = String(n || "");
+        const paren = n.match(/\(([^)]*)\)\s*$/);
+        if (paren) {
+            const m = paren[1].match(/(Radeon|GeForce|Arc|Quadro|RTX|GTX|Intel)[^)]*/);
+            if (m) return m[0].replace(/\s+(OC|Gaming|Edition)\b.*$/, "").trim();
+        }
+        const br = n.match(/\[([^\]]*)\]/);
+        if (br) return br[1].split("/")[0].trim();
+        return n.length > 28 ? n.slice(0, 27) + "…" : n;
+    }
+    readonly property string summaryText: {
+        tick;
+        let t = "<table cellspacing='1'>";
+        t += row("CPU", palette.cpu, pct(cpuUsage), cpuTempC > 0 ? cpuTempC.toFixed(0) + "°C" : "");
+        t += row("Memory", palette.mem, pct(memPercent), fmtBytes(memUsed) + " of " + fmtBytes(memTotal));
+        for (const k of gpuIndexes) {
+            const g = gpuFiles.objectAt(k);
+            if (!g) continue;
+            const n = gpuIndexes.length > 1 ? "GPU" + (k + 1) : "GPU";
+            const name = shortGpuName(g.modelData.name);
+            t += row(n, palette.gpu, pct(g.usage), esc(name) + (g.tempC > 0 ? (name ? " · " : "") + g.tempC.toFixed(0) + "°C" : ""));
+            t += row("VRAM", palette.vram, pct(100 * g.vramUsed / Math.max(1, g.modelData.vramTotal)), fmtBytes(g.vramUsed));
+        }
+        t += row("Network", palette.net, "↓" + fmtRate(netDown), "↑" + fmtRate(netUp) + "/s");
+        return t + "</table><br>" + c(Theme.fgDim, "Click to open treetop · hover an item for its top users");
+    }
+
+    PopupWindow {
+        id: tip
+        anchor.item: root
+        anchor.edges: Edges.Top
+        anchor.gravity: Edges.Top
+        anchor.adjustment: PopupAdjustment.Slide
+        anchor.margins.top: -4
+        color: "transparent"
+        visible: false
+        implicitWidth: tipFrame.implicitWidth
+        implicitHeight: tipFrame.implicitHeight
+
+        readonly property bool want: root.containsMouse && !root.pressed
+        onWantChanged: {
+            if (want) tipTimer.restart();
+            else { tipTimer.stop(); visible = false; }
+        }
+        Timer {
+            id: tipTimer
+            interval: 550
+            onTriggered: tip.visible = tip.want
+        }
+
+        Rectangle {
+            id: tipFrame
+            anchors.fill: parent
+            color: Theme.bgRaised
+            border.color: Theme.border
+            radius: Theme.radius
+            implicitWidth: tipCol.implicitWidth + 20
+            implicitHeight: tipCol.implicitHeight + 16
+            transform: Translate { x: 0.001; y: 0.001 }
+
+            Column {
+                id: tipCol
+                x: 10
+                y: 8
+                spacing: 4
+                Label {
+                    text: !root.hoverKind ? "treetop"
+                        : root.hoverKind === "temp" ? root.kindTitle.temp
+                        : root.kindTitle[root.hoverKind] + " — top programs"
+                    font.weight: Font.DemiBold
+                    font.pointSize: Theme.fontSize + 1
+                }
+                Label {
+                    textFormat: Text.RichText
+                    elide: Text.ElideNone
+                    text: tip.visible ? (root.hoverKind ? root.topText(root.hoverKind) : root.summaryText) : ""
+                    font.family: "monospace"
+                    font.pointSize: Theme.fontSize * 0.95
+                }
+            }
+        }
+    }
 }
