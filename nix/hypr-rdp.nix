@@ -57,6 +57,26 @@ rustPlatform.buildRustPackage rec {
   postInstall = ''
     install -Dm644 LICENSE $out/share/licenses/hypr-rdp/LICENSE
     install -Dm644 pkg/pam/hypr-rdp.arch $out/share/hypr-rdp/pam/hypr-rdp
+
+    # User unit with an [Install] section, so `systemctl --user enable` (the
+    # hearth tray's "Start at login") works when NixOS installs it through
+    # `systemd.packages`. Settings live in ~/.config/hypr-rdp/config.toml.
+    mkdir -p $out/lib/systemd/user
+    cat > $out/lib/systemd/user/hypr-rdp.service <<EOF
+    [Unit]
+    Description=hypr-rdp: RDP server for the Hyprland session
+    Documentation=https://github.com/MuNeNICK/hypr-rdp
+    PartOf=graphical-session.target
+    After=graphical-session.target pipewire.service wireplumber.service
+
+    [Service]
+    ExecStart=$out/bin/hypr-rdp
+    Restart=on-failure
+    RestartSec=3
+
+    [Install]
+    WantedBy=graphical-session.target
+    EOF
     wrapProgram $out/bin/hypr-rdp \
       --run 'if test -z "''${FUSERMOUNT_PATH-}" && test -x /run/wrappers/bin/fusermount3; then export FUSERMOUNT_PATH=/run/wrappers/bin/fusermount3; fi' \
       --prefix PATH : ${lib.makeBinPath [ pulseaudio ]}
