@@ -15,7 +15,12 @@
 --     fanzyzones overlay snaps them back into a zone), double-click to
 --     maximize / restore;
 --   * no bar on fullscreen windows or on apps that draw their own title bar
---     (client-side decorations; see M.csd_classes).
+--     (client-side decorations; see M.csd_classes);
+--   * with hearth's patched hyprbars (on_middle_click / on_right_click keys,
+--     left button only for moving and buttons): middle-click lowers a
+--     floating window, right-click asks the shell for the window menu
+--     (socket2 `custom>>titlebars menu <address> <x> <y>`). Stock hyprbars
+--     treats every mouse button like the left one.
 --
 -- Loading: hl.plugin.load() only queues the path; Hyprland loads the plugin
 -- after the config has run and then re-runs the config. So on the first pass
@@ -48,6 +53,8 @@ M.opts = {
         { name = "minimize", icon = "∨", bg = "rgba(31363b00)" },
     },
     csd_bars = false,              -- true: keep bars on M.csd_classes too
+    middle_click = "lower",        -- action name or false (patched plugin only)
+    right_click = "menu",
 }
 
 -- Apps that draw their own title bar whatever Hyprland asks for: GTK
@@ -124,6 +131,20 @@ function actions.close()
     hl.dispatch(hl.dsp.window.close())
 end
 
+-- KWin's middle-click "Lower": send a floating window behind the others.
+function actions.lower()
+    local w = hl.get_active_window()
+    if w and w.floating then hl.dispatch(hl.dsp.window.alter_zorder({ mode = "bottom" })) end
+end
+
+-- KWin's right-click window menu: hearth draws it.
+function actions.menu()
+    local w, c = hl.get_active_window(), hl.get_cursor_pos()
+    if not w then return end
+    c = c or { x = 0, y = 0 }
+    pcall(hl.dispatch, hl.dsp.event(string.format("titlebars menu %s %d %d", w.address, c.x, c.y)))
+end
+
 M.actions = actions
 
 -- `hyprctl dispatch 'Titlebars.cmd("close")'`; returns a function so
@@ -178,6 +199,17 @@ function M.setup(opts)
             },
         },
     })
+    -- Keys only the patched plugin has.
+    if hl.get_config("plugin.hyprbars.on_right_click") ~= nil then
+        hl.config({
+            plugin = {
+                hyprbars = {
+                    on_middle_click = o.middle_click and action(o.middle_click) or "",
+                    on_right_click = o.right_click and action(o.right_click) or "",
+                },
+            },
+        })
+    end
 
     for _, b in ipairs(o.buttons) do
         hl.plugin.hyprbars.add_button({
