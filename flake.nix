@@ -33,7 +33,7 @@
       ddcutil hyprsunset
       udisks networkmanager
       curl jq libnotify xdg-utils pciutils cups
-      wlogout hyprpaper
+      wlogout hyprpaper swaynotificationcenter
       pipewire wireplumber
       systemd procps coreutils gnugrep gawk util-linux iproute2
       python
@@ -47,7 +47,7 @@
       installPhase = ''
         runHook preInstall
         mkdir -p $out/share/hearth $out/bin
-        cp -r shell helpers hypr vicinae $out/share/hearth/
+        cp -r shell helpers hypr vicinae swaync $out/share/hearth/
         chmod +x $out/share/hearth/helpers/*
         patchShebangs $out/share/hearth/helpers
         for exe in hearth hearth-ipc; do

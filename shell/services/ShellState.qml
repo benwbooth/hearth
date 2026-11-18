@@ -8,7 +8,6 @@ import Quickshell.Hyprland
 // `hearth-ipc call <target> <function>`.
 Singleton {
     id: root
-    property bool doNotDisturb: false
     // The open BarPopup, so opening one closes the others.
     property var activePopup: null
 

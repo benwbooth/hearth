@@ -34,7 +34,7 @@ Row {
     Bluetooth { ipcName: "bluetooth" }
     Brightness { ipcName: "brightness" }
     Volume { ipcName: "volume" }
-    Notifications { ipcName: "notifications" }
+    Notifications {}
 
     Indicator {
         id: more

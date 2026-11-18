@@ -11,12 +11,13 @@ import "popups"
 import "services"
 
 ShellRoot {
+    // Touch the singleton so swaync starts with the shell.
+    Component.onCompleted: void Swaync
     Variants {
         model: Quickshell.screens
         Bar {}
     }
 
-    NotificationPopups {}
     Osd {}
     BtPairDialog {}
     ZoneOverlay {}
