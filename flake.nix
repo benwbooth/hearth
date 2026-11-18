@@ -21,6 +21,9 @@
       src = quickshell-src;
     });
 
+    # RDP server for the Hyprland session (replaces KRDP); not in nixpkgs.
+    hypr-rdp = pkgs.callPackage ./nix/hypr-rdp.nix { };
+
     python = pkgs.python3.withPackages (p: [ p.dbus-python p.pygobject3 ]);
 
     # Everything the shell's widgets shell out to.
@@ -31,7 +34,7 @@
       udisks networkmanager
       curl jq libnotify
       pipewire wireplumber
-      systemd procps coreutils gnugrep gawk util-linux
+      systemd procps coreutils gnugrep gawk util-linux iproute2
       python
     ];
 
@@ -60,7 +63,7 @@
   in {
     packages.${system} = {
       default = hearth;
-      inherit hearth quickshell;
+      inherit hearth quickshell hypr-rdp;
     };
 
     # `nix develop`, then `quickshell -p shell` runs straight from the
