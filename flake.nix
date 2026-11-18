@@ -32,7 +32,7 @@
       cliphist wl-clipboard
       ddcutil hyprsunset
       udisks networkmanager
-      curl jq libnotify xdg-utils pciutils
+      curl jq libnotify xdg-utils pciutils cups
       pipewire wireplumber
       systemd procps coreutils gnugrep gawk util-linux iproute2
       python

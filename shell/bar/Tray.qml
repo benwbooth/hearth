@@ -27,6 +27,7 @@ Row {
     Network { ipcName: "network" }
     Rdp { ipcName: "rdp" }
     Camera { ipcName: "camera" }
+    Printers { ipcName: "printers" }
     Drives { ipcName: "drives" }
     Weather { ipcName: "weather" }
     Keyboard { ipcName: "keyboard" }

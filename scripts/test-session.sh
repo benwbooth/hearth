@@ -91,7 +91,7 @@ run)
   [[ -f $dir/qs.pid ]] && kill "$(cat "$dir/qs.pid")" 2>/dev/null || true
   sleep 0.3
   HYPRLAND_INSTANCE_SIGNATURE=$(hypr_sig) WAYLAND_DISPLAY=$(hypr_wayland) QT_QPA_PLATFORM=wayland \
-    PATH="$repo/helpers:$(runtime_path):$(tool hyprland)/bin:$PATH" XDG_STATE_HOME="$dir/state" \
+    PATH="${HEARTH_TEST_PATH:+$HEARTH_TEST_PATH:}$repo/helpers:$(runtime_path):$(tool hyprland)/bin:$PATH" XDG_STATE_HOME="$dir/state" \
     daemon "$dir/qs.pid" "$dir/qs.log" "$(quickshell)/bin/quickshell" -p "$repo/shell"
   sleep 3
   grep -E 'ERROR|WARN|error' "$dir/qs.log" | grep -vE 'accessibility|host portal|Empty key' || true
