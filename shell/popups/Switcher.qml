@@ -13,10 +13,12 @@ import ".."
 //   hl.dispatch(hl.dsp.event("hearth-switcher next"))   -- next|prev|nextApp|prevApp|commit|cancel
 // or the IPC target `switcher` with the same function names.
 // The first next/prev starts a session; the overlay only appears after
-// 150 ms, so a quick Alt+Tab tap just flips to the previous window. A
-// key-release bind on the modifier sends `commit`; the overlay also takes
-// the keyboard while shown (arrows, Return, Esc, and the modifier release
-// as a fallback).
+// 150 ms, so a quick Alt+Tab tap just flips to the previous window.
+// Letting go of Alt/Super commits through a key-release bind on ALT_L etc.
+// with `transparent = true`: Hyprland shadows a modifier's release bind once
+// another key (Tab) was pressed with it, and transparent binds are exempt.
+// While shown the overlay has the keyboard: arrows, Return, Esc (and a bare
+// modifier release as a fallback when no release bind is set up).
 Scope {
     id: root
 
