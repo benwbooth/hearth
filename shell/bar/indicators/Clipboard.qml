@@ -50,7 +50,8 @@ Indicator {
             required property string modelData
             Process {
                 id: watcher
-                command: ["wl-paste", "--type", watch.modelData, "--watch", "cliphist", "store"]
+                // pdeathsig: don't leave watchers behind if hearth is killed.
+                command: ["setpriv", "--pdeathsig", "TERM", "--", "wl-paste", "--type", watch.modelData, "--watch", "cliphist", "store"]
                 running: true
                 onExited: restart.start()
             }
