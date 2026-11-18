@@ -18,4 +18,5 @@ ShellRoot {
     PolkitDialog {}
     BtPairDialog {}
     ZoneOverlay {}
+    WallpaperInfo {}
 }
