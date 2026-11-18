@@ -1,0 +1,65 @@
+#!/usr/bin/env python3
+"""Print Unity LauncherEntry badge updates as JSON lines.
+
+Apps (Chrome, Thunderbird, Telegram, Electron apps, KDE apps...) broadcast
+`com.canonical.Unity.LauncherEntry.Update(app_uri, properties)` on the session
+bus to show unread counts and progress on their taskbar icon. Quickshell has
+no generic DBus access, so this relays them to the shell over stdout.
+
+Each line: {"app": "<desktop id>", "count": n, "countVisible": b,
+            "progress": f, "progressVisible": b, "urgent": b}
+"""
+import json
+import sys
+
+import dbus
+import dbus.mainloop.glib
+from gi.repository import GLib
+
+state = {}
+
+
+def desktop_id(uri):
+    s = str(uri)
+    if s.startswith("application://"):
+        s = s[len("application://"):]
+    if s.endswith(".desktop"):
+        s = s[: -len(".desktop")]
+    return s
+
+
+def on_update(app_uri, props, sender=None):
+    app = desktop_id(app_uri)
+    cur = state.setdefault(app, {
+        "app": app, "count": 0, "countVisible": False,
+        "progress": 0.0, "progressVisible": False, "urgent": False,
+    })
+    keys = {
+        "count": ("count", int), "count-visible": ("countVisible", bool),
+        "progress": ("progress", float), "progress-visible": ("progressVisible", bool),
+        "urgent": ("urgent", bool),
+    }
+    for k, v in props.items():
+        if str(k) in keys:
+            name, conv = keys[str(k)]
+            cur[name] = conv(v)
+    print(json.dumps(cur), flush=True)
+
+
+def main():
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    bus = dbus.SessionBus()
+    bus.add_signal_receiver(
+        on_update,
+        signal_name="Update",
+        dbus_interface="com.canonical.Unity.LauncherEntry",
+        sender_keyword="sender",
+    )
+    GLib.MainLoop().run()
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit(0)
