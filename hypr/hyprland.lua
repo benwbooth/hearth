@@ -14,6 +14,10 @@ hl.monitor({
     mode     = "5120x2160@165.06",
     position = "0x0",
     scale    = 1.3,
+    -- HDR, as Plasma had it on for this monitor. If SDR apps look washed
+    -- out, raise sdrbrightness (1.0 = reference) or drop these two lines.
+    bitdepth = 10,
+    cm       = "hdr",
 })
 -- Anything else plugged in: sensible defaults.
 hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
@@ -95,6 +99,11 @@ hl.config({
 hl.on("hyprland.start", function()
     hl.exec_cmd("uwsm app -- hearth")
     hl.exec_cmd("uwsm app -- hypridle")
+    -- Night light on a schedule (~/.config/hypr/hyprsunset.conf); hearth's
+    -- brightness popup overrides it live.
+    hl.exec_cmd("uwsm app -- hyprsunset")
+    -- KDE Connect's tray icon (in Plasma it was a panel widget).
+    hl.exec_cmd("uwsm app -- kdeconnect-indicator")
 end)
 
 ----------------------------
@@ -199,8 +208,24 @@ hl.bind(M .. " + 0",     function() zoom(0) end)
 hl.bind(M .. " + L", hl.dsp.exec_cmd("loginctl lock-session"))
 
 -- Ben's own tools (were KDE custom shortcuts).
-hl.bind(M .. " + H", hl.dsp.exec_cmd("/home/ben/bin/dsnote-tts.sh"))
-hl.bind(M .. " + C", hl.dsp.exec_cmd("/home/ben/bin/ultrawide-crop"))
+hl.bind(M .. " + H", hl.dsp.exec_cmd("dsnote-tts.sh"))
+hl.bind(M .. " + C", hl.dsp.exec_cmd("ultrawide-crop"))
+
+-- Speech Note's own shortcuts (Plasma's KGlobalAccel held them; here they
+-- call its --action interface).
+local speechnote = {
+    C = "cancel", P = "pause-resume-reading", L = "start-listening",
+    K = "start-listening-active-window", J = "start-listening-clipboard",
+    slash = "start-listening-translate", period = "start-listening-translate-active-window",
+    comma = "start-listening-translate-clipboard", R = "start-reading",
+    E = "start-reading-clipboard", S = "stop-listening",
+    B = "switch-to-next-stt-model", M = "switch-to-next-tts-model",
+    V = "switch-to-prev-stt-model", N = "switch-to-prev-tts-model",
+}
+for key, action in pairs(speechnote) do
+    hl.bind("CTRL + ALT + SHIFT + " .. key,
+        hl.dsp.exec_cmd("flatpak run net.mkiol.SpeechNote --action " .. action))
+end
 hl.bind("Pause",     hl.dsp.exec_cmd("whisper-toggle"))
 
 -- Screenshots

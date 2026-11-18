@@ -11,8 +11,10 @@ import Quickshell.Io
 // once at startup (and when asked to refresh) and keeps at most one write in
 // flight: dragging a slider only ever sends the latest value.
 //
-// Night light runs hyprsunset as a child process; the setting is kept in
-// the state dir.
+// Night light is the hyprsunset daemon (started by hyprland.lua), which
+// follows its own schedule in ~/.config/hypr/hyprsunset.conf (4500 K from
+// 19:00 to 07:00, like KDE's Night Color). The toggle and slider override
+// it live through `hyprctl hyprsunset`, until the next scheduled change.
 //
 // HEARTH_BRIGHTNESS_DRYRUN=1 logs DDC/backlight writes instead of sending them.
 Singleton {
@@ -25,7 +27,7 @@ Singleton {
     readonly property int percent: available ? displays[0].value : 0
     readonly property bool dryRun: Quickshell.env("HEARTH_BRIGHTNESS_DRYRUN") === "1"
 
-    property bool nightLight: false
+    property bool nightLight: scheduledNight()
     property int temperature: 4500
     readonly property int minTemperature: 2500
     readonly property int maxTemperature: 6500
@@ -245,40 +247,40 @@ Singleton {
 
     // --- Night light -------------------------------------------------------
 
-    property bool sunsetRestart: false
+    // Mirrors the schedule in hyprsunset.conf, for the switch's state.
+    readonly property int nightStartHour: 19
+    readonly property int nightEndHour: 7
+    function scheduledNight() {
+        const h = new Date().getHours();
+        return h >= root.nightStartHour || h < root.nightEndHour;
+    }
 
     function applyNightLight() {
-        if (root.nightLight) {
-            if (sunset.running) { root.sunsetRestart = true; sunset.running = false; }
-            else { sunset.command = ["hyprsunset", "-t", String(root.temperature)]; sunset.running = true; }
-        } else {
-            root.sunsetRestart = false;
-            sunset.running = false;
-        }
+        Quickshell.execDetached(root.nightLight
+            ? ["hyprctl", "hyprsunset", "temperature", String(root.temperature)]
+            : ["hyprctl", "hyprsunset", "identity"]);
     }
 
     Timer {
         id: tempDebounce
-        interval: 350
+        interval: 150
         onTriggered: if (root.nightLight) root.applyNightLight()
     }
 
-    Process {
-        id: sunset
-        onRunningChanged: {
-            if (!running && root.sunsetRestart) {
-                root.sunsetRestart = false;
-                sunset.command = ["hyprsunset", "-t", String(root.temperature)];
-                sunset.running = true;
-            }
-        }
-        stderr: SplitParser {
-            onRead: line => console.info("hyprsunset:", line)
+    // Follow the schedule's flips so the switch matches the screen.
+    Timer {
+        interval: 60000
+        running: true
+        repeat: true
+        property bool last: root.scheduledNight()
+        onTriggered: {
+            const now = root.scheduledNight();
+            if (now !== last) { last = now; root.nightLight = now; }
         }
     }
 
     function saveState() {
-        state.setText(JSON.stringify({ nightLight: root.nightLight, temperature: root.temperature }, null, 2));
+        state.setText(JSON.stringify({ temperature: root.temperature }, null, 2));
     }
 
     FileView {
@@ -289,8 +291,6 @@ Singleton {
             try {
                 const s = JSON.parse(text());
                 if (s.temperature) root.temperature = s.temperature;
-                root.nightLight = !!s.nightLight;
-                if (root.nightLight) root.applyNightLight();
             } catch (e) {}
         }
     }
