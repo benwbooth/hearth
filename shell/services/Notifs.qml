@@ -21,6 +21,8 @@ Singleton {
     }
     property var popups: []
     property int unreadCount: 0
+    // Notification id -> arrival time (ms). Lost on reload for old ones.
+    property var times: ({})
 
     signal notified(var notification)
 
@@ -49,6 +51,31 @@ Singleton {
         if (a) a.invoke();
         if (!n.resident) dismiss(n);
         else hidePopup(n);
+    }
+    // "now", "5m", "2h", or a date, for the history list.
+    function age(n, now) {
+        const t = root.times[n.id];
+        if (!t) return "";
+        const m = Math.floor((now - t) / 60000);
+        if (m < 1) return "now";
+        if (m < 60) return m + "m";
+        if (m < 24 * 60) return Math.floor(m / 60) + "h";
+        return Qt.formatDate(new Date(t), "MMM d");
+    }
+    // History grouped by app, newest group first:
+    // [{ app, icon, items: [Notification...] }]
+    function groups() {
+        const out = [];
+        const byApp = {};
+        for (const n of root.history) {
+            const key = appName(n);
+            if (!byApp[key]) {
+                byApp[key] = { app: key, icon: appIcon(n), items: [] };
+                out.push(byApp[key]);
+            }
+            byApp[key].items.push(n);
+        }
+        return out;
     }
     function appIcon(n) {
         if (n.appIcon) return n.appIcon;
@@ -82,6 +109,9 @@ Singleton {
 
         onNotification: n => {
             n.tracked = true;
+            // Carried over from before a config reload: history only.
+            if (n.lastGeneration) return;
+            root.times[n.id] = Date.now();
             root.unreadCount += 1;
             n.closed.connect(() => {
                 root.hidePopup(n);
