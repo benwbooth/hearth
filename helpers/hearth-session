@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# hearth-session lock|suspend|reboot|poweroff|logout|menu
+#
+# One place for the session actions, used by the launcher footer, the
+# `session` IPC target and the wlogout layout (hypr/wlogout/layout).
+# HEARTH_SESSION_DRYRUN=1 only logs what would run (for testing).
+set -euo pipefail
+
+here=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+
+run() {
+  if [[ ${HEARTH_SESSION_DRYRUN:-} == 1 ]]; then
+    echo "hearth-session: dry run: $*" >&2
+    logger -t hearth-session "dry run: $*" 2>/dev/null || true
+    return 0
+  fi
+  exec "$@"
+}
+
+case ${1:-menu} in
+lock)     run loginctl lock-session ;;
+suspend)  run systemctl suspend ;;
+reboot)   run systemctl reboot ;;
+poweroff) run systemctl poweroff ;;
+logout)
+  # End the Hyprland session cleanly: through uwsm when it started it (so the
+  # graphical-session units stop too), else ask Hyprland to exit.
+  if command -v uwsm >/dev/null && uwsm check is-active >/dev/null 2>&1; then
+    run uwsm stop
+  else
+    run hyprctl dispatch 'hl.dsp.exit()'
+  fi ;;
+menu)
+  # Plasma-style logout screen. Already open: leave it be.
+  pgrep -u "$UID" -x wlogout >/dev/null && exit 0
+  # Size the five buttons (bw x bh) by centring them on the focused
+  # monitor with margins; wlogout only takes margins.
+  bw=200 bh=220 gap=20
+  read -r w h < <(hyprctl -j monitors 2>/dev/null \
+    | jq -r '.[] | select(.focused) | [(if .transform % 2 == 1 then .height else .width end) / .scale,
+                                      (if .transform % 2 == 1 then .width else .height end) / .scale]
+             | map(floor) | @tsv' 2>/dev/null) || true
+  w=${w:-1920} h=${h:-1080}
+  lr=$(( (w - 5 * bw - 4 * gap) / 2 )) tb=$(( (h - bh) / 2 ))
+  (( lr < 0 )) && lr=0; (( tb < 0 )) && tb=0
+  exec wlogout -l "$here/hypr/wlogout/layout" -C "$here/hypr/wlogout/style.css" \
+    -b 5 -c "$gap" -L "$lr" -R "$lr" -T "$tb" -B "$tb" -n ;;
+*) echo "usage: hearth-session lock|suspend|reboot|poweroff|logout|menu" >&2; exit 2 ;;
+esac

@@ -1,0 +1,50 @@
+/* Breeze Dark wlogout, matching hearth's Theme.qml. Icons come from the GTK
+   icon theme (Breeze when Plasma's GTK settings are around). */
+* {
+    background-image: none;
+    box-shadow: none;
+    text-shadow: none;
+    font-family: "Noto Sans";
+    font-size: 11pt;
+}
+
+window {
+    background-color: rgba(0, 0, 0, 0.6);
+}
+
+button {
+    color: #fcfcfc;
+    background-color: #292c30;
+    border: 1px solid #3f444a;
+    border-radius: 8px;
+    margin: 0;
+    min-width: 198px;  /* + border + padding = bw x bh (200 x 220) in helpers/hearth-session */
+    min-height: 194px;
+    padding: 0 0 24px 0;
+    background-repeat: no-repeat;
+    background-position: center 40%;
+    background-size: 64px;
+    transition: none;
+}
+
+button:focus {
+    background-color: #1e5774;
+    border-color: #3daee9;
+    outline-style: none;
+}
+
+button:hover {
+    background-color: #31363b;
+    border-color: #3daee9;
+}
+
+button:active {
+    background-color: #3daee9;
+    color: #202326;
+}
+
+#lock     { background-image: -gtk-icontheme("system-lock-screen-symbolic"); }
+#suspend  { background-image: -gtk-icontheme("system-suspend"); }
+#reboot   { background-image: -gtk-icontheme("system-reboot"); }
+#shutdown { background-image: -gtk-icontheme("system-shutdown"); }
+#logout   { background-image: -gtk-icontheme("system-log-out"); }

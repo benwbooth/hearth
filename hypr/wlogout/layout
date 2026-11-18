@@ -1,0 +1,30 @@
+{
+    "label" : "lock",
+    "action" : "hearth-session lock",
+    "text" : "Lock",
+    "keybind" : "l"
+}
+{
+    "label" : "suspend",
+    "action" : "hearth-session suspend",
+    "text" : "Sleep",
+    "keybind" : "s"
+}
+{
+    "label" : "reboot",
+    "action" : "hearth-session reboot",
+    "text" : "Restart",
+    "keybind" : "r"
+}
+{
+    "label" : "shutdown",
+    "action" : "hearth-session poweroff",
+    "text" : "Shut Down",
+    "keybind" : "p"
+}
+{
+    "label" : "logout",
+    "action" : "hearth-session logout",
+    "text" : "Log Out",
+    "keybind" : "e"
+}
