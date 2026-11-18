@@ -29,7 +29,7 @@ Indicator {
         switch (d.type) {
         case UPowerDeviceType.Mouse: return "input-mouse";
         case UPowerDeviceType.Keyboard: return "input-keyboard";
-        case UPowerDeviceType.GamingInput: return "input-gaming";
+        case UPowerDeviceType.GamingInput: return "input-gamepad";
         case UPowerDeviceType.Touchpad: return "input-touchpad";
         case UPowerDeviceType.Tablet: case UPowerDeviceType.Pen: return "input-tablet";
         case UPowerDeviceType.Headset: return "audio-headset";
