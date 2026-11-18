@@ -172,7 +172,8 @@ Scope {
         readonly property int cellH: Math.round(280 * cellScale)
         readonly property int cols: Math.max(1, Math.min(count, Math.floor((maxW - 24) / cellW)))
 
-        onVisibleChanged: if (visible) keys.forceActiveFocus()
+        property var lastPointer: null
+        onVisibleChanged: if (visible) { lastPointer = null; keys.forceActiveFocus(); }
 
         // Clicking outside the panel cancels.
         MouseArea {
@@ -189,8 +190,10 @@ Scope {
             Keys.onPressed: event => {
                 const n = root.items.length;
                 switch (event.key) {
-                case Qt.Key_Tab: case Qt.Key_Right: root.index = (root.index + 1) % n; break;
-                case Qt.Key_Backtab: case Qt.Key_Left: root.index = (root.index + n - 1) % n; break;
+                // No Tab here: the Hyprland binds step on Tab, and a Tab
+                // still held when the overlay takes the keyboard would step twice.
+                case Qt.Key_Right: root.index = (root.index + 1) % n; break;
+                case Qt.Key_Left: root.index = (root.index + n - 1) % n; break;
                 case Qt.Key_Down: root.index = Math.min(n - 1, root.index + win.cols); break;
                 case Qt.Key_Up: root.index = Math.max(0, root.index - win.cols); break;
                 case Qt.Key_Home: root.index = 0; break;
@@ -254,7 +257,15 @@ Scope {
                             height: win.cellH
                             hoverEnabled: true
                             acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-                            onEntered: root.index = index
+                            // Hover selects only once the pointer really moves, so a
+                            // cursor resting where the overlay appears doesn't pick a window.
+                            onPositionChanged: mouse => {
+                                const p = mapToItem(null, mouse.x, mouse.y);
+                                const last = win.lastPointer;
+                                win.lastPointer = p;
+                                if (last && (Math.abs(p.x - last.x) > 2 || Math.abs(p.y - last.y) > 2))
+                                    root.index = index;
+                            }
                             onClicked: mouse => {
                                 if (mouse.button === Qt.MiddleButton) { modelData.wayland.close(); return; }
                                 root.index = index;
