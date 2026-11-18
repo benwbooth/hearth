@@ -147,3 +147,18 @@ Not verifiable headless: a real SUPER+LMB / title-bar drag, real Shift key
 binds (wtype's virtual keyboard doesn't trigger Hyprland binds), and clicks
 inside the picker (virtual-pointer clicks don't reach Quickshell surfaces
 in the nested session).
+
+## Window memory
+
+With `remember_window_geometries` on (the default, as in Ben's KWin
+settings), windows reopen where they were last closed:
+
+- Tiled windows on a zones workspace: per app (window class) -> zone. Set on
+  `window.open_early`, so the window is placed straight into that zone.
+- Floating windows: per app and initial title -> position and size relative
+  to their monitor (kept on screen if the monitor changed). Keying on the
+  title keeps an app's dialogs from inheriting its main window's spot.
+
+Saved to `$XDG_STATE_HOME/hearth/window-memory.json` when a window closes
+and when Hyprland shuts down. Macsimized and fullscreen windows aren't
+recorded. Turn it off with `remember_window_geometries = false` in zones.json.

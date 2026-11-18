@@ -52,6 +52,8 @@ M.LAYOUT = "fanzyzones"            -- registered as "lua:fanzyzones"
 M.opts = {
     config_path = XDG_CONFIG .. "/hearth/zones.json",
     state_path = RUNTIME .. "/hearth-fanzyzones-" .. INSTANCE .. ".json",
+    -- Per-app window memory (remember_window_geometries); survives logins.
+    memory_path = (os.getenv("XDG_STATE_HOME") or (HOME .. "/.local/state")) .. "/hearth/window-memory.json",
     tick_ms = 16,                  -- drag tracking poll interval
     drag_binds = true,             -- watch LMB and the snap modifier keys
 }
@@ -1081,8 +1083,121 @@ local function mac_owner(wsid)
     end
 end
 
+---------------------------------------------------------------------------
+-- Window memory (remember_window_geometries)
+---------------------------------------------------------------------------
+-- Like the KWin script: an app's windows reopen where they were. Tiled
+-- windows are remembered by app (class) -> zone; floating windows by app
+-- and initial title -> position/size relative to their monitor (so dialogs
+-- of an app don't share its main window's spot).
+
+local memory = { tiled = {}, floating = {} }
+local memory_loaded = false
+
+local function load_memory()
+    if memory_loaded then return end
+    memory_loaded = true
+    local s = read_file(M.opts.memory_path)
+    local t = s and json.decode(s)
+    if type(t) == "table" then
+        memory.tiled = type(t.tiled) == "table" and t.tiled or {}
+        memory.floating = type(t.floating) == "table" and t.floating or {}
+    end
+end
+
+local function save_memory()
+    local dir = M.opts.memory_path:match("^(.*)/[^/]*$")
+    if dir then os.execute("mkdir -p '" .. dir:gsub("'", "'\\''") .. "'") end
+    write_file(M.opts.memory_path, json.encode(memory))
+end
+
+local function app_key(w)
+    local c = w.initial_class
+    if not c or c == "" then c = w.class end
+    return (c and c ~= "") and c or nil
+end
+
+local function vec(v)
+    if type(v) ~= "table" then return nil, nil end
+    return v.x or v[1], v.y or v[2]
+end
+
+-- Record where window `w` is now. Returns true if anything changed.
+local function remember(w)
+    if cfg.remember_window_geometries == false or not w then return false end
+    local app = app_key(w)
+    if not app or (w.fullscreen or 0) ~= 0 then return false end
+    local ws = w.workspace
+    if not ws or ws.special then return false end
+    load_memory()
+    if w.floating then
+        local mon = w.monitor or (ws and ws.monitor)
+        local ax, ay = vec(w.at)
+        local sw, sh = vec(w.size)
+        if not mon or not ax or not sw then return false end
+        local box = monitor_box(mon)
+        memory.floating[app .. "|" .. (w.initial_title or "")] = {
+            x = ax - box.x, y = ay - box.y, w = sw, h = sh,
+        }
+        return true
+    elseif uses_zones(ws) and S.zones[w.address] then
+        memory.tiled[app] = S.zones[w.address]
+        return true
+    end
+    return false
+end
+
+-- Before a new window is laid out: give it its app's remembered zone.
+local function recall_zone(w)
+    if cfg.remember_window_geometries == false or not w then return end
+    local app = app_key(w)
+    if not app or S.zones[w.address] then return end
+    load_memory()
+    local z = memory.tiled[app]
+    if type(z) == "number" and z >= 1 then S.zones[w.address] = math.floor(z) end
+end
+
+-- After a floating window maps: put it back where it was.
+local function recall_floating(w)
+    if cfg.remember_window_geometries == false or not w or not w.floating then return end
+    local app = app_key(w)
+    if not app then return end
+    load_memory()
+    local g = memory.floating[app .. "|" .. (w.initial_title or "")]
+    if type(g) ~= "table" or not g.w or not g.h then return end
+    local mon = w.monitor or hl.get_active_monitor()
+    if not mon then return end
+    local box = monitor_box(mon)
+    -- Keep it on screen if the monitor changed size since.
+    local ww, wh = math.min(g.w, box.w), math.min(g.h, box.h)
+    local x = box.x + math.max(0, math.min(g.x, box.w - ww))
+    local y = box.y + math.max(0, math.min(g.y, box.h - wh))
+    local sel = win_sel(w.address)
+    pcall(hl.dispatch, hl.dsp.window.resize({ x = ww, y = wh, window = sel }))
+    pcall(hl.dispatch, hl.dsp.window.move({ x = x, y = y, window = sel }))
+end
+
+-- Session ending: remember every open window.
+local function remember_all()
+    local any = false
+    local ok, wins = pcall(hl.get_windows, { mapped = true })
+    if ok and wins then
+        for _, w in ipairs(wins) do if remember(w) then any = true end end
+    end
+    if any then save_memory() end
+end
+
 local function on_open(w)
     if not w then return end
+    -- Window memory: zone (if open_early didn't get it in first) and floating geometry.
+    if not S.zones[w.address] then
+        recall_zone(w)
+        if S.zones[w.address] and not w.floating and uses_zones(w.workspace) then M.refresh() end
+    end
+    if w.floating then
+        local addr0 = w.address
+        later(30, function() recall_floating(get_window(addr0)) end)
+    end
     local ws = w.workspace
     if cfg.macsimize_exclusive_desktops and ws and not w.floating and (w.fullscreen or 0) == 0 then
         local owner, rec = mac_owner(ws.id)
@@ -1100,6 +1215,7 @@ end
 local function on_close(w)
     if not w then return end
     local addr = w.address
+    if not S.mac[addr] and remember(w) then save_memory() end
     if S.mac[addr] then M.restore(addr, true) end
     S.zones[addr] = nil
     if drag.active and drag.addr == addr then end_drag() end
@@ -1128,7 +1244,9 @@ function M.setup(opts)
     tick_timer:set_enabled(false)
 
     hl.on("window.fullscreen", on_fullscreen)
+    hl.on("window.open_early", recall_zone)
     hl.on("window.open", on_open)
+    hl.on("hyprland.shutdown", remember_all)
     hl.on("window.close", on_close)
     hl.on("window.move_to_workspace", function() schedule_prune() end)
     hl.on("workspace.removed", function() schedule_prune() end)
