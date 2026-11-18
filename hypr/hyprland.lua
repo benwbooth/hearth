@@ -97,6 +97,10 @@ hl.config({
 -------------------
 
 hl.on("hyprland.start", function()
+    -- 130% for X11 apps: with force_zero_scaling they draw at native pixels
+    -- and scale themselves from Xft.dpi (Plasma loads this at login; nothing
+    -- does under Hyprland). 124 = 96 x 1.3; the X cursor is scaled to match.
+    hl.exec_cmd("printf 'Xft.dpi: 124\\nXcursor.size: 31\\nXcursor.theme: breeze_cursors\\n' | xrdb -merge")
     hl.exec_cmd("uwsm app -- hearth")
     -- Launcher daemon (also keeps the clipboard history).
     hl.exec_cmd("uwsm app -- vicinae server")
