@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Services.Notifications
 
 // The desktop notification server (org.freedesktop.Notifications).
@@ -92,6 +93,15 @@ Singleton {
             if (e) return e.name;
         }
         return "Notification";
+    }
+
+    // `hearth-ipc call notifications toggleDnd` etc., for Hyprland binds.
+    IpcHandler {
+        target: "notifications"
+        function toggleDnd(): void { ShellState.doNotDisturb = !ShellState.doNotDisturb; }
+        function setDnd(on: bool): void { ShellState.doNotDisturb = on; }
+        function clearAll(): void { root.clearAll(); }
+        function hidePopups(): void { root.popups = []; }
     }
 
     NotificationServer {
