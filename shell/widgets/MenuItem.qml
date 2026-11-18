@@ -29,8 +29,27 @@ MouseArea {
         Icon {
             anchors.verticalCenter: parent.verticalCenter
             implicitSize: 16
-            name: root.checkable ? (root.checked ? "checkbox-checked-symbolic" : "checkbox-symbolic") : root.icon
-            visible: root.icon !== "" || root.checkable
+            name: root.icon
+            visible: root.icon !== "" && !root.checkable
+        }
+        // Drawn, not an icon: Breeze's checkbox-symbolic is a tick and
+        // checkbox-checked-symbolic a pencil.
+        Rectangle {
+            anchors.verticalCenter: parent.verticalCenter
+            visible: root.checkable
+            width: 16
+            height: 16
+            radius: 3
+            color: root.checked ? Theme.accent : "transparent"
+            border.color: root.checked ? Theme.accent : Theme.fgDim
+            Label {
+                anchors.centerIn: parent
+                visible: root.checked
+                text: "✓"
+                color: Theme.bg
+                font.weight: Font.Bold
+                font.pointSize: Theme.smallFontSize
+            }
         }
         Label {
             anchors.verticalCenter: parent.verticalCenter
