@@ -33,6 +33,7 @@
       ddcutil hyprsunset
       udisks networkmanager
       curl jq libnotify xdg-utils pciutils cups
+      wlogout libqalculate hyprpaper
       pipewire wireplumber
       systemd procps coreutils gnugrep gawk util-linux iproute2
       python

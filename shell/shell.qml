@@ -1,6 +1,9 @@
 //@ pragma UseQApplication
 //@ pragma NativeTextRendering
 //@ pragma IconTheme breeze-dark
+// Fixed id: state/cache dirs are otherwise keyed by the shell's path,
+// which changes with every Nix build (losing pins, weather, wallpaper).
+//@ pragma ShellId hearth
 import QtQuick
 import Quickshell
 import "bar"
@@ -18,5 +21,6 @@ ShellRoot {
     PolkitDialog {}
     BtPairDialog {}
     ZoneOverlay {}
+    Switcher {}
     WallpaperInfo {}
 }

@@ -99,6 +99,8 @@ hl.config({
 hl.on("hyprland.start", function()
     hl.exec_cmd("uwsm app -- hearth")
     hl.exec_cmd("uwsm app -- hypridle")
+    -- Wallpaper: hyprpaper draws it, hearth fetches Bing's image of the day.
+    hl.exec_cmd("uwsm app -- hyprpaper")
     -- Night light on a schedule (~/.config/hypr/hyprsunset.conf); hearth's
     -- brightness popup overrides it live.
     hl.exec_cmd("uwsm app -- hyprsunset")
@@ -205,7 +207,9 @@ hl.bind(M .. " + minus", function() zoom(0.8) end, { repeating = true })
 hl.bind(M .. " + 0",     function() zoom(0) end)
 
 -- Session
-hl.bind(M .. " + L", hl.dsp.exec_cmd("loginctl lock-session"))
+hl.bind(M .. " + L", hl.dsp.exec_cmd(hearth_ipc .. "session lock"))
+hl.bind("CTRL + ALT + Delete", hl.dsp.exec_cmd(hearth_ipc .. "session open"))
+hl.bind("XF86PowerOff", hl.dsp.exec_cmd(hearth_ipc .. "session open"))
 
 -- Ben's own tools (were KDE custom shortcuts).
 hl.bind(M .. " + H", hl.dsp.exec_cmd("dsnote-tts.sh"))
