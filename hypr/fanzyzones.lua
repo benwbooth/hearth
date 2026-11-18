@@ -1223,6 +1223,7 @@ end
 --   snap <zone> [address]        snap a window (default: focused) into a zone
 --   preview <monitor> <zone>     show the overlay with a zone highlighted (testing)
 --   hide                         hide the overlay
+--   sim_key <keysym> <0|1>, sim_button <0|1>   fake the drag binds (headless testing)
 --   dump                         write state to $XDG_RUNTIME_DIR/hearth-fanzyzones-debug.json
 function M.cmd(name, a, b)
     return function()
@@ -1244,6 +1245,10 @@ function M.cmd(name, a, b)
             overlay_forced = false
             drag.shown = true
             overlay_hide()
+        elseif name == "sim_key" then        -- testing: fake a modifier key press/release
+            on_modifier(a, b == 1 or b == "1" or b == true)
+        elseif name == "sim_button" then     -- testing: fake LMB press/release
+            on_button(a == 1 or a == "1" or a == true)
         elseif name == "toggle_overlay" then
             M.toggle_overlay()
         elseif name == "dump" then
