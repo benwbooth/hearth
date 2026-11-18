@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
+import Quickshell.Wayland
 import "../services"
 import ".."
 
@@ -9,29 +10,43 @@ import ".."
 //
 // Put a single layout inside it; the popup sizes itself to that child's
 // implicit size.
-PopupWindow {
+PanelWindow {
     id: popup
     required property Item anchorItem
     default property alias content: body.data
     property int padding: 12
     property bool open: false
+    // OnDemand: the popup takes the keyboard when clicked into (search
+    // fields, passwords). The launcher uses Exclusive so typing goes
+    // straight to its search box.
+    property int keyboardFocus: WlrKeyboardFocus.OnDemand
 
-    anchor.item: anchorItem
-    anchor.edges: Edges.Top
-    anchor.gravity: Edges.Top
-    anchor.adjustment: PopupAdjustment.Slide
-    anchor.margins.top: -4
-    // No xdg_popup grab: it needs a recent input serial, so popups opened from
-    // a key bind or `hearth-ipc` would fail. Hyprland's focus grab gives the
-    // popup the keyboard and tells us about clicks elsewhere instead. The bar
-    // is part of the grab so its buttons can toggle the popup closed.
-    grabFocus: false
+    // A layer-shell panel rather than an xdg popup: popups only get the
+    // keyboard through an input grab, which a key bind or `hearth-ipc` can't
+    // start. Anchored to the bottom edge it sits just above the bar (the
+    // bar's exclusive zone pushes it up), horizontally under its button.
+    readonly property var barWindow: anchorItem.QsWindow.window
+    screen: barWindow ? barWindow.screen : null
+    anchors.bottom: true
+    anchors.left: true
+    exclusionMode: ExclusionMode.Normal
+    exclusiveZone: 0
+    margins.bottom: 4
+    margins.left: {
+        void popup.open;
+        if (!barWindow || !screen) return 4;
+        const p = anchorItem.mapToItem(null, anchorItem.width / 2, 0);
+        const w = popup.implicitWidth;
+        return Math.max(4, Math.min(screen.width - w - 4, Math.round(p.x - w / 2)));
+    }
+    WlrLayershell.layer: WlrLayer.Top
+    WlrLayershell.namespace: "hearth-popup"
+    WlrLayershell.keyboardFocus: open ? popup.keyboardFocus : WlrKeyboardFocus.None
     visible: open
     color: "transparent"
     implicitWidth: frame.implicitWidth
     implicitHeight: frame.implicitHeight
 
-    onVisibleChanged: if (!visible) open = false
     onOpenChanged: if (open) ShellState.activePopup = popup
     // One popup at a time.
     Connections {
@@ -41,9 +56,11 @@ PopupWindow {
         }
     }
 
+    // Close on clicks anywhere else. The bar is part of the grab so its
+    // buttons can toggle the popup closed.
     HyprlandFocusGrab {
         active: popup.visible
-        windows: [popup, popup.anchorItem.QsWindow.window]
+        windows: popup.barWindow ? [popup, popup.barWindow] : [popup]
         onCleared: popup.close()
     }
 

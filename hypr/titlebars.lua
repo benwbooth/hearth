@@ -118,7 +118,7 @@ end
 local actions = {}
 
 function actions.minimize()
-    hl.dispatch(hl.dsp.window.move({ workspace = "special:minimized", silent = true }))
+    hl.dispatch(hl.dsp.window.move({ workspace = "special:minimized", follow = false }))
 end
 
 -- Same dispatcher as Super+PgUp: fanzyzones' window.fullscreen handler does

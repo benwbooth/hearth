@@ -164,7 +164,7 @@ hl.bind("ALT + F4", hl.dsp.window.close())
 hl.bind(M .. " + CTRL + Escape", hl.dsp.window.kill())
 hl.bind(M .. " + Page_Up", hl.dsp.window.fullscreen({ mode = "maximized" }))
 hl.bind(M .. " + F", hl.dsp.window.fullscreen())
-hl.bind(M .. " + Page_Down", hl.dsp.window.move({ workspace = "special:minimized", silent = true }))
+hl.bind(M .. " + Page_Down", hl.dsp.window.move({ workspace = "special:minimized", follow = false }))
 hl.bind(M .. " + SHIFT + Page_Down", hl.dsp.workspace.toggle_special("minimized"))
 hl.bind(M .. " + V", hl.dsp.exec_cmd(hearth_ipc .. "indicator-clipboard toggle"))
 hl.bind(M .. " + T", hl.dsp.window.float({ action = "toggle" }))
@@ -183,10 +183,35 @@ hl.bind(M .. " + ALT + up",    hl.dsp.focus({ direction = "up" }))
 hl.bind(M .. " + ALT + down",  hl.dsp.focus({ direction = "down" }))
 
 -- Alt/Super+Tab walk through windows.
-hl.bind("ALT + Tab",         hl.dsp.window.cycle_next())
-hl.bind("ALT + SHIFT + Tab", hl.dsp.window.cycle_next({ prev = true }))
-hl.bind(M .. " + Tab",         hl.dsp.window.cycle_next())
-hl.bind(M .. " + SHIFT + Tab", hl.dsp.window.cycle_next({ prev = true }))
+-- hearth's task switcher (shell/popups/Switcher.qml), KWin-style: live
+-- thumbnails in recently-used order; releasing the modifier picks. The
+-- release binds must be transparent: Hyprland shadows a modifier's release
+-- bind once another key (Tab) was pressed with it.
+local switching = false
+local function switcher(cmd)
+    return function()
+        switching = true
+        hl.dispatch(hl.dsp.event("hearth-switcher " .. cmd))
+    end
+end
+local function switcher_commit()
+    if not switching then return end
+    switching = false
+    hl.dispatch(hl.dsp.event("hearth-switcher commit"))
+end
+for _, mod in ipairs({ "ALT", M }) do
+    hl.bind(mod .. " + Tab",           switcher("next"))
+    hl.bind(mod .. " + SHIFT + Tab",   switcher("prev"))
+    hl.bind(mod .. " + grave",         switcher("nextApp"))   -- current application only
+    hl.bind(mod .. " + SHIFT + grave", switcher("prevApp"))
+end
+for _, key in ipairs({ "ALT_L", "ALT_R", "SUPER_L", "SUPER_R" }) do
+    hl.bind(key, switcher_commit, { release = true, ignore_mods = true, transparent = true })
+end
+
+-- Overview (KDE Meta+W) and Grid View (Meta+G): shell/popups/Overview.qml.
+hl.bind(M .. " + W", hl.dsp.event("hearth-overview toggle"))
+hl.bind(M .. " + G", hl.dsp.event("hearth-overview toggle"))
 
 -- Workspaces (KDE: Ctrl+F1..F4, Meta+Ctrl+arrows; with Shift moves the window).
 for i = 1, 9 do

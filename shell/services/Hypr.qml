@@ -32,7 +32,7 @@ Singleton {
     function moveWindowToWorkspace(address, ws) {
         const a = address.startsWith("0x") ? address : "0x" + address;
         dispatch(`movetoworkspacesilent ${ws},address:${a}`,
-                 `hl.dsp.window.move({ workspace = ${lit(ws)}, window = ${lit("address:" + a)}, silent = true })`);
+                 `hl.dsp.window.move({ workspace = ${lit(ws)}, window = ${lit("address:" + a)}, follow = false })`);
     }
 
     function exec(cmd) {

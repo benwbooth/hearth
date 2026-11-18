@@ -73,13 +73,15 @@ hl.config({
 })
 EOF
   before=$(ls "$XDG_RUNTIME_DIR/hypr" 2>/dev/null || true)
-  wbefore=$(ls "$XDG_RUNTIME_DIR" | grep -E '^wayland-[0-9]+$' || true)
   (cd "$dir" && WAYLAND_DISPLAY=$sock daemon "$dir/hypr.pid" "$dir/hypr.log" \
     "$(tool hyprland)/bin/Hyprland" --config "$dir/hyprland.lua")
   for _ in $(seq 100); do
     sig=$(comm -13 <(echo "$before" | sort) <(ls "$XDG_RUNTIME_DIR/hypr" 2>/dev/null | sort) | head -1)
-    way=$(comm -13 <(echo "$wbefore" | sort) <(ls "$XDG_RUNTIME_DIR" | grep -E '^wayland-[0-9]+$' | sort) | head -1)
-    [[ -n $sig && -n $way && -S $XDG_RUNTIME_DIR/hypr/$sig/.socket.sock ]] && break
+    # Ask Hyprland for its socket: a stale wayland-N file can be reused.
+    way=""
+    [[ -n $sig && -S $XDG_RUNTIME_DIR/hypr/$sig/.socket.sock ]] &&
+      way=$("$(tool hyprland)/bin/hyprctl" instances -j 2>/dev/null | jq -r --arg s "$sig" '.[] | select(.instance == $s) | .wl_socket')
+    [[ -n $sig && -n $way ]] && break
     sleep 0.1
   done
   [[ -n ${sig:-} && -n ${way:-} ]] || { echo "Hyprland did not start; see $dir/hypr.log" >&2; exit 1; }
@@ -116,6 +118,10 @@ stop)
     [[ -f $dir/$p.pid ]] && kill -- -"$(cat "$dir/$p.pid")" 2>/dev/null || true
   done
   sleep 0.5
+  # Hyprland leaves a watchdog child outside its process group.
+  for p in $(pgrep Hyprland); do
+    tr '\0' ' ' </proc/$p/cmdline 2>/dev/null | grep -q -- "--config $dir/hyprland.lua" && kill -9 "$p"
+  done
   [[ -f $dir/sig ]] && rm -rf "$XDG_RUNTIME_DIR/hypr/$(cat "$dir/sig")"
   rm -rf "$dir"
   ;;

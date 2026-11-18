@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Wayland
 import Quickshell.Io
 import "../widgets"
 import "../services"
@@ -104,6 +105,7 @@ BarButton {
         id: pop
         anchorItem: root
         padding: 10
+        keyboardFocus: WlrKeyboardFocus.Exclusive
         // Not a binding: closing the popup assigns `open`, which would break
         // it and leave the shortcut unable to reopen the launcher.
         Connections {
