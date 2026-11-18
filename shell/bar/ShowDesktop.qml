@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell.Hyprland
+import Quickshell.Io
 import "../widgets"
 import "../services"
 import ".."
@@ -15,7 +16,14 @@ BarButton {
     tooltip: showing ? "Back to windows" : "Show desktop"
     active: showing
 
-    onClicked: {
+    onClicked: toggle()
+
+    IpcHandler {
+        target: "desktop"
+        function toggle(): void { root.toggle(); }
+    }
+
+    function toggle() {
         if (showing) {
             Hypr.focusWorkspace(previous);
             previous = null;

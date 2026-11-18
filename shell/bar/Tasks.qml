@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
+import Quickshell.Io
 import "../widgets"
 import "../services"
 import ".."
@@ -41,7 +42,17 @@ Row {
         return order.map(k => byKey[k]).filter(g => g.entry || g.windows.length > 0);
     }
 
+    // Super+N (Plasma's "activate task manager entry N").
+    IpcHandler {
+        target: "tasks"
+        function activate(n: int): void {
+            const item = repeater.itemAt(n - 1);
+            if (item) item.trigger();
+        }
+    }
+
     Repeater {
+        id: repeater
         model: ScriptModel {
             values: root.groups
             objectProp: "key"
@@ -69,9 +80,8 @@ Row {
             if (entry) entry.execute();
         }
 
-        onClicked: mouse => {
-            if (mouse.button === Qt.MiddleButton) { launch(); return; }
-            if (mouse.button === Qt.RightButton) { tip.hovered = false; menu.toggle(); return; }
+        // Left click: launch, focus, minimize, or cycle through windows.
+        function trigger() {
             if (!running) { launch(); return; }
             if (windows.length === 1) {
                 const w = windows[0];
@@ -82,6 +92,12 @@ Row {
             // Several windows: each click focuses the next one.
             cycle = (cycle + 1) % windows.length;
             windows[cycle].activate();
+        }
+
+        onClicked: mouse => {
+            if (mouse.button === Qt.MiddleButton) launch();
+            else if (mouse.button === Qt.RightButton) { tip.hovered = false; menu.toggle(); }
+            else trigger();
         }
         onWheel: w => {
             if (windows.length < 2) return;
