@@ -122,6 +122,10 @@ fz.setup()
 fz.bind_keys()
 hl.config({ general = { layout = "lua:fanzyzones" } })
 
+-- Title bars with minimize/maximize/close (hyprbars; the plugin path comes
+-- from $HEARTH_HYPRBARS, set once per login by uwsm). Double-click maximizes.
+require("titlebars").setup()
+
 -- Super+Alt+Space cycles the tiling algorithm: zones and Hyprland's own.
 local layouts = { "lua:fanzyzones", "dwindle", "master", "scrolling" }
 local function cycle_layout()
