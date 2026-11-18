@@ -1,0 +1,19 @@
+{
+  "$schema": "https://vicinae.com/schemas/config.json",
+  "telemetry": { "system_info": false },
+  "favicon_service": "none",
+  "escape_key_behavior": "close_window",
+  "pop_to_root_on_close": true,
+  "font": {
+    "rendering": "native",
+    "normal": { "family": "Noto Sans" }
+  },
+  "theme": {
+    "light": { "name": "breeze-dark", "icon_theme": "breeze-dark" },
+    "dark": { "name": "breeze-dark", "icon_theme": "breeze-dark" }
+  },
+  "launcher_window": {
+    "size": { "width": 820, "height": 520 },
+    "layer_shell": { "enabled": true, "keyboard_interactivity": "exclusive", "layer": "top" }
+  }
+}

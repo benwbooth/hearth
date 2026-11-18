@@ -8,24 +8,25 @@ import Quickshell.Hyprland
 // `hearth-ipc call <target> <function>`.
 Singleton {
     id: root
-    property bool launcherOpen: false
     property bool doNotDisturb: false
     // The open BarPopup, so opening one closes the others.
     property var activePopup: null
 
-    // Per-screen bar pieces (IPC targets, the launcher) act only on the
+    // Per-screen bar pieces (IPC targets) act only on the
     // focused monitor, so a second screen (e.g. hypr-rdp's virtual one)
-    // doesn't register duplicate targets or open a second launcher.
+    // doesn't register duplicate targets.
     function isActiveScreen(screen) {
         const m = Hyprland.focusedMonitor;
         if (!m || !screen) return true;
         return m.name === screen.name;
     }
 
+    // The launcher is Vicinae; kept so `hearth-ipc call launcher toggle`
+    // still works.
     IpcHandler {
         target: "launcher"
-        function toggle(): void { root.launcherOpen = !root.launcherOpen; }
-        function open(): void { root.launcherOpen = true; }
-        function close(): void { root.launcherOpen = false; }
+        function toggle(): void { Quickshell.execDetached(["vicinae", "toggle"]); }
+        function open(): void { Quickshell.execDetached(["vicinae", "open"]); }
+        function close(): void { Quickshell.execDetached(["vicinae", "close"]); }
     }
 }

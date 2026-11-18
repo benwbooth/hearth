@@ -17,8 +17,7 @@ PanelWindow {
     property int padding: 12
     property bool open: false
     // OnDemand: the popup takes the keyboard when clicked into (search
-    // fields, passwords). The launcher uses Exclusive so typing goes
-    // straight to its search box.
+    // fields, passwords). Exclusive sends all typing straight to it.
     property int keyboardFocus: WlrKeyboardFocus.OnDemand
 
     // A layer-shell panel rather than an xdg popup: popups only get the

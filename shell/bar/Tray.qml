@@ -21,7 +21,6 @@ Row {
         delegate: TrayItem {}
     }
 
-    Clipboard { ipcName: "clipboard" }
     Media { ipcName: "media" }
     Zones { ipcName: "zones" }
     Network { ipcName: "network" }

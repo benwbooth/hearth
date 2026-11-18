@@ -98,6 +98,8 @@ hl.config({
 
 hl.on("hyprland.start", function()
     hl.exec_cmd("uwsm app -- hearth")
+    -- Launcher daemon (also keeps the clipboard history).
+    hl.exec_cmd("uwsm app -- vicinae server")
     hl.exec_cmd("uwsm app -- hypridle")
     -- Wallpaper: hyprpaper draws it, hearth fetches Bing's image of the day.
     hl.exec_cmd("uwsm app -- hyprpaper")
@@ -151,9 +153,10 @@ end
 
 local M = "SUPER"
 
--- Launcher: tap Super (Plasma's "Meta"), or Alt+F1.
-hl.bind(M .. " + SUPER_L", hl.dsp.exec_cmd(hearth_ipc .. "launcher toggle"), { release = true })
-hl.bind("ALT + F1", hl.dsp.exec_cmd(hearth_ipc .. "launcher toggle"))
+-- Launcher (Vicinae): tap Super (Plasma's "Meta"), Alt+F1 or Alt+Space.
+hl.bind(M .. " + SUPER_L", hl.dsp.exec_cmd("vicinae toggle"), { release = true })
+hl.bind("ALT + F1", hl.dsp.exec_cmd("vicinae toggle"))
+hl.bind("ALT + SPACE", hl.dsp.exec_cmd("vicinae toggle"))
 -- Super+1..9: activate task manager entry N (as in Plasma).
 for i = 1, 9 do
     hl.bind(M .. " + " .. i, hl.dsp.exec_cmd(hearth_ipc .. "tasks activate " .. i))
@@ -166,7 +169,7 @@ hl.bind(M .. " + Page_Up", hl.dsp.window.fullscreen({ mode = "maximized" }))
 hl.bind(M .. " + F", hl.dsp.window.fullscreen())
 hl.bind(M .. " + Page_Down", hl.dsp.window.move({ workspace = "special:minimized", follow = false }))
 hl.bind(M .. " + SHIFT + Page_Down", hl.dsp.workspace.toggle_special("minimized"))
-hl.bind(M .. " + V", hl.dsp.exec_cmd(hearth_ipc .. "indicator-clipboard toggle"))
+hl.bind(M .. " + V", hl.dsp.exec_cmd("vicinae cmd launch clipboard:history"))
 hl.bind(M .. " + T", hl.dsp.window.float({ action = "toggle" }))
 hl.bind(M .. " + ALT + SPACE", cycle_layout)
 hl.bind(M .. " + J", hl.dsp.layout("togglesplit"))
