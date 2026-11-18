@@ -17,4 +17,5 @@ ShellRoot {
     Osd {}
     PolkitDialog {}
     BtPairDialog {}
+    ZoneOverlay {}
 }
