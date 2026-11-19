@@ -61,7 +61,10 @@ case $cmd in
 start)
   sock=hearth-kwin-$name
   if ! [[ -S $XDG_RUNTIME_DIR/$sock ]]; then
-    WAYLAND_DISPLAY= DISPLAY= daemon "$dir/kwin.pid" "$dir/kwin.log" \
+    # Own config dir: KWin writes [Xwayland] Scale from its outputs into
+    # kwinrc, and the 1x virtual output would reset the real session's 1.3.
+    mkdir -p "$dir/kwin-config"
+    WAYLAND_DISPLAY= DISPLAY= XDG_CONFIG_HOME="$dir/kwin-config" daemon "$dir/kwin.pid" "$dir/kwin.log" \
       kwin_wayland --virtual --no-lockscreen --socket="$sock" --width 4000 --height 1720
     for _ in $(seq 50); do [[ -S $XDG_RUNTIME_DIR/$sock ]] && break; sleep 0.1; done
   fi
