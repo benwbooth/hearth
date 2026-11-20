@@ -16,6 +16,11 @@ PanelWindow {
     required property Item anchorItem
     default property alias content: body.data
     property int padding: 12
+    // No frame of its own: the content draws its own glass (cascading menus).
+    property bool bare: false
+    // "center": centred on the anchor; "start": left edge at the anchor's
+    // (menu bar menus, which grow to the right as submenus open).
+    property string align: "center"
     property bool open: false
     // Child popups (cascading submenus) that clicks may land in.
     property var extraWindows: []
@@ -55,8 +60,12 @@ PanelWindow {
         if (edge === "left") return 4 + edgeGap;
         void popup.open;
         if (!barWindow || !screen) return 4;
-        const p = anchorItem.mapToItem(null, anchorItem.width / 2, 0);
         const w = popup.implicitWidth;
+        if (popup.align === "start") {
+            const q = anchorItem.mapToItem(null, 0, 0);
+            return Math.max(4, Math.min(screen.width - w - 4, Math.round(q.x)));
+        }
+        const p = anchorItem.mapToItem(null, anchorItem.width / 2, 0);
         return Math.max(4, Math.min(screen.width - w - 4, Math.round(p.x - w / 2)));
     }
     // Above the click catcher below (non-Hyprland).
@@ -77,8 +86,8 @@ PanelWindow {
     // Stays mapped while it fades out.
     visible: open || fadeOut.running
     color: "transparent"
-    implicitWidth: frame.implicitWidth
-    implicitHeight: frame.implicitHeight
+    implicitWidth: Math.max(8, frame.implicitWidth)
+    implicitHeight: Math.max(8, frame.implicitHeight)
 
     onOpenChanged: if (open) ShellState.activePopup = popup
     // One popup at a time.
@@ -131,6 +140,9 @@ PanelWindow {
         Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
         implicitWidth: body.implicitWidth + popup.padding * 2
         implicitHeight: body.implicitHeight + popup.padding * 2
+        tint: popup.bare ? "transparent" : Theme.glassMenu
+        border.width: popup.bare ? 0 : 1
+        rimVisible: !popup.bare
         // GlassFrame carries the 0.001 px nudge: popups draw in their own
         // surface, outside the bar's.
 

@@ -30,6 +30,7 @@ BarButton {
     BarPopup {
         id: menu
         readonly property bool menuBarMenu: true
+                align: "start"
         anchorItem: root
         padding: 5
         Column {

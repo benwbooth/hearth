@@ -41,6 +41,7 @@ Row {
     BarPopup {
         id: appMenu
         readonly property bool menuBarMenu: true
+                align: "start"
         anchorItem: appTitle
         padding: 5
         Column {
@@ -74,7 +75,12 @@ Row {
     }
 
     Repeater {
-        model: AppMenu.topLevel
+        // Keyed by item id: a layout refresh (every time a menu opens) must
+        // not recreate the titles, or the open dropdown would go with them.
+        model: ScriptModel {
+            values: AppMenu.topLevel
+            objectProp: "id"
+        }
         delegate: Item {
             id: topItem
             required property var modelData
@@ -89,8 +95,10 @@ Row {
             BarPopup {
                 id: pop
                 readonly property bool menuBarMenu: true
+                align: "start"
                 anchorItem: title
-                padding: 5
+                padding: 0
+                bare: true
                 Loader {
                     active: pop.open
                     sourceComponent: DBusMenuList {

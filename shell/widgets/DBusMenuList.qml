@@ -3,96 +3,97 @@ import Quickshell
 import "../services"
 import ".."
 
-// The entries of one global-menu (dbusmenu) menu: items, separators,
-// check/radio items, shortcuts, and submenus that cascade to the right on
-// hover. Always reads the live tree (AppMenu.find), so updates while open
-// show at once. `done()` fires after an item is activated.
-Column {
+// One global-menu (dbusmenu) menu in its own glass pane: items,
+// separators, check/radio items, shortcuts, and submenus that cascade to
+// the right on hover. Submenus are drawn in the same surface (the popup
+// grows to fit), not as separate popups, so clicks in them never fall
+// outside the menu's focus grab. Always reads the live tree
+// (AppMenu.find), so updates while open show at once. `done()` fires after
+// an item is activated.
+Item {
     id: root
     property int itemId: 0
-    // The BarPopup this menu is in: submenus join its focus grab.
-    property var hostPopup: null
+    property var hostPopup: null    // unused; kept for callers
     signal done()
     readonly property var node: { void AppMenu.menu; return AppMenu.find(root.itemId); }
     readonly property var items: node ? (node.children || []).filter(i => i.visible) : []
     property int openSub: -1
+    property real openSubY: 0
 
-    width: Math.max(220, implicitW)
-    readonly property real implicitW: {
-        let w = 0;
-        for (let i = 0; i < children.length; i++) w = Math.max(w, children[i].implicitWidth || 0);
-        return w;
-    }
+    implicitWidth: pane.width + (sub.item ? sub.item.implicitWidth - 4 : 0)
+    implicitHeight: Math.max(pane.height, sub.item ? sub.y + sub.item.implicitHeight : 0)
 
     Component.onCompleted: Qt.callLater(() => AppMenu.open(root.itemId))
     Component.onDestruction: AppMenu.close(root.itemId)
 
-    Repeater {
-        model: root.items
-        delegate: Item {
-            id: row
-            required property var modelData
-            readonly property bool sep: modelData.type === "separator"
-            width: root.width
-            implicitWidth: sep ? 0 : entry.implicitWidth
-            height: sep ? sepItem.implicitHeight : entry.implicitHeight
+    onOpenSubChanged: {
+        if (openSub < 0) sub.source = "";
+        else sub.setSource("DBusMenuList.qml", { itemId: openSub });
+    }
 
-            MenuSeparator { id: sepItem; visible: row.sep; width: parent.width }
+    GlassFrame {
+        id: pane
+        width: col.width + 12
+        height: col.implicitHeight + 12
 
-            MenuItem {
-                id: entry
-                visible: !row.sep
-                width: parent.width
-                enabled: row.modelData.enabled
-                text: row.modelData.label
-                icon: row.modelData.toggleType === "" ? row.modelData.icon : ""
-                checkable: row.modelData.toggleType !== ""
-                checked: row.modelData.toggleState === 1
-                shortcut: row.modelData.submenu ? "›" : row.modelData.shortcut
-                onContainsMouseChanged: if (containsMouse) root.openSub = row.modelData.submenu ? row.modelData.id : -1
-                onTriggered: {
-                    if (row.modelData.submenu) { root.openSub = row.modelData.id; return; }
-                    AppMenu.click(row.modelData.id);
-                    root.done();
-                }
+        Column {
+            id: col
+            x: 6
+            y: 6
+            width: Math.max(220, widest)
+            readonly property real widest: {
+                let w = 0;
+                for (let i = 0; i < children.length; i++) w = Math.max(w, children[i].implicitWidth || 0);
+                return w;
             }
 
-            PopupWindow {
-                id: sub
-                visible: row.modelData.submenu && root.openSub === row.modelData.id
-                anchor.item: row
-                anchor.edges: Edges.Right | Edges.Top
-                anchor.gravity: Edges.Right | Edges.Bottom
-                anchor.adjustment: PopupAdjustment.FlipX | PopupAdjustment.SlideY
-                anchor.margins.top: -6
-                onVisibleChanged: {
-                    const h = root.hostPopup;
-                    if (!h) return;
-                    const rest = h.extraWindows.filter(w => w !== sub);
-                    h.extraWindows = visible ? rest.concat([sub]) : rest;
+            Repeater {
+                model: ScriptModel {
+                    values: root.items
+                    objectProp: "id"
                 }
-                color: "transparent"
-                implicitWidth: subFrame.implicitWidth
-                implicitHeight: subFrame.implicitHeight
-                GlassFrame {
-                    id: subFrame
-                    anchors.fill: parent
-                    implicitWidth: subLoader.implicitWidth + 12
-                    implicitHeight: subLoader.implicitHeight + 12
-                    Loader {
-                        id: subLoader
-                        x: 6
-                        y: 6
-                        active: sub.visible
-                        source: "DBusMenuList.qml"
-                        onLoaded: {
-                            item.hostPopup = root.hostPopup;
-                            item.itemId = row.modelData.id;
-                            item.done.connect(root.done);
+                delegate: Item {
+                    id: row
+                    required property var modelData
+                    readonly property bool sep: modelData.type === "separator"
+                    width: col.width
+                    implicitWidth: sep ? 0 : entry.implicitWidth
+                    height: sep ? sepItem.implicitHeight : entry.implicitHeight
+
+                    MenuSeparator { id: sepItem; visible: row.sep; width: parent.width }
+
+                    MenuItem {
+                        id: entry
+                        visible: !row.sep
+                        width: parent.width
+                        enabled: row.modelData.enabled
+                        text: row.modelData.label
+                        icon: row.modelData.toggleType === "" ? row.modelData.icon : ""
+                        checkable: row.modelData.toggleType !== ""
+                        checked: row.modelData.toggleState === 1
+                        shortcut: row.modelData.submenu ? "›" : row.modelData.shortcut
+                        // Keep the submenu's row highlighted while it's open.
+                        highlighted: root.openSub === row.modelData.id
+                        function openIt() {
+                            root.openSubY = row.y;
+                            root.openSub = row.modelData.submenu ? row.modelData.id : -1;
+                        }
+                        onContainsMouseChanged: if (containsMouse) openIt()
+                        onTriggered: {
+                            if (row.modelData.submenu) { openIt(); return; }
+                            AppMenu.click(row.modelData.id);
+                            root.done();
                         }
                     }
                 }
             }
         }
+    }
+
+    Loader {
+        id: sub
+        x: pane.width - 4
+        y: root.openSubY
+        onLoaded: item.done.connect(root.done)
     }
 }

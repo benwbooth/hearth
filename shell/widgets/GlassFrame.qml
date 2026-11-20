@@ -7,6 +7,7 @@ import ".."
 Rectangle {
     id: root
     property color tint: Theme.glassMenu
+    property bool rimVisible: true
     color: tint
     radius: Theme.popupRadius
     border.color: Theme.glassEdge
@@ -14,6 +15,7 @@ Rectangle {
     transform: Translate { x: 0.001; y: 0.001 }
 
     Rectangle {
+        visible: root.rimVisible
         anchors.fill: parent
         anchors.margins: 1
         radius: Math.max(0, root.radius - 1)

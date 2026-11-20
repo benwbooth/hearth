@@ -9,6 +9,8 @@ MouseArea {
     property bool checked: false
     property bool checkable: false
     property string shortcut: ""
+    property bool highlighted: false
+    readonly property bool lit: enabled && (pressed || containsMouse || highlighted)
     signal triggered()
 
     width: parent ? parent.width : implicitWidth
@@ -21,7 +23,7 @@ MouseArea {
     Rectangle {
         anchors.fill: parent
         radius: Theme.radius
-        color: root.enabled && (root.pressed || root.containsMouse) ? Theme.accent : "transparent"
+        color: root.lit ? Theme.accent : "transparent"
     }
     Label {
         anchors.right: parent.right
@@ -29,7 +31,7 @@ MouseArea {
         anchors.verticalCenter: parent.verticalCenter
         visible: root.shortcut !== ""
         text: root.shortcut
-        color: root.enabled && root.containsMouse ? Theme.accentText : Theme.fgDim
+        color: root.lit ? Theme.accentText : Theme.fgDim
     }
     Row {
         id: row
@@ -64,7 +66,7 @@ MouseArea {
         Label {
             anchors.verticalCenter: parent.verticalCenter
             text: root.text
-            color: !root.enabled ? Theme.fgDim : root.containsMouse ? Theme.accentText : Theme.fg
+            color: !root.enabled ? Theme.fgDim : root.lit ? Theme.accentText : Theme.fg
         }
     }
 }
