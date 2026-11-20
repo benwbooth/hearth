@@ -10,6 +10,8 @@ import ".."
 Column {
     id: root
     property int itemId: 0
+    // The BarPopup this menu is in: submenus join its focus grab.
+    property var hostPopup: null
     signal done()
     readonly property var node: { void AppMenu.menu; return AppMenu.find(root.itemId); }
     readonly property var items: node ? (node.children || []).filter(i => i.visible) : []
@@ -63,6 +65,12 @@ Column {
                 anchor.gravity: Edges.Right | Edges.Bottom
                 anchor.adjustment: PopupAdjustment.FlipX | PopupAdjustment.SlideY
                 anchor.margins.top: -6
+                onVisibleChanged: {
+                    const h = root.hostPopup;
+                    if (!h) return;
+                    const rest = h.extraWindows.filter(w => w !== sub);
+                    h.extraWindows = visible ? rest.concat([sub]) : rest;
+                }
                 color: "transparent"
                 implicitWidth: subFrame.implicitWidth
                 implicitHeight: subFrame.implicitHeight
@@ -78,6 +86,7 @@ Column {
                         active: sub.visible
                         source: "DBusMenuList.qml"
                         onLoaded: {
+                            item.hostPopup = root.hostPopup;
                             item.itemId = row.modelData.id;
                             item.done.connect(root.done);
                         }

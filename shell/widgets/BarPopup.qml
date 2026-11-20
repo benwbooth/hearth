@@ -17,6 +17,8 @@ PanelWindow {
     default property alias content: body.data
     property int padding: 12
     property bool open: false
+    // Child popups (cascading submenus) that clicks may land in.
+    property var extraWindows: []
     // OnDemand: the popup takes the keyboard when clicked into (search
     // fields, passwords). Exclusive sends all typing straight to it.
     property int keyboardFocus: WlrKeyboardFocus.OnDemand
@@ -60,7 +62,18 @@ PanelWindow {
     // Above the click catcher below (non-Hyprland).
     WlrLayershell.layer: Compositor.isHyprland ? WlrLayer.Top : WlrLayer.Overlay
     WlrLayershell.namespace: "hearth-popup"
-    WlrLayershell.keyboardFocus: open ? popup.keyboardFocus : WlrKeyboardFocus.None
+    // Mapped without keyboard interactivity, which is turned on a moment
+    // later: Hyprland gives a keyboard-interactive layer the pointer as it
+    // maps (an enter at the cursor's position, outside the popup), after
+    // which Qt never shows hover in it until the pointer leaves again.
+    WlrLayershell.keyboardFocus: open && keyboardReady ? popup.keyboardFocus : WlrKeyboardFocus.None
+    property bool keyboardReady: false
+    onVisibleChanged: { keyboardReady = false; if (visible) keyboardTimer.restart(); }
+    Timer {
+        id: keyboardTimer
+        interval: 120
+        onTriggered: popup.keyboardReady = popup.visible
+    }
     visible: open
     color: "transparent"
     implicitWidth: frame.implicitWidth
@@ -79,7 +92,7 @@ PanelWindow {
     // buttons can toggle the popup closed.
     HyprlandFocusGrab {
         active: Compositor.isHyprland && popup.visible
-        windows: popup.barWindow ? [popup, popup.barWindow] : [popup]
+        windows: (popup.barWindow ? [popup, popup.barWindow] : [popup]).concat(popup.extraWindows)
         onCleared: popup.close()
     }
 

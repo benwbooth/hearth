@@ -76,14 +76,14 @@ Row {
     Repeater {
         model: AppMenu.topLevel
         delegate: Item {
-            id: item
+            id: topItem
             required property var modelData
             implicitWidth: title.implicitWidth
             implicitHeight: title.implicitHeight
             MenuTitle {
                 id: title
-                text: item.modelData.label
-                enabled: item.modelData.enabled
+                text: topItem.modelData.label
+                enabled: topItem.modelData.enabled
                 popup: pop
             }
             BarPopup {
@@ -94,7 +94,8 @@ Row {
                 Loader {
                     active: pop.open
                     sourceComponent: DBusMenuList {
-                        itemId: item.modelData.id
+                        itemId: topItem.modelData.id
+                        hostPopup: pop
                         onDone: pop.close()
                     }
                 }

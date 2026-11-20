@@ -189,15 +189,29 @@ def event(cur, nid, name):
                        error_handler=lambda e: out({"type": "error", "message": str(e)}))
 
 
+inbuf = b""
+
+
 def on_stdin(fd, cond):
-    line = sys.stdin.readline()
-    if not line:
+    # Read whatever is there and handle every complete line: several
+    # commands often arrive in one chunk (close + open when switching menus).
+    global inbuf
+    data = os.read(fd, 65536)
+    if not data:
         loop.quit()
         return False
+    inbuf += data
+    while b"\n" in inbuf:
+        line, inbuf = inbuf.split(b"\n", 1)
+        handle(line.decode("utf-8", "replace"))
+    return True
+
+
+def handle(line):
     try:
         c = json.loads(line)
     except ValueError:
-        return True
+        return
     cmd = c.get("cmd")
     try:
         if cmd == "watch":
@@ -214,7 +228,6 @@ def on_stdin(fd, cond):
             event(current, int(c["id"]), "clicked")
     except Exception as e:
         out({"type": "error", "message": str(e)})
-    return True
 
 
 class Registrar(dbus.service.Object):
