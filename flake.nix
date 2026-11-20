@@ -57,7 +57,11 @@
         cp -r shell helpers hypr vicinae swaync $out/share/hearth/
         chmod +x $out/share/hearth/helpers/*
         patchShebangs $out/share/hearth/helpers
+        # Apps launched from the dock inherit the bar's working directory;
+        # start in $HOME so a bar run from a since-deleted directory doesn't
+        # hand every app a dangling cwd.
         makeWrapper ${quickshell}/bin/quickshell $out/bin/hearth \
+          --run 'cd "$HOME"' \
           --add-flags "-p $out/share/hearth/shell" \
           --prefix PATH : ${lib.makeBinPath runtimeDeps}:$out/share/hearth/helpers \
           --prefix QML_IMPORT_PATH : ${qmlPath}
