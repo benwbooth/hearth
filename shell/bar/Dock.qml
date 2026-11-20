@@ -22,7 +22,10 @@ PanelWindow {
     readonly property var cfg: Settings.dock
     readonly property string edge: ["left", "right"].indexOf(cfg.position) >= 0 ? cfg.position : "bottom"
     readonly property bool vertical: edge !== "bottom"
-    readonly property int iconSize: Math.max(24, Math.min(128, cfg.size))
+    // The set size, shrunk when every app wouldn't fit along the edge.
+    readonly property int appCount: TaskGroups.groups.length + (cfg.showRecents ? TaskGroups.recentGroups.length : 0)
+    readonly property int fitSize: Math.floor(((vertical ? height : width) - 60 - 2 * 17) / Math.max(1, appCount)) - 10
+    readonly property int iconSize: Math.max(20, Math.min(128, cfg.size, fitSize))
     readonly property real cell: iconSize + 10
     readonly property real sepLen: 17
     readonly property real pad: 6
@@ -135,7 +138,11 @@ PanelWindow {
             for (const g of rest) out.push({ key: g.key, kind: "app", group: g, pinned: false });
         }
         if (!cfg.minimizeIntoApp) {
-            const mins = ToplevelManager.toplevels.values.filter(t => t.minimized);
+            // Minimized: arbor reports it per window; elsewhere the
+            // foreign-toplevel state.
+            const mins = Compositor.isNiri
+                ? Compositor.windows.filter(w => w.minimized && w.toplevel).map(w => w.toplevel)
+                : ToplevelManager.toplevels.values.filter(t => t.minimized);
             if (mins.length) {
                 out.push({ key: "sep:min", kind: "sep" });
                 for (const t of mins) out.push({ key: "min:" + (t.appId || "") + ":" + mins.indexOf(t), kind: "min", toplevel: t });
@@ -316,7 +323,9 @@ PanelWindow {
                 id: slab
                 anchors.fill: parent
                 radius: Math.min(22, dockWin.thickness * 0.32)
-                color: Theme.glassDock
+                // Hyprland blurs behind the dock; niri can't for this wide
+                // surface (see niri/hearth-layer-rules.kdl), so more tint.
+                color: Compositor.isHyprland ? Theme.glassDock : Theme.glassDockSolid
                 border.color: Theme.glassEdge
                 border.width: 1
                 Rectangle {

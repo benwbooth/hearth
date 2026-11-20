@@ -269,7 +269,8 @@ Scope {
                                 y: 10
                                 width: parent.width - 20
                                 height: parent.height - 52
-                                captureSource: cell.modelData.toplevel
+                                captureSource: cell.modelData.toplevel || null
+                                visible: !!cell.modelData.toplevel
                                 live: true
                                 constraintSize: Qt.size(width, height)
                             }

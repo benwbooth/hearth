@@ -43,6 +43,7 @@ Singleton {
     }
     readonly property color glassBar: glassColor(dark ? Qt.rgba(0.10, 0.11, 0.12, 1) : Qt.rgba(0.95, 0.95, 0.96, 1), 0.34)
     readonly property color glassDock: glassColor(dark ? Qt.rgba(0.16, 0.17, 0.19, 1) : Qt.rgba(0.97, 0.97, 0.98, 1), 0.40)
+    readonly property color glassDockSolid: glassColor(dark ? Qt.rgba(0.16, 0.17, 0.19, 1) : Qt.rgba(0.97, 0.97, 0.98, 1), 0.85)
     readonly property color glassMenu: glassColor(dark ? Qt.rgba(0.14, 0.15, 0.17, 1) : Qt.rgba(0.97, 0.97, 0.98, 1), 0.62)
     // The thin bright rim and darker outline that make glass read as a pane.
     readonly property color glassRim: dark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.75)

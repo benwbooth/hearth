@@ -54,7 +54,7 @@ Row {
             MenuItem {
                 text: "Minimize"
                 visible: root.activeTop !== null
-                onTriggered: { appMenu.close(); if (root.activeTop) root.activeTop.minimized = true; }
+                onTriggered: { appMenu.close(); if (root.activeTop) Compositor.minimizeToplevel(root.activeTop); }
             }
             MenuItem {
                 text: "Close Window"

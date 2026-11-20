@@ -22,6 +22,7 @@ Scope {
             workspaceId: t.workspace ? t.workspace.id : null,
             output: mon ? mon.name : "",
             focused: t.activated,
+            minimized: !!(t.wayland && t.wayland.minimized),
             floating: !!o.floating,
             urgent: t.urgent,
             at: o.at ? [o.at[0] - mx, o.at[1] - my] : null,

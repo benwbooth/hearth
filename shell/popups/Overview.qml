@@ -294,7 +294,8 @@ Scope {
 
                                     ScreencopyView {
                                         anchors.fill: parent
-                                        captureSource: win.modelData.toplevel
+                                        captureSource: win.modelData.toplevel || null
+                                        visible: !!win.modelData.toplevel
                                         live: root.open
                                         constraintSize: Qt.size(width, height)
                                     }

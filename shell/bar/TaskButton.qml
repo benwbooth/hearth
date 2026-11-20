@@ -56,7 +56,7 @@ MouseArea {
         if (!running) { launch(); return; }
         if (windows.length === 1) {
             const w = windows[0];
-            if (w.activated) w.minimized = true;
+            if (w.activated) Compositor.minimizeToplevel(w);
             else w.activate();
             return;
         }

@@ -1,0 +1,34 @@
+// hearth's glass for niri / arbor (26.04+): blur what's behind the menu bar,
+// menus and popups, and swaync's notifications. Include it from the arbor
+// config:   include "/path/to/hearth/niri/hearth-layer-rules.kdl"
+// (or paste it in).
+//
+// The dock is left out on purpose: its layer surface spans the whole screen
+// edge (so it never resizes while magnifying) and niri blurs a layer's
+// whole rectangle, not only its opaque pixels like Hyprland's ignore_alpha.
+// hearth draws the dock with a more opaque tint there instead.
+
+layer-rule {
+    match namespace="^hearth-(menubar|popup)$"
+    match namespace="^swaync-(control-center|notification-window)$"
+    geometry-corner-radius 10
+    background-effect {
+        xray false
+        blur true
+        noise 0.03
+        saturation 1.4
+    }
+    popups {
+        geometry-corner-radius 10
+        background-effect {
+            xray false
+            blur true
+        }
+    }
+}
+
+// The menu bar is square-cornered.
+layer-rule {
+    match namespace="^hearth-menubar$"
+    geometry-corner-radius 0
+}

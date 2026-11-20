@@ -6,7 +6,7 @@ import "compositor"
 
 // What the shell needs from the compositor, for Hyprland and niri/arbor.
 //
-// windows: [{ id (string), appId, title, workspaceId, output, focused,
+// windows: [{ id (string), appId, title, workspaceId, output, focused, minimized,
 //             floating, urgent, at: [x, y] | null (logical, relative to the
 //             output), size: [w, h] | null, focusOrder (lower = more recent),
 //             special (Hyprland special workspace), appMenu: { service_name,
@@ -95,7 +95,15 @@ Singleton {
     function focusEmptyWorkspace() { if (backend) backend.focusEmptyWorkspace(); }
     function refresh() { if (backend) backend.refresh(); }
     function minimize(id) {
+        if (backend && backend.minimize) { backend.minimize(id); return; }
         const w = windows.find(x => x.id === id);
         if (w && w.toplevel) w.toplevel.minimized = true;
+    }
+    // Minimize through the compositor when it can (arbor), else the
+    // foreign-toplevel request.
+    function minimizeToplevel(t) {
+        const w = windowForToplevel(t);
+        if (w && backend && backend.minimize) backend.minimize(w.id);
+        else if (t) t.minimized = true;
     }
 }

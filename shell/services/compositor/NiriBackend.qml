@@ -55,6 +55,7 @@ Scope {
                 workspaceId: w.workspace_id !== null && w.workspace_id !== undefined ? w.workspace_id : null,
                 output: w.workspace_id !== null && w.workspace_id !== undefined ? (outOf[w.workspace_id] || "") : "",
                 focused: !!w.is_focused,
+                minimized: !!w.is_minimized,   // arbor
                 floating: !!w.is_floating,
                 urgent: !!w.is_urgent,
                 at: l.tile_pos_in_workspace_view ? [l.tile_pos_in_workspace_view[0], l.tile_pos_in_workspace_view[1]] : null,
@@ -228,6 +229,8 @@ Scope {
 
     function num(id) { return Number(id); }
     function focusWindow(id) { action("FocusWindow", { id: num(id) }); }
+    // arbor: MinimizeWindow; focusing a minimized window restores it.
+    function minimize(id) { action("MinimizeWindow", { id: num(id) }); }
     function closeWindow(id) { action("CloseWindow", { id: num(id) }); }
     function focusWorkspace(id) { action("FocusWorkspace", { reference: { Id: num(id) } }); }
     function focusWorkspaceRelative(delta) { action(delta > 0 ? "FocusWorkspaceDown" : "FocusWorkspaceUp", {}); }
