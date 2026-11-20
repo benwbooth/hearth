@@ -18,7 +18,10 @@ run() {
 }
 
 case ${1:-menu} in
-lock)     run loginctl lock-session ;;
+lock)
+  # hypridle turns lock-session into hyprlock; without it, lock directly.
+  if pgrep -x hypridle >/dev/null; then run loginctl lock-session
+  else run sh -c 'pidof hyprlock || hyprlock'; fi ;;
 suspend)  run systemctl suspend ;;
 reboot)   run systemctl reboot ;;
 poweroff) run systemctl poweroff ;;
