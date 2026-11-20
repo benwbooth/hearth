@@ -1,8 +1,22 @@
 # hearth
 
-A Quickshell desktop shell for Hyprland, replacing Ben's Plasma panel:
-launcher, icon task manager with live previews and badges, pager, system
-tray, and indicators for everything the Plasma tray did.
+A Quickshell desktop shell for Hyprland and niri/arbor, replacing Ben's
+Plasma panel: a macOS-style glass menu bar (with the focused app's global
+menu on arbor) and auto-hiding, magnifying Dock, or the classic bottom panel;
+launcher, task manager with live previews and badges, pager, system tray,
+indicators for everything the Plasma tray did, Settings and Help windows.
+
+- Layout and every option: Settings window (system menu → hearth Settings…,
+  `hearth-ipc call settings open`), saved to `~/.config/hearth/settings.json`
+  (`layout`: `"mac"` default or `"panel"`). Scripts: `hearth-ipc call settings
+  set dock.size 64`.
+- Compositor: `shell/services/Compositor.qml` picks Hyprland or niri (via
+  `$NIRI_SOCKET`; `HEARTH_COMPOSITOR` overrides). On niri/arbor include
+  `niri/hearth-layer-rules.kdl` for blur.
+- Global menu (arbor + mac layout): `helpers/hearth-appmenu` owns
+  `com.canonical.AppMenu.Registrar` (so Qt apps export their menus) and relays
+  com.canonical.dbusmenu; the address comes from niri IPC `Window.app_menu`.
+- Help: the ? in the menu bar, `hearth-ipc call help shortcuts` (Super+/).
 
 - `nix run` / `hearth`: run the installed shell. `hearth-ipc call launcher toggle` etc.
 - `nix develop`, then `quickshell -p shell`: run from the checkout; QML hot-reloads on save.

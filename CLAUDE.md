@@ -1,6 +1,7 @@
 # hearth conventions
 
-Quickshell 0.3.2 shell for Hyprland 0.55 (Lua config). Read README.md first.
+Quickshell 0.3.2 shell for Hyprland 0.55 (Lua config) and niri/arbor. Read
+README.md first.
 
 ## QML rules
 - All text: `widgets/Label.qml` (native rendering). Text inputs set
@@ -12,6 +13,15 @@ Quickshell 0.3.2 shell for Hyprland 0.55 (Lua config). Read README.md first.
   text on an exact half device pixel smears).
 - Colours/sizes from `Theme` (`import ".."` or `"../.."`), Breeze Dark.
 - Icons: `widgets/Icon.qml` with freedesktop/Breeze icon names.
+- Window/workspace state and actions go through `services/Compositor.qml`
+  (Hyprland and niri backends); Hyprland-only features check
+  `Compositor.isHyprland` and must not touch `Quickshell.Hyprland` otherwise.
+- User options live in `services/Settings.qml` (settings.json) and get a row
+  in `popups/SettingsWindow.qml` with a one-line explanation; new actions and
+  shortcuts go into `services/Help.qml` so the Help search finds them.
+- Bars set `edge` ("top"/"bottom"/"left"/"right") on their window; BarPopup,
+  Tooltip and previews open away from it. Never make a bar window change size
+  or visibility per frame: animate content inside a fixed-size surface.
 - Hyprland dispatches go through `services/Hypr.qml` (the Lua config means
   `hyprctl dispatch` takes Lua expressions such as `hl.dsp.focus({ workspace = 3 })`).
 - Quickshell has no generic DBus. Shell out with `Process` (nmcli, udisksctl,
@@ -29,7 +39,10 @@ Docs: https://quickshell.org/docs/v0.3.2/types/
 ## Testing
 `scripts/test-session.sh start NAME`, then `run NAME` after each change
 (prints QML warnings), `ipc NAME call indicator-x toggle` to open a popup,
-`shot NAME out.png` for a 3840x1620 screenshot (bar is the bottom 44 px).
+`shot NAME out.png` for a 3840x1620 screenshot. `HEARTH_LAYOUT=panel` forces
+the classic panel. Test runs share the real session bus: set
+`HEARTH_APPMENU_REGISTRAR=0` and `HEARTH_SESSION_DRYRUN=1`, and give them
+their own `XDG_CONFIG_HOME`/`XDG_CACHE_HOME`.
 Use your own NAME so parallel sessions don't collide; `stop NAME` when done.
 The tray shows the real session's apps (same session bus).
 
