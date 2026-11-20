@@ -26,7 +26,8 @@ PanelWindow {
     property var extraWindows: []
     // OnDemand: the popup takes the keyboard when clicked into (search
     // fields, passwords). Exclusive sends all typing straight to it.
-    property int keyboardFocus: WlrKeyboardFocus.OnDemand
+    // Exclusive by default, like a macOS menu: Escape closes it.
+    property int keyboardFocus: WlrKeyboardFocus.Exclusive
 
     // A layer-shell panel rather than an xdg popup: popups only get the
     // keyboard through an input grab, which a key bind or `hearth-ipc` can't
@@ -123,6 +124,13 @@ PanelWindow {
             acceptedButtons: Qt.AllButtons
             onPressed: popup.close()
         }
+    }
+
+    // Escape closes it (a focused key handler: Shortcut needs an "active"
+    // window, which a layer surface never is).
+    Item {
+        focus: popup.open
+        Keys.onEscapePressed: popup.close()
     }
 
     function toggle() { open = !open; }

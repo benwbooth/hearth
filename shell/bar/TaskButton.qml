@@ -71,7 +71,7 @@ MouseArea {
         windows[cycle].activate();
     }
 
-    onPressed: mouse => { pressPos = Qt.point(mouse.x, mouse.y); dragging = false; previewShow.stop(); }
+    onPressed: mouse => { ShellState.pressedIn(task); pressPos = Qt.point(mouse.x, mouse.y); dragging = false; previewShow.stop(); }
     onPositionChanged: mouse => {
         // Moving over the icon restarts the rest timer (dock thumbnails).
         if (task.dock && task.pointed && !preview.visible && !task.pressed) previewShow.restart();

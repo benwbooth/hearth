@@ -9,6 +9,14 @@ Singleton {
     id: root
     // The open BarPopup, so opening one closes the others.
     property var activePopup: null
+    // A press on a bar/dock button: close the open popup unless it belongs
+    // to that button (whose own click toggles it). The popups' focus grab
+    // lets clicks through to their bar, so without this a menu stayed open
+    // while you clicked other dock icons.
+    function pressedIn(item) {
+        const p = activePopup;
+        if (p && p.open && p.anchorItem !== item) p.close();
+    }
     // Ask the overview to open (dock menu "Show All Windows").
     signal overviewRequested()
 

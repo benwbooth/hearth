@@ -1,11 +1,13 @@
 import QtQuick
 import Quickshell
 import ".."
+import "../services"
 
 // A bar/tray button: icon and/or text, hover highlight and a tooltip.
 // Extra children (badges, overlays) go on top of the icon.
 MouseArea {
     id: root
+    onPressed: ShellState.pressedIn(root)
     property string icon: ""
     property string iconFallback: "application-x-executable"
     property string text: ""
