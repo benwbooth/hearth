@@ -279,9 +279,19 @@ for key, action in pairs(speechnote) do
 end
 hl.bind("Pause",     hl.dsp.exec_cmd("whisper-toggle"))
 
--- Screenshots
-hl.bind("Print",              hl.dsp.exec_cmd("spectacle"))
-hl.bind(M .. " + SHIFT + S",  hl.dsp.exec_cmd("spectacle -r"))
+-- Screenshots (Spectacle needs KWin): grimblast captures, satty opens it to
+-- annotate, then Enter copies / Ctrl+S saves to ~/Pictures/Screenshots
+-- (~/.config/satty/config.toml).
+local shot = function(what)
+    return hl.dsp.exec_cmd("grimblast --freeze save " .. what .. " - | satty --filename -")
+end
+hl.bind("Print",               shot("output"))   -- this screen
+hl.bind("SHIFT + Print",       shot("area"))     -- drag a region or click a window
+hl.bind(M .. " + SHIFT + S",   shot("area"))
+hl.bind("ALT + Print",         shot("active"))   -- the focused window
+hl.bind(M .. " + Print",       shot("active"))
+-- Straight to the clipboard, no editor.
+hl.bind("CTRL + Print",        hl.dsp.exec_cmd("grimblast --notify --freeze copy area"))
 
 -- Media and volume keys (work on the lock screen too).
 local lr = { locked = true, repeating = true }
@@ -308,6 +318,13 @@ hl.window_rule({
     name  = "fix-xwayland-drags",
     match = { class = "^$", title = "^$", xwayland = true, float = true, fullscreen = false, pin = false },
     no_focus = true,
+})
+hl.window_rule({
+    name   = "screenshot-editor",
+    match  = { class = "^(com.gabm.satty)$" },
+    float  = true,
+    size   = "monitor_w*0.8 monitor_h*0.8",
+    center = true,
 })
 hl.window_rule({
     name  = "kde-dialogs-float",
