@@ -28,7 +28,7 @@ BarButton {
             MenuSeparator {}
             MenuItem {
                 text: "hearth Settings…"
-                onTriggered: { menu.close(); Settings.openRequested(); }
+                onTriggered: { menu.close(); Settings.openRequested(""); }
             }
             MenuItem {
                 text: "System Settings…"

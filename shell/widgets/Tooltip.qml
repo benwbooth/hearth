@@ -40,6 +40,8 @@ PopupWindow {
     Rectangle {
         id: frame
         anchors.fill: parent
+        opacity: tip.visible ? 1 : 0
+        Behavior on opacity { NumberAnimation { duration: 120 } }
         color: Theme.glassMenu
         border.color: Theme.glassEdge
         radius: Theme.radius

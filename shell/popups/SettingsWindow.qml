@@ -18,7 +18,7 @@ Scope {
 
     Connections {
         target: Settings
-        function onOpenRequested() { root.open = true; }
+        function onOpenRequested(pane) { if (pane) root.pane = pane; root.open = true; }
     }
 
     LazyLoader {

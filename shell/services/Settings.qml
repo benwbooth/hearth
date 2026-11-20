@@ -93,11 +93,13 @@ Singleton {
     readonly property var dock: { void root.data; return Object.assign({}, defaults.dock, data.dock || {}); }
     readonly property var notifications: { void root.data; return Object.assign({}, defaults.notifications, data.notifications || {}); }
 
-    signal openRequested()
+    // pane: "" (last used) or a Settings window pane id ("dock", ...).
+    signal openRequested(string pane)
 
     IpcHandler {
         target: "settings"
-        function open(): void { root.openRequested(); }
+        function open(): void { root.openRequested(""); }
+        function openPane(pane: string): void { root.openRequested(pane); }
         function set(key: string, json: string): string {
             let v;
             try { v = JSON.parse(json); } catch (e) { v = json; }

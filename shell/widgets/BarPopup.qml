@@ -74,7 +74,8 @@ PanelWindow {
         interval: 120
         onTriggered: popup.keyboardReady = popup.visible
     }
-    visible: open
+    // Stays mapped while it fades out.
+    visible: open || fadeOut.running
     color: "transparent"
     implicitWidth: frame.implicitWidth
     implicitHeight: frame.implicitHeight
@@ -121,6 +122,13 @@ PanelWindow {
     GlassFrame {
         id: frame
         anchors.fill: parent
+        // Fade and grow in from the bar's side; fade out on close.
+        opacity: popup.open ? 1 : 0
+        scale: popup.open ? 1 : 0.96
+        transformOrigin: popup.fromTop ? Item.Top : popup.edge === "left" ? Item.Left
+                       : popup.edge === "right" ? Item.Right : Item.Bottom
+        Behavior on opacity { NumberAnimation { id: fadeOut; duration: popup.open ? 140 : 110; easing.type: Easing.OutCubic } }
+        Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
         implicitWidth: body.implicitWidth + popup.padding * 2
         implicitHeight: body.implicitHeight + popup.padding * 2
         // GlassFrame carries the 0.001 px nudge: popups draw in their own

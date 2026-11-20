@@ -23,6 +23,10 @@ MouseArea {
     // Dock drag-to-reorder/remove: an object with begin(task, p),
     // move(task, p), end(task, p); p in the task's window coordinates.
     property var dragHost: null
+    // False once the pointer has left the dock: previews must close even if
+    // the MouseArea missed the leave (input region changed under it).
+    property bool hostHovered: true
+    onHostHoveredChanged: if (!hostHovered) previewHide.restart()
     readonly property bool menuOpen: menu.open
     readonly property bool previewOpen: preview.visible
 
@@ -61,7 +65,7 @@ MouseArea {
         windows[cycle].activate();
     }
 
-    onPressed: mouse => { pressPos = Qt.point(mouse.x, mouse.y); dragging = false; }
+    onPressed: mouse => { pressPos = Qt.point(mouse.x, mouse.y); dragging = false; previewShow.stop(); }
     onPositionChanged: mouse => {
         if (!task.dragHost || !task.pressed || !(task.pressedButtons & Qt.LeftButton)) return;
         const p = task.mapToItem(null, mouse.x, mouse.y);
@@ -79,6 +83,9 @@ MouseArea {
             Qt.callLater(() => task.dragging = false);
         }
     }
+    // The grab was taken away mid-drag: drop the drag, don't leave it hanging.
+    onCanceled: if (task.dragging) { task.dragHost.cancel(task); task.dragging = false; }
+    Component.onDestruction: if (task.dragging && task.dragHost) task.dragHost.cancel(task)
     onClicked: mouse => {
         if (task.dragging) return;
         if (mouse.button === Qt.MiddleButton) launch();
@@ -181,12 +188,13 @@ MouseArea {
         }
     }
     Rectangle {
-        visible: task.dock && task.running && task.showIndicator
+        visible: opacity > 0
+        opacity: task.dock && task.running && task.showIndicator ? 0.85 : 0
+        Behavior on opacity { NumberAnimation { duration: 250 } }
         width: 5
         height: 5
         radius: 2.5
         color: task.urgent ? Theme.warn : Theme.fg
-        opacity: 0.85
         x: !task.vertical ? (parent.width - width) / 2
          : task.edge === "left" ? 2 : parent.width - width - 2
         y: task.vertical ? (parent.height - height) / 2 : parent.height - height - 2
@@ -213,12 +221,12 @@ MouseArea {
         Timer {
             id: previewShow
             interval: task.dock && !task.running ? 150 : 450
-            onTriggered: preview.visible = (task.containsMouse || previewHover.hovered) && !menu.open && !task.dragging
+            onTriggered: preview.visible = ((task.containsMouse && task.hostHovered) || previewHover.hovered) && !menu.open && !task.dragging && !task.pressed
         }
         Timer {
             id: previewHide
             interval: 250
-            onTriggered: if (!task.containsMouse && !previewHover.hovered) preview.visible = false
+            onTriggered: if ((!task.containsMouse || !task.hostHovered) && !previewHover.hovered) preview.visible = false
         }
 
         GlassFrame {

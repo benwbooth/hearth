@@ -89,33 +89,50 @@ PanelWindow {
         target: ShellState.isActiveScreen(dockWin.screen) ? "dock" : ""
         function reveal(): void { dockWin.held = true; hideTimer.restart(); }
         function hide(): void { dockWin.held = false; }
+        // Tests: show the drag preview for app `key` held at `x` (window
+        // coordinates along the dock), as if dragged there; dragEnd drops it.
+        function dragAt(key: string, x: real, out: bool): void {
+            const t = { modelData: { key: key }, entry: DesktopEntries.byId(key) };
+            const p = dockWin.vertical ? Qt.point(dockWin.width / 2, x) : Qt.point(x, out ? 0 : dockWin.height - dockWin.margin - dockWin.thickness / 2);
+            if (dockWin.dragKey !== key) dockWin.dragHost.begin(t, p);
+            else dockWin.dragHost.move(t, p);
+        }
+        function dragEnd(): void { dockWin.drop(dockWin.dragPos); }
         function toggle(): void { dockWin.held = !dockWin.held; }
         function state(): string {
             return JSON.stringify({ shown: dockWin.shown, held: dockWin.held, hovered: hover.hovered, pointer: dockWin.pointer,
                                     frame: [frameMask.x, frameMask.y, frameMask.width, frameMask.height],
-                                    win: [dockWin.width, dockWin.height], previews: dockWin.previews });
+                                    win: [dockWin.width, dockWin.height], previews: dockWin.previews, drag: [dockWin.dragKey, dockWin.dragIndex, dockWin.dragOut] });
         }
     }
 
+    // Hidden, the pointer reveals the dock by touching the screen edge
+    // under it (like macOS). It must lie inside frameMask, so showing the
+    // dock never moves the input region out from under a resting pointer
+    // (that toggled show/hide in a loop along the rest of the edge).
     Item {
         id: trigger
-        width: dockWin.vertical ? 2 : parent.width
-        height: dockWin.vertical ? parent.height : 2
-        x: dockWin.edge === "right" ? parent.width - 2 : 0
-        y: dockWin.edge === "bottom" ? parent.height - 2 : 0
+        x: dockWin.vertical ? (dockWin.edge === "right" ? parent.width - 2 : 0) : frameMask.x
+        y: dockWin.vertical ? frameMask.y : parent.height - 2
+        width: dockWin.vertical ? 2 : frameMask.width
+        height: dockWin.vertical ? frameMask.height : 2
         HoverHandler { onHoveredChanged: if (hovered) { dockWin.held = true; hideTimer.stop(); } }
     }
 
     // --- model ---
+    // The slot list never changes during a drag (that would recreate the
+    // dragged delegate, which holds the pointer grab); the drag preview is
+    // done in `geo` instead: the dragged slot collapses and a gap opens
+    // where it would land, so the neighbours slide aside live.
     readonly property var slots: {
         const out = [];
         const all = TaskGroups.groups;
         const pinned = all.filter(g => g.pinned);
         const rest = all.filter(g => !g.pinned).concat(cfg.showRecents ? TaskGroups.recentGroups : []);
-        for (const g of pinned) out.push({ key: g.key, kind: "app", group: g });
+        for (const g of pinned) out.push({ key: g.key, kind: "app", group: g, pinned: true });
         if (rest.length) {
             if (out.length) out.push({ key: "sep:apps", kind: "sep" });
-            for (const g of rest) out.push({ key: g.key, kind: "app", group: g });
+            for (const g of rest) out.push({ key: g.key, kind: "app", group: g, pinned: false });
         }
         if (!cfg.minimizeIntoApp) {
             const mins = ToplevelManager.toplevels.values.filter(t => t.minimized);
@@ -139,38 +156,52 @@ PanelWindow {
     // Magnification: each slot's zoom from its distance to the pointer (in
     // the un-magnified layout, so nothing feeds back), and how far the
     // growth pushes neighbours: slots before the pointer grow toward the
-    // start, slots after it toward the end.
-    readonly property real pointer: hover.hovered && cfg.magnify && dragKey === ""
+    // start, slots after it toward the end. `magLevel` eases the whole
+    // effect in and out, so nothing snaps when the pointer arrives or leaves.
+    readonly property bool tracking: hover.hovered && cfg.magnify && dragKey === ""
+    readonly property real livePointer: hover.hovered
         ? (vertical ? hover.point.position.y : hover.point.position.x) - baseStart : NaN
+    property real pointer: 0
+    onLivePointerChanged: if (!isNaN(livePointer)) pointer = livePointer
+    property real magLevel: tracking ? 1 : 0
+    Behavior on magLevel { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
     readonly property var geo: {
         const z = [], pos = [], lens = [];
         const range = cell * 2.6;
-        let total = 0, before = 0;
+        let before = 0;
+        // Drag preview: collapse the dragged slot, open a gap at dragIndex
+        // among the other pins.
+        const gapAt = dragKey && !dragOut && dragIndex >= 0 ? dragIndex : -1;
+        const collapse = dragKey && (gapAt >= 0 || (dragOut && dragWasPinned)) ? dragKey : "";
         for (const s of slots) {
             const c = s.base + s.len / 2;
             let k = 1;
-            if (!isNaN(pointer) && s.kind !== "sep") {
+            if (magLevel > 0 && (s.kind === "app" || s.kind === "min")) {
                 const d = Math.abs(pointer - c);
-                if (d < range) k = 1 + (maxZoom - 1) * (Math.cos(Math.PI * d / range) + 1) / 2;
+                if (d < range) k = 1 + (maxZoom - 1) * magLevel * (Math.cos(Math.PI * d / range) + 1) / 2;
             }
             z.push(k);
             const ext = s.len * (k - 1);
-            total += ext;
-            if (!isNaN(pointer)) {
+            if (magLevel > 0) {
                 if (s.base + s.len <= pointer) before += ext;
                 else if (s.base < pointer) before += ext * (pointer - s.base) / s.len;
             }
         }
-        let acc = 0;
+        let acc = 0, pinIdx = 0, gapDone = gapAt < 0;
         for (let i = 0; i < slots.length; i++) {
             const s = slots[i];
+            const isPin = s.kind === "app" && s.pinned;
+            if (!gapDone && (!isPin || (s.key !== collapse && pinIdx === gapAt))) { acc += cell; gapDone = true; }
             pos.push(baseStart + s.base + acc - before);
-            lens.push(s.len * z[i]);
-            acc += s.len * (z[i] - 1);
+            const len = s.key === collapse ? 0 : s.len * z[i];
+            lens.push(len);
+            acc += len - s.len;
+            if (isPin && s.key !== collapse) pinIdx++;
         }
+        if (!gapDone) acc += cell;
         const start = pos.length ? pos[0] : baseStart;
         const end = pos.length ? pos[pos.length - 1] + lens[lens.length - 1] : baseStart + cell;
-        return { zoom: z, pos: pos, len: lens, start: start, end: end };
+        return { zoom: z, pos: pos, len: lens, start: start, end: Math.max(end, start + cell) };
     }
 
     // Super+N activates the Nth app.
@@ -187,41 +218,57 @@ PanelWindow {
 
     // --- drag to reorder / remove ---
     property string dragKey: ""
+    property bool dragWasPinned: false
     property point dragPos
     property bool dragOut: false
+    property int dragIndex: -1
+    property real dragStart: 0      // where the first pin starts, at drag start
+    property int dragPins: 0        // pins other than the dragged one
+    property string dragIcon: ""
+    property var seen: ({})          // keys that have had a delegate
     readonly property var dragHost: ({
-        begin: (task, p) => { dockWin.dragKey = task.modelData.key; dockWin.dragPos = p; dockWin.dragIcon = task.entry ? task.entry.icon : ""; },
+        begin: (task, p) => {
+            const key = task.modelData.key;
+            const first = dockWin.slots.find(s => s.kind === "app");
+            dockWin.dragStart = dockWin.baseStart + (first ? first.base : 0);
+            dockWin.dragWasPinned = Pins.isPinned(key);
+            dockWin.dragPins = TaskGroups.groups.filter(g => g.pinned && g.key !== key).length;
+            dockWin.dragIcon = task.entry ? task.entry.icon : "";
+            dockWin.dragPos = p;
+            dockWin.dragIndex = -1;
+            dockWin.dragOut = false;
+            dockWin.dragKey = key;
+            dockWin.dragHost.move(task, p);
+        },
         move: (task, p) => {
             dockWin.dragPos = p;
-            const off = dockWin.vertical ? (dockWin.edge === "left" ? p.x - (dockWin.margin + dockWin.thickness) : (dockWin.width - dockWin.margin - dockWin.thickness) - p.x)
-                                      : (dockWin.height - dockWin.margin - dockWin.thickness) - p.y;
-            dockWin.dragOut = dockWin.edge === "left" ? off > 60 : off > 60;
+            const off = dockWin.edge === "left" ? p.x - (dockWin.margin + dockWin.thickness)
+                      : dockWin.edge === "right" ? (dockWin.width - dockWin.margin - dockWin.thickness) - p.x
+                      : (dockWin.height - dockWin.margin - dockWin.thickness) - p.y;
+            dockWin.dragOut = off > 60;
+            const along = (dockWin.vertical ? p.y : p.x) - dockWin.dragStart;
+            const idx = Math.floor(along / dockWin.cell + 0.5);
+            // Unpinned apps only join the pins when dropped among them.
+            const inPins = along < (dockWin.dragPins + 0.5) * dockWin.cell;
+            dockWin.dragIndex = dockWin.dragWasPinned || inPins ? Math.max(0, Math.min(dockWin.dragPins, idx)) : -1;
         },
-        end: (task, p) => dockWin.drop(task, p)
+        end: (task, p) => dockWin.drop(p),
+        cancel: task => { dockWin.dragKey = ""; dockWin.dragIndex = -1; dockWin.dragOut = false; }
     })
-    property string dragIcon: ""
 
-    function drop(task, p) {
-        const key = dragKey;
+    function drop(p) {
+        const key = dragKey, idx = dragIndex, out = dragOut;
         dragKey = "";
+        dragIndex = -1;
+        dragOut = false;
         if (!key) return;
-        if (dragOut) {
-            dragOut = false;
-            if (Pins.isPinned(key)) {
-                Pins.unpin(key);
-                poof.at(p);
-            }
+        if (out) {
+            if (dragWasPinned) { Pins.unpin(key); poof.at(p); }
             return;
         }
-        // Index among the pins at the drop point.
-        const along = (vertical ? p.y : p.x);
-        const pins = slots.filter(s => s.kind === "app" && s.group.pinned && s.key !== key);
-        let idx = 0;
-        for (const s of pins) if (baseStart + s.base + s.len / 2 < along) idx++;
-        const lastPin = slots.filter(s => s.kind === "app" && s.group.pinned).pop();
-        const inPins = !lastPin || along < baseStart + lastPin.base + lastPin.len + cell / 2;
-        if (Pins.isPinned(key)) Pins.move(key, idx);
-        else if (inPins) { Pins.pin(key); Pins.move(key, idx); }
+        if (idx < 0) return;
+        if (!dragWasPinned) Pins.pin(key);
+        Pins.move(key, idx);
     }
 
     // --- drawing ---
@@ -248,6 +295,12 @@ PanelWindow {
             y: dockWin.vertical ? s : dockWin.height - dockWin.margin - dockWin.thickness
             width: dockWin.vertical ? dockWin.thickness : e - s
             height: dockWin.vertical ? e - s : dockWin.thickness
+            // Slide with the icons when apps come and go (not while the
+            // pointer drives magnification: that has to follow it at once).
+            Behavior on x { enabled: !dockWin.tracking && !dockWin.vertical; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+            Behavior on width { enabled: !dockWin.tracking && !dockWin.vertical; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+            Behavior on y { enabled: !dockWin.tracking && dockWin.vertical; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+            Behavior on height { enabled: !dockWin.tracking && dockWin.vertical; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
 
             // Soft shadow.
             Rectangle {
@@ -286,6 +339,22 @@ PanelWindow {
             }
         }
 
+        // Right-click on the dock itself (not an app): the Dock menu.
+        MouseArea {
+            x: frame.x
+            y: frame.y
+            width: frame.width
+            height: frame.height
+            acceptedButtons: Qt.RightButton
+            onClicked: mouse => {
+                const p = mapToItem(body, mouse.x, mouse.y);
+                menuAnchor.x = p.x;
+                menuAnchor.y = p.y;
+                dockMenu.toggle();
+            }
+        }
+        Item { id: menuAnchor; width: 1; height: 1 }
+
         Repeater {
             id: rep
             model: ScriptModel {
@@ -303,6 +372,19 @@ PanelWindow {
                 y: dockWin.vertical ? p : frame.y
                 width: dockWin.vertical ? dockWin.thickness : l
                 height: dockWin.vertical ? l : dockWin.thickness
+                Behavior on x { enabled: !dockWin.tracking && !dockWin.vertical; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                Behavior on y { enabled: !dockWin.tracking && dockWin.vertical; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                Behavior on width { enabled: !dockWin.tracking && !dockWin.vertical; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                Behavior on height { enabled: !dockWin.tracking && dockWin.vertical; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                // New apps fade and grow in; the dragged one is hidden (the
+                // ghost under the pointer stands in for it).
+                opacity: slot.modelData.key === dockWin.dragKey ? 0 : appear
+                // Only apps new to the dock fade in; a delegate recreated for
+                // a reorder starts visible.
+                property real appear: dockWin.seen[slot.modelData.key] ? 1 : 0
+                Component.onCompleted: { dockWin.seen[slot.modelData.key] = true; appear = 1; }
+                Behavior on appear { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                Behavior on opacity { NumberAnimation { duration: 160 } }
 
                 readonly property bool previewOpen: task ? task.previewOpen : false
                 onPreviewOpenChanged: dockWin.previews += previewOpen ? 1 : -1
@@ -312,7 +394,8 @@ PanelWindow {
                     id: loader
                     anchors.fill: parent
                     sourceComponent: slot.modelData.kind === "app" ? appComp
-                                   : slot.modelData.kind === "sep" ? sepComp : minComp
+                                   : slot.modelData.kind === "sep" ? sepComp
+                                   : slot.modelData.kind === "min" ? minComp : null
                 }
                 Component {
                     id: appComp
@@ -326,6 +409,7 @@ PanelWindow {
                         zoom: dockWin.geo.zoom[slot.index] ?? 1
                         showIndicator: dockWin.cfg.showIndicators
                         dragHost: dockWin.dragHost
+                        hostHovered: hover.hovered
                     }
                 }
                 Component {
@@ -396,6 +480,41 @@ PanelWindow {
                     NumberAnimation { target: poof; property: "opacity"; from: 0; to: 1; duration: 60 }
                     NumberAnimation { target: poof; property: "opacity"; to: 0; duration: 290 }
                 }
+            }
+        }
+    }
+
+    // The Dock menu (right-click on the dock background or a divider).
+    BarPopup {
+        id: dockMenu
+        anchorItem: menuAnchor
+        padding: 5
+        Column {
+            width: 230
+            MenuItem {
+                text: dockWin.cfg.autohide ? "Turn Hiding Off" : "Turn Hiding On"
+                onTriggered: { dockMenu.close(); Settings.set("dock.autohide", !dockWin.cfg.autohide); }
+            }
+            MenuItem {
+                text: dockWin.cfg.magnify ? "Turn Magnification Off" : "Turn Magnification On"
+                onTriggered: { dockMenu.close(); Settings.set("dock.magnify", !dockWin.cfg.magnify); }
+            }
+            MenuSeparator {}
+            Label { x: 8; height: 24; text: "Position on Screen"; color: Theme.fgDim; font.pointSize: Theme.smallFontSize }
+            Repeater {
+                model: [{ v: "left", l: "Left" }, { v: "bottom", l: "Bottom" }, { v: "right", l: "Right" }]
+                MenuItem {
+                    required property var modelData
+                    text: modelData.l
+                    checkable: true
+                    checked: dockWin.edge === modelData.v
+                    onTriggered: { dockMenu.close(); Settings.set("dock.position", modelData.v); }
+                }
+            }
+            MenuSeparator {}
+            MenuItem {
+                text: "Dock Settings…"
+                onTriggered: { dockMenu.close(); Settings.openRequested("dock"); }
             }
         }
     }
