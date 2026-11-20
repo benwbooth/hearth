@@ -5,13 +5,13 @@
 #
 #   scripts/test-session.sh start NAME     # KWin + Hyprland
 #   scripts/test-session.sh run NAME       # (re)start hearth from ./shell
-#   scripts/test-session.sh shot NAME [OUT.png]   # full screenshot (3938x1662)
+#   scripts/test-session.sh shot NAME [OUT.png]   # full screenshot (3840x1620)
 #   scripts/test-session.sh hyprctl NAME ARGS...  # talk to the nested Hyprland
 #   scripts/test-session.sh ipc NAME ARGS...      # hearth-ipc against that instance
 #   scripts/test-session.sh log NAME       # hearth's log
 #   scripts/test-session.sh stop NAME
 #
-# The nested output is 3938x1662 at scale 1 (Ben's 5120x2160 at 1.3x in
+# The nested output is 3840x1620 at scale 1 (Ben's 5120x2160 at 4/3 in
 # logical pixels). Tools come from /etc/nixos's nixpkgs.
 set -euo pipefail
 
@@ -69,7 +69,7 @@ start)
     for _ in $(seq 50); do [[ -S $XDG_RUNTIME_DIR/$sock ]] && break; sleep 0.1; done
   fi
   cat > "$dir/hyprland.lua" <<'EOF'
-hl.monitor({ output = "", mode = "3938x1662", position = "0x0", scale = "1" })
+hl.monitor({ output = "", mode = "3840x1620", position = "0x0", scale = "1" })
 hl.config({
   misc = { disable_hyprland_logo = true, force_default_wallpaper = 0 },
   ecosystem = { no_update_news = true, no_donation_nag = true },

@@ -39,6 +39,13 @@
       python
     ];
 
+    # The `kde` platform theme picks the org.kde.desktop Controls style, which
+    # imports Kirigami. Plasma's session provides it; outside Plasma
+    # (Hyprland) nothing does, so controls fail to load without this.
+    qmlPath = lib.makeSearchPath "lib/qt-6/qml" (with pkgs.kdePackages; [
+      kirigami.unwrapped qqc2-desktop-style sonnet kitemmodels
+    ]);
+
     hearth = pkgs.stdenvNoCC.mkDerivation {
       pname = "hearth";
       version = "0.1.0";
@@ -55,7 +62,8 @@
           [ $exe = hearth-ipc ] && args="ipc"
           makeWrapper ${quickshell}/bin/quickshell $out/bin/$exe \
             --add-flags "-p $out/share/hearth/shell $args" \
-            --prefix PATH : ${lib.makeBinPath runtimeDeps}:$out/share/hearth/helpers
+            --prefix PATH : ${lib.makeBinPath runtimeDeps}:$out/share/hearth/helpers \
+            --prefix QML_IMPORT_PATH : ${qmlPath}
         done
         runHook postInstall
       '';

@@ -8,7 +8,7 @@ Quickshell 0.3.2 shell for Hyprland 0.55 (Lua config). Read README.md first.
 - Popups: use `widgets/Indicator.qml` (tray button + popup) or
   `widgets/BarPopup.qml`. They already carry the 0.001 px nudge and close on
   outside click via HyprlandFocusGrab. Any other top-level window/popup root
-  needs `transform: Translate { x: 0.001; y: 0.001 }` (Ben's display is 130%:
+  needs `transform: Translate { x: 0.001; y: 0.001 }` (Ben's display is 4/3 under Hyprland, 130% under Plasma:
   text on an exact half device pixel smears).
 - Colours/sizes from `Theme` (`import ".."` or `"../.."`), Breeze Dark.
 - Icons: `widgets/Icon.qml` with freedesktop/Breeze icon names.
@@ -29,7 +29,7 @@ Docs: https://quickshell.org/docs/v0.3.2/types/
 ## Testing
 `scripts/test-session.sh start NAME`, then `run NAME` after each change
 (prints QML warnings), `ipc NAME call indicator-x toggle` to open a popup,
-`shot NAME out.png` for a 3938x1662 screenshot (bar is the bottom 44 px).
+`shot NAME out.png` for a 3840x1620 screenshot (bar is the bottom 44 px).
 Use your own NAME so parallel sessions don't collide; `stop NAME` when done.
 The tray shows the real session's apps (same session bus).
 

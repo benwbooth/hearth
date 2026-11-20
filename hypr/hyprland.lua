@@ -13,11 +13,13 @@ hl.monitor({
     output   = "DP-1",
     mode     = "5120x2160@165.06",
     position = "0x0",
-    scale    = 1.3,
-    -- HDR, as Plasma had it on for this monitor. If SDR apps look washed
-    -- out, raise sdrbrightness (1.0 = reference) or drop these two lines.
-    bitdepth = 10,
-    cm       = "hdr",
+    -- 4/3, not 1.3: Hyprland needs a whole-pixel logical size (in 1/120
+    -- steps), so 1.3 silently became 1.333 for windows while the cursor
+    -- stayed clamped to 1.3, leaving the right and bottom edges unreachable.
+    -- The nearest valid scales on 5120x2160 are 1.25 and 4/3.
+    scale    = 4/3,
+    -- No HDR: Hyprland's HDR mode maps SDR content to 80 nits, so
+    -- everything looked faded and brown.
 })
 -- Anything else plugged in: sensible defaults.
 hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
@@ -60,11 +62,12 @@ hl.config({
     master = { new_status = "slave", orientation = "center", slave_count_for_center_master = 2, mfact = 0.5 },
     misc = {
         disable_hyprland_logo = true,
+        disable_splash_rendering = true,
         force_default_wallpaper = 0,
         focus_on_activate = true,
         middle_click_paste = true,
     },
-    -- X11 apps draw at native pixels and scale themselves (Xft.dpi=124 is
+    -- X11 apps draw at native pixels and scale themselves (Xft.dpi=128 is
     -- already set for Plasma), instead of being bitmap-scaled blurry.
     xwayland = { force_zero_scaling = true },
     ecosystem = { no_update_news = true, no_donation_nag = true },
@@ -97,14 +100,17 @@ hl.config({
 -------------------
 
 hl.on("hyprland.start", function()
-    -- 130% for X11 apps: with force_zero_scaling they draw at native pixels
+    -- 4/3 for X11 apps: with force_zero_scaling they draw at native pixels
     -- and scale themselves from Xft.dpi (Plasma loads this at login; nothing
-    -- does under Hyprland). 124 = 96 x 1.3; the X cursor is scaled to match.
-    hl.exec_cmd("printf 'Xft.dpi: 124\\nXcursor.size: 31\\nXcursor.theme: breeze_cursors\\n' | xrdb -merge")
+    -- does under Hyprland). 128 = 96 x 4/3; the X cursor is scaled to match.
+    hl.exec_cmd("printf 'Xft.dpi: 128\\nXcursor.size: 32\\nXcursor.theme: breeze_cursors\\n' | xrdb -merge")
     hl.exec_cmd("uwsm app -- hearth")
     -- Launcher daemon (also keeps the clipboard history).
     hl.exec_cmd("uwsm app -- vicinae server")
-    hl.exec_cmd("uwsm app -- hypridle")
+    -- hypridle runs as its own systemd user unit (services.hypridle).
+    -- KWallet: SDDM's PAM module holds the login password until this hands
+    -- it to kwalletd (Plasma's startup does the same).
+    hl.exec_cmd("/run/current-system/sw/libexec/pam_kwallet_init")
     -- Wallpaper: hyprpaper draws it, hearth fetches Bing's image of the day.
     hl.exec_cmd("uwsm app -- hyprpaper")
     -- Night light on a schedule (~/.config/hypr/hyprsunset.conf); hearth's
