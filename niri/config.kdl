@@ -26,9 +26,6 @@ output "DP-1" {
 environment {
     QT_QPA_PLATFORMTHEME "kde"
     QT_QPA_PLATFORM "wayland;xcb"
-    // arbor draws no title bars yet; Qt apps without their own draw these
-    // (cleaner than Qt's default decoration).
-    QT_WAYLAND_DECORATION "adwaita"
     XDG_MENU_PREFIX "plasma-"
     ELECTRON_OZONE_PLATFORM_HINT "auto"
 }
