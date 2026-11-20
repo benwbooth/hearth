@@ -201,8 +201,10 @@ MouseArea {
                     : task.edge === "right" ? Edges.Left : Edges.Top
         anchor.gravity: anchor.edges
         anchor.adjustment: PopupAdjustment.Slide
-        anchor.margins.top: task.edge === "bottom" ? -8 : task.edge === "top" ? 8 : 0
-        anchor.margins.left: task.edge === "left" ? 8 : task.edge === "right" ? -8 : 0
+        // Clear the (magnified) icon, which grows out of the item.
+        readonly property real gap: 8 + task.iconSize * (task.zoom - 1)
+        anchor.margins.top: task.edge === "bottom" ? -gap : task.edge === "top" ? gap : 0
+        anchor.margins.left: task.edge === "left" ? gap : task.edge === "right" ? -gap : 0
         color: "transparent"
         visible: false
         implicitWidth: previewFrame.implicitWidth

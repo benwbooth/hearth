@@ -50,25 +50,36 @@ PanelWindow {
     WlrLayershell.namespace: "hearth-dock"
     WlrLayershell.layer: WlrLayer.Top
     // Input only on the dock itself; hidden, a 2 px strip along the edge.
-    mask: Region {
-        item: dockWin.shown ? frame : trigger
-        Region { item: trigger }
+    mask: Region { item: dockWin.shown ? frameMask : trigger }
+    // The slab's resting geometry out to the screen edge (so the pointer
+    // can rest on the edge), outside the sliding (transformed) body:
+    // Region doesn't follow transforms.
+    Item {
+        id: frameMask
+        x: dockWin.edge === "left" ? 0 : frame.x
+        y: frame.y
+        width: dockWin.vertical ? dockWin.width - (dockWin.edge === "left" ? 0 : frame.x) : frame.width
+        height: dockWin.vertical ? frame.height : dockWin.height - frame.y
     }
 
     // --- show / hide ---
     property int previews: 0
     readonly property bool menuOpen: !!ShellState.activePopup && ShellState.activePopup.barWindow === dockWin
     property bool held: false
-    readonly property bool shown: !autohide || held || hover.hovered || menuOpen || previews > 0 || dragKey !== ""
-    onShownChanged: if (shown) held = true
+    // `held` goes up when the pointer touches the edge strip or the dock and
+    // drops `autohideDelay` ms after it leaves.
+    readonly property bool shown: !autohide || held || menuOpen || previews > 0 || dragKey !== ""
     Timer {
         id: hideTimer
         interval: Math.max(0, dockWin.cfg.autohideDelay)
-        onTriggered: dockWin.held = false
+        onTriggered: if (!hover.hovered) dockWin.held = false
     }
     Connections {
         target: hover
-        function onHoveredChanged() { if (hover.hovered) hideTimer.stop(); else hideTimer.restart(); }
+        function onHoveredChanged() {
+            if (hover.hovered) { dockWin.held = true; hideTimer.stop(); }
+            else hideTimer.restart();
+        }
     }
     onPreviewsChanged: if (previews === 0 && !hover.hovered) hideTimer.restart()
     onMenuOpenChanged: if (!menuOpen && !hover.hovered) hideTimer.restart()
@@ -79,6 +90,11 @@ PanelWindow {
         function reveal(): void { dockWin.held = true; hideTimer.restart(); }
         function hide(): void { dockWin.held = false; }
         function toggle(): void { dockWin.held = !dockWin.held; }
+        function state(): string {
+            return JSON.stringify({ shown: dockWin.shown, held: dockWin.held, hovered: hover.hovered, pointer: dockWin.pointer,
+                                    frame: [frameMask.x, frameMask.y, frameMask.width, frameMask.height],
+                                    win: [dockWin.width, dockWin.height], previews: dockWin.previews });
+        }
     }
 
     Item {
@@ -319,7 +335,7 @@ PanelWindow {
                             anchors.centerIn: parent
                             width: dockWin.vertical ? parent.width - 22 : 1
                             height: dockWin.vertical ? 1 : parent.height - 22
-                            color: Theme.dark ? Qt.rgba(1, 1, 1, 0.25) : Qt.rgba(0, 0, 0, 0.2)
+                            color: Theme.dark ? Qt.rgba(1, 1, 1, 0.38) : Qt.rgba(0, 0, 0, 0.28)
                         }
                     }
                 }

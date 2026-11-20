@@ -26,9 +26,13 @@ Singleton {
         ? menu.children.filter(i => i.visible && i.type !== "separator" && i.label !== "") : []
     readonly property bool available: topLevel.length > 0
 
-    // Off where nothing could ever supply an address (Hyprland), unless
-    // HEARTH_APPMENU=1 (testing the helper there).
-    readonly property bool enabled: Compositor.isNiri || Quickshell.env("HEARTH_APPMENU") === "1"
+    // Only where hearth draws the menus: niri/arbor with the mac layout.
+    // The helper owns com.canonical.AppMenu.Registrar while it runs, and
+    // with that name owned Qt apps hide their in-window menu bars, so it
+    // must not run on Hyprland (no address source) or with the classic
+    // panel. HEARTH_APPMENU=1 forces it (testing). Singleton touched from
+    // shell.qml at startup so apps launched later find the registrar.
+    readonly property bool enabled: (Compositor.isNiri && Settings.mac) || Quickshell.env("HEARTH_APPMENU") === "1"
 
     function send(obj) { if (proc.running) proc.write(JSON.stringify(obj) + "\n"); }
     function open(id) { send({ cmd: "open", id: id }); }
