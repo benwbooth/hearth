@@ -1,6 +1,5 @@
 import QtQuick
 import Quickshell
-import Quickshell.Hyprland
 import Quickshell.Io
 import "../widgets"
 import "../services"
@@ -10,8 +9,8 @@ import ".."
 BarButton {
     id: root
     property var previous: null
-    readonly property bool showing: previous !== null && Hyprland.focusedWorkspace
-        && Hyprland.focusedWorkspace.toplevels.values.length === 0
+    readonly property bool showing: previous !== null && Compositor.focusedWorkspace !== null
+        && Compositor.windowsOn(Compositor.focusedWorkspace.id).length === 0
     implicitWidth: 30
     icon: "user-desktop"
     tooltip: showing ? "Back to windows" : "Show desktop"
@@ -26,11 +25,11 @@ BarButton {
 
     function toggle() {
         if (showing) {
-            Hypr.focusWorkspace(previous);
+            Compositor.focusWorkspace(previous);
             previous = null;
         } else {
-            previous = Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : null;
-            Hypr.focusWorkspace("empty");
+            previous = Compositor.focusedWorkspace ? Compositor.focusedWorkspace.id : null;
+            Compositor.focusEmptyWorkspace();
         }
     }
 }

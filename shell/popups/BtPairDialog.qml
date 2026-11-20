@@ -2,7 +2,6 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
-import Quickshell.Hyprland
 import "../widgets"
 import "../services"
 import ".."
@@ -60,10 +59,7 @@ Scope {
     PanelWindow {
         id: win
         visible: root.req !== null
-        screen: {
-            const name = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "";
-            return Quickshell.screens.find(s => s.name === name) ?? Quickshell.screens[0];
-        }
+        screen: Compositor.focusedScreen
         // No anchors: the layer surface is centred on the screen.
         implicitWidth: dialog.width
         implicitHeight: dialog.height

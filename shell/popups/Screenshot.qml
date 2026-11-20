@@ -2,8 +2,8 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
-import Quickshell.Hyprland
 import "../widgets"
+import "../services"
 import ".."
 
 // Spectacle-style capture (Print): the screen freezes under a dim overlay
@@ -17,7 +17,7 @@ Scope {
     property bool open: false
     property string mode: "region"
 
-    function start(m) { mode = m; Hyprland.refreshToplevels(); open = true; }
+    function start(m) { mode = m; Compositor.refresh(); open = true; }
 
     IpcHandler {
         target: "screenshot"
@@ -46,10 +46,7 @@ Scope {
 
         PanelWindow {
             id: win
-            screen: {
-                const m = Hyprland.focusedMonitor;
-                return (m && Quickshell.screens.find(s => s.name === m.name)) || Quickshell.screens[0];
-            }
+            screen: Compositor.focusedScreen
             anchors { top: true; bottom: true; left: true; right: true }
             exclusionMode: ExclusionMode.Ignore
             WlrLayershell.layer: WlrLayer.Overlay
@@ -65,17 +62,16 @@ Scope {
 
             // Visible windows on this monitor, topmost first.
             readonly property var windows: {
-                const mon = Hyprland.monitorFor(win.screen);
-                const ws = mon && mon.activeWorkspace ? mon.activeWorkspace.id : -1;
+                const act = Compositor.workspaces.find(w => w.active && w.output === win.screen.name);
+                const ws = act ? act.id : null;
                 const list = [];
-                for (const t of Hyprland.toplevels.values) {
-                    const o = t.lastIpcObject;
-                    if (!o || !o.at || !o.size || o.hidden || !o.mapped) continue;
-                    if (!o.workspace || o.workspace.id !== ws) continue;
-                    list.push({ o: o, x: o.at[0] - win.screen.x, y: o.at[1] - win.screen.y,
-                                w: o.size[0], h: o.size[1] });
+                for (const t of Compositor.windows) {
+                    const o = t.hypr ? t.hypr.lastIpcObject : null;
+                    if (o && (o.hidden || !o.mapped)) continue;
+                    if (!t.at || !t.size || t.workspaceId !== ws) continue;
+                    list.push({ o: t, x: t.at[0], y: t.at[1], w: t.size[0], h: t.size[1] });
                 }
-                list.sort((a, b) => (a.o.focusHistoryID ?? 0) - (b.o.focusHistoryID ?? 0));
+                list.sort((a, b) => a.o.focusOrder - b.o.focusOrder);
                 return list;
             }
             function windowAt(px, py) {

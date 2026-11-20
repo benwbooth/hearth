@@ -2,7 +2,7 @@ import QtQuick
 import Quickshell
 import ".."
 
-// Hover tooltip shown above `anchorItem` after a short delay.
+// Hover tooltip shown next to `anchorItem` after a short delay.
 PopupWindow {
     id: tip
     required property Item anchorItem
@@ -10,11 +10,13 @@ PopupWindow {
     property string subtext: ""
     property bool hovered: false
 
+    // Below the item in a top bar, above it elsewhere.
+    readonly property bool below: !!anchorItem.QsWindow.window && anchorItem.QsWindow.window.edge === "top"
     anchor.item: anchorItem
-    anchor.edges: Edges.Top
-    anchor.gravity: Edges.Top
+    anchor.edges: below ? Edges.Bottom : Edges.Top
+    anchor.gravity: below ? Edges.Bottom : Edges.Top
     anchor.adjustment: PopupAdjustment.Slide
-    anchor.margins.top: -4
+    anchor.margins.top: below ? 4 : -4
     color: "transparent"
     visible: false
     implicitWidth: frame.implicitWidth

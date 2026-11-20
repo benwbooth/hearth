@@ -21,7 +21,7 @@ Indicator {
     readonly property var layouts: cfg && cfg.layouts ? cfg.layouts : []
     readonly property string screenName: {
         const w = root.QsWindow.window;
-        return w && w.screen ? w.screen.name : (Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "");
+        return w && w.screen ? w.screen.name : Compositor.focusedOutput;
     }
     // Display the popup acts on (switchable when there are several).
     property string targetDisplay: ""
@@ -35,7 +35,8 @@ Indicator {
         return s && s.height > 0 ? s.width / s.height : 16 / 9;
     }
 
-    shown: cfg !== null
+    // FanzyZones is a Hyprland Lua module.
+    shown: Compositor.isHyprland && cfg !== null
     tooltip: activeLayout ? "Zones: " + activeLayout.name : "Zones"
     tooltipSub: "Scroll to change layout"
 

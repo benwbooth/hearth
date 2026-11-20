@@ -2,7 +2,6 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
-import Quickshell.Hyprland
 import "../widgets"
 import "../services"
 import ".."
@@ -22,24 +21,16 @@ import ".."
 Scope {
     id: root
 
-    // Window addresses, most recently focused first (from activewindowv2).
-    property var mru: []
-
     property bool active: false
     property bool shown: false
     property bool appMode: false
-    property var items: []      // [HyprlandToplevel]
+    property var items: []      // [Compositor window]
     property int index: 0
 
-    function addr(t) { return String(t.address).replace(/^0x/, ""); }
-    function klass(t) { const o = t.lastIpcObject; return o && o.class ? o.class : (t.wayland ? t.wayland.appId : ""); }
+    function addr(t) { return t.id; }
+    function klass(t) { return t.appId; }
 
-    function windowList() {
-        const tops = Hyprland.toplevels.values.filter(t => t.wayland);
-        const rank = a => { const i = mru.indexOf(a); return i < 0 ? 1e6 : i; };
-        const hist = t => { const o = t.lastIpcObject; return o && o.focusHistoryID !== undefined ? o.focusHistoryID : 1e6; };
-        return tops.sort((a, b) => (rank(addr(a)) - rank(addr(b))) || (hist(a) - hist(b)));
-    }
+    function windowList() { return Compositor.windowsByRecency(); }
 
     function begin(app) {
         let list = windowList();
@@ -81,11 +72,10 @@ Scope {
     }
 
     function activate(t) {
-        const o = t.lastIpcObject;
-        const ws = o && o.workspace ? String(o.workspace.name) : "";
-        if (ws.startsWith("special:") && Hyprland.focusedWorkspace)
-            Hypr.moveWindowToWorkspace(addr(t), Hyprland.focusedWorkspace.id);
-        Hypr.focusWindow(addr(t));
+        // Hyprland: pull a window out of a special workspace first.
+        if (t.special && Compositor.focusedWorkspace)
+            Compositor.moveWindowToWorkspace(t.id, Compositor.focusedWorkspace.id);
+        Compositor.focusWindow(t.id);
     }
 
     function run(cmd) {
@@ -106,25 +96,18 @@ Scope {
     }
 
     Connections {
-        target: Hyprland
-        function onRawEvent(event) {
-            if (event.name === "activewindowv2") {
-                const a = event.data.trim().replace(/^0x/, "");
-                if (!a) return;
-                const m = root.mru.filter(x => x !== a);
-                m.unshift(a);
-                root.mru = m.slice(0, 200);
-            } else if (event.name === "closewindow") {
-                const a = event.data.trim().replace(/^0x/, "");
-                root.mru = root.mru.filter(x => x !== a);
-                if (root.active && root.items.some(t => root.addr(t) === a)) {
-                    root.items = root.items.filter(t => root.addr(t) !== a);
-                    if (!root.items.length) root.finish();
-                    else root.index = Math.min(root.index, root.items.length - 1);
-                }
-            } else if (event.name === "custom" && event.data.startsWith("hearth-switcher ")) {
-                root.run(event.data.split(" ")[1]);
-            }
+        target: Compositor
+        function onCustomEvent(data) {
+            if (data.startsWith("hearth-switcher ")) root.run(data.split(" ")[1]);
+        }
+        // A window closed mid-session: drop it from the list.
+        function onWindowsChanged() {
+            if (!root.active) return;
+            const ids = new Set(Compositor.windows.map(w => w.id));
+            if (root.items.every(t => ids.has(t.id))) return;
+            root.items = root.items.filter(t => ids.has(t.id));
+            if (!root.items.length) root.finish();
+            else root.index = Math.min(root.index, root.items.length - 1);
         }
     }
 
@@ -140,17 +123,14 @@ Scope {
         function state(): string {
             return JSON.stringify({ active: root.active, shown: root.shown, appMode: root.appMode, index: root.index,
                                     items: root.items.map(t => ({ address: root.addr(t), title: t.title, class: root.klass(t) })),
-                                    mru: root.mru });
+                                    mru: Compositor.mru });
         }
     }
 
     PanelWindow {
         id: win
         visible: root.shown
-        screen: {
-            const m = Hyprland.focusedMonitor;
-            return (m && Quickshell.screens.find(s => s.name === m.name)) || Quickshell.screens[0];
-        }
+        screen: Compositor.focusedScreen
         anchors { top: true; bottom: true; left: true; right: true }
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
@@ -269,7 +249,7 @@ Scope {
                                     root.index = index;
                             }
                             onClicked: mouse => {
-                                if (mouse.button === Qt.MiddleButton) { modelData.wayland.close(); return; }
+                                if (mouse.button === Qt.MiddleButton) { Compositor.closeWindow(modelData.id); return; }
                                 root.index = index;
                                 root.commit();
                             }
@@ -289,7 +269,7 @@ Scope {
                                 y: 10
                                 width: parent.width - 20
                                 height: parent.height - 52
-                                captureSource: cell.modelData.wayland
+                                captureSource: cell.modelData.toplevel
                                 live: true
                                 constraintSize: Qt.size(width, height)
                             }

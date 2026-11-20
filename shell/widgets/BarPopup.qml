@@ -5,8 +5,9 @@ import Quickshell.Wayland
 import "../services"
 import ".."
 
-// A panel popup that opens above `anchorItem` (the bar is at the bottom of
-// the screen) and closes when you click anywhere else.
+// A panel popup that opens next to `anchorItem`: below it when its window is
+// a top bar (`edge: "top"` on the bar window), above it otherwise (bottom
+// panel, dock), and closes when you click anywhere else.
 //
 // Put a single layout inside it; the popup sizes itself to that child's
 // implicit size.
@@ -25,12 +26,18 @@ PanelWindow {
     // start. Anchored to the bottom edge it sits just above the bar (the
     // bar's exclusive zone pushes it up), horizontally under its button.
     readonly property var barWindow: anchorItem.QsWindow.window
+    readonly property bool fromTop: !!barWindow && barWindow.edge === "top"
+    // Extra gap from the screen edge, for bars that don't reserve space
+    // (the auto-hiding dock).
+    readonly property int edgeGap: barWindow && barWindow.popupGap !== undefined ? barWindow.popupGap : 0
     screen: barWindow ? barWindow.screen : null
-    anchors.bottom: true
+    anchors.top: fromTop
+    anchors.bottom: !fromTop
     anchors.left: true
     exclusionMode: ExclusionMode.Normal
     exclusiveZone: 0
-    margins.bottom: 4
+    margins.top: 4 + edgeGap
+    margins.bottom: 4 + edgeGap
     margins.left: {
         void popup.open;
         if (!barWindow || !screen) return 4;
@@ -38,7 +45,8 @@ PanelWindow {
         const w = popup.implicitWidth;
         return Math.max(4, Math.min(screen.width - w - 4, Math.round(p.x - w / 2)));
     }
-    WlrLayershell.layer: WlrLayer.Top
+    // Above the click catcher below (non-Hyprland).
+    WlrLayershell.layer: Compositor.isHyprland ? WlrLayer.Top : WlrLayer.Overlay
     WlrLayershell.namespace: "hearth-popup"
     WlrLayershell.keyboardFocus: open ? popup.keyboardFocus : WlrKeyboardFocus.None
     visible: open
@@ -58,9 +66,28 @@ PanelWindow {
     // Close on clicks anywhere else. The bar is part of the grab so its
     // buttons can toggle the popup closed.
     HyprlandFocusGrab {
-        active: popup.visible
+        active: Compositor.isHyprland && popup.visible
         windows: popup.barWindow ? [popup, popup.barWindow] : [popup]
         onCleared: popup.close()
+    }
+
+    // Elsewhere (niri/arbor have no focus grab): a transparent surface over
+    // everything but the bars, under the popup, closes it on a click.
+    PanelWindow {
+        visible: popup.visible && !Compositor.isHyprland
+        screen: popup.screen
+        anchors { top: true; bottom: true; left: true; right: true }
+        exclusionMode: ExclusionMode.Normal
+        exclusiveZone: 0
+        WlrLayershell.layer: WlrLayer.Top
+        WlrLayershell.namespace: "hearth-popup-catcher"
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+        color: "transparent"
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.AllButtons
+            onPressed: popup.close()
+        }
     }
 
     function toggle() { open = !open; }

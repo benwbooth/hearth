@@ -1,7 +1,6 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
-import Quickshell.Hyprland
 import Quickshell.Services.Pipewire
 import "../widgets"
 import "../services"
@@ -75,12 +74,7 @@ Scope {
 
     PanelWindow {
         id: win
-        screen: {
-            const name = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "";
-            const s = Quickshell.screens;
-            for (let i = 0; i < s.length; i++) if (s[i].name === name) return s[i];
-            return s.length > 0 ? s[0] : null;
-        }
+        screen: Compositor.focusedScreen
         anchors.bottom: true
         margins.bottom: 32
         exclusionMode: ExclusionMode.Normal

@@ -71,7 +71,7 @@ Row {
         readonly property var windows: modelData.windows
         readonly property bool running: windows.length > 0
         readonly property bool focused: windows.some(w => w.activated)
-        readonly property bool urgent: windows.some(w => { const h = Hypr.hyprFor(w); return h && h.urgent; })
+        readonly property bool urgent: windows.some(w => { const c = Compositor.windowForToplevel(w); return c && c.urgent; })
         readonly property var badge: Badges.forApp(modelData.key)
         property int cycle: 0
 

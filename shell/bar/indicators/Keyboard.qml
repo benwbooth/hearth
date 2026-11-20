@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
 import "../../widgets"
+import "../../services"
 import "../.."
 
 // Caps Lock / Num Lock and keyboard layout, from `hyprctl devices -j`.
@@ -73,7 +74,8 @@ Indicator {
 
     Timer {
         interval: root.capsLock ? 400 : 1500
-        running: true
+        // hyprctl only; niri's layouts would come from its event stream.
+        running: Compositor.isHyprland
         repeat: true
         onTriggered: root.refresh()
     }
@@ -83,7 +85,7 @@ Indicator {
         onTriggered: root.refresh()
     }
     Connections {
-        target: Hyprland
+        target: Compositor.isHyprland ? Hyprland : null
         function onRawEvent(event) {
             if (event.name === "activelayout" || event.name === "configreloaded") refreshSoon.restart();
         }

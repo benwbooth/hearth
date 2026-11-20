@@ -15,10 +15,7 @@ PanelWindow {
     id: win
     property bool open: false
 
-    screen: {
-        const name = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "";
-        return Quickshell.screens.find(s => s.name === name) ?? Quickshell.screens[0];
-    }
+    screen: Compositor.focusedScreen
     anchors { bottom: true; right: true }
     margins { bottom: 8; right: 8 }
     exclusiveZone: 0
@@ -36,7 +33,7 @@ PanelWindow {
     }
 
     HyprlandFocusGrab {
-        active: win.visible
+        active: Compositor.isHyprland && win.visible
         windows: [win]
         onCleared: win.open = false
     }

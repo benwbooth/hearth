@@ -2,7 +2,6 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
-import Quickshell.Hyprland
 import "../widgets"
 import "../services"
 import ".."
@@ -20,7 +19,7 @@ Scope {
 
     function toggle() { open = !open; }
 
-    onOpenChanged: if (open) { Hyprland.refreshToplevels(); Hyprland.refreshWorkspaces(); }
+    onOpenChanged: if (open) Compositor.refresh()
 
     IpcHandler {
         target: "overview"
@@ -31,10 +30,10 @@ Scope {
     }
 
     Connections {
-        target: Hyprland
-        function onRawEvent(event) {
-            if (event.name !== "custom" || !event.data.startsWith("hearth-overview ")) return;
-            switch (event.data.split(" ")[1]) {
+        target: Compositor
+        function onCustomEvent(data) {
+            if (!data.startsWith("hearth-overview ")) return;
+            switch (data.split(" ")[1]) {
             case "toggle": root.toggle(); break;
             case "open": root.open = true; break;
             case "close": root.open = false; break;
@@ -45,10 +44,7 @@ Scope {
     PanelWindow {
         id: ov
         visible: root.open
-        screen: {
-            const m = Hyprland.focusedMonitor;
-            return (m && Quickshell.screens.find(s => s.name === m.name)) || Quickshell.screens[0];
-        }
+        screen: Compositor.focusedScreen
         anchors { top: true; bottom: true; left: true; right: true }
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
@@ -57,14 +53,14 @@ Scope {
         color: "transparent"
 
         property string query: ""
-        property var dragging: null     // HyprlandToplevel being dragged
+        property var dragging: null     // Compositor window being dragged
 
         onVisibleChanged: {
             if (visible) { query = ""; search.text = ""; search.forceActiveFocus(); }
         }
 
-        function addr(t) { return String(t.address).replace(/^0x/, ""); }
-        function klass(t) { const o = t.lastIpcObject; return o && o.class ? o.class : (t.wayland ? t.wayland.appId : ""); }
+        function addr(t) { return t.id; }
+        function klass(t) { return t.appId; }
         function matches(t) {
             const q = query.trim().toLowerCase();
             if (!q) return true;
@@ -72,18 +68,27 @@ Scope {
             return [t.title, klass(t), e ? e.name : ""].join(" ").toLowerCase().includes(q);
         }
 
-        // Normal workspaces by id, plus an empty tile for "new workspace".
+        // Hyprland: normal workspaces by id, plus an empty tile for "new
+        // workspace". niri: this output's workspaces; its trailing empty one
+        // already is the new workspace.
         readonly property var workspaces: {
-            const ws = Hyprland.workspaces.values.filter(w => w.id > 0).sort((a, b) => a.id - b.id);
+            if (Compositor.isNiri) {
+                const ws = Compositor.workspacesOn(Compositor.focusedOutput);
+                const used = new Set(Compositor.windows.map(w => w.workspaceId));
+                return ws.map((w, i) => ({ id: w.id, name: w.name, ws: w,
+                                           fresh: i === ws.length - 1 && !used.has(w.id) }));
+            }
+            const ws = Compositor.workspacesOn("").filter(w => w.id > 0).sort((a, b) => a.id - b.id);
             const next = ws.length ? ws[ws.length - 1].id + 1 : 1;
-            return ws.map(w => ({ id: w.id, name: w.name, ws: w })).concat([{ id: next, name: "", ws: null }]);
+            return ws.map(w => ({ id: w.id, name: w.name, ws: w, fresh: false }))
+                .concat([{ id: next, name: "", ws: null, fresh: true }]);
         }
-        readonly property var windows: Hyprland.toplevels.values.filter(t => t.wayland && t.workspace && t.workspace.id > 0)
+        readonly property var windows: Compositor.windows.filter(t => t.workspaceId !== null && !t.special)
         readonly property var hits: windows.filter(t => matches(t))
 
         function focusWindow(t) {
             root.open = false;
-            Hypr.focusWindow(addr(t));
+            Compositor.focusWindow(addr(t));
         }
 
         // Tile size: the column count that gives the biggest miniatures.
@@ -193,21 +198,21 @@ Scope {
                         required property var modelData
                         readonly property var ws: modelData.ws
                         readonly property bool current: ws !== null && ws.active
-                        readonly property var mon: ws && ws.monitor ? ws.monitor : Hyprland.focusedMonitor
-                        readonly property real monX: mon ? mon.x : 0
-                        readonly property real monY: mon ? mon.y : 0
-                        readonly property real monW: mon ? mon.width / mon.scale : ov.screen.width
+                        readonly property var mon: Compositor.screenFor(ws && ws.output ? ws.output : Compositor.focusedOutput)
+                        readonly property real monX: 0
+                        readonly property real monY: 0
+                        readonly property real monW: mon ? mon.width : ov.screen.width
                         readonly property real k: ov.tiling.w / monW
                         width: ov.tiling.w
                         height: ov.tiling.h + ov.labelH
-                        z: ov.dragging && ov.dragging.workspace === ws ? 10 : 0
+                        z: ov.dragging && ws && ov.dragging.workspaceId === ws.id ? 10 : 0
 
                         Label {
                             x: 2
                             width: parent.width - 4
                             height: ov.labelH
-                            text: tile.ws ? (tile.ws.name !== String(tile.ws.id) ? tile.ws.name : "Workspace " + tile.ws.id)
-                                          : "New workspace"
+                            text: tile.modelData.fresh ? "New workspace"
+                                : (tile.ws.name !== String(tile.ws.idx) ? tile.ws.name : "Workspace " + tile.ws.idx)
                             color: tile.current ? Theme.fg : Theme.fgDim
                             font.weight: tile.current ? Font.DemiBold : Font.Normal
                         }
@@ -231,12 +236,12 @@ Scope {
                                 hoverEnabled: true
                                 onClicked: {
                                     root.open = false;
-                                    Hypr.focusWorkspace(tile.modelData.id);
+                                    Compositor.focusWorkspace(tile.modelData.id);
                                 }
                             }
 
                             Icon {
-                                visible: !tile.ws
+                                visible: tile.modelData.fresh
                                 anchors.centerIn: parent
                                 implicitSize: 48
                                 name: "list-add"
@@ -249,28 +254,27 @@ Scope {
                                 keys: ["hearth-window"]
                                 onDropped: drag => {
                                     const t = ov.dragging;
-                                    if (t && (!t.workspace || t.workspace.id !== tile.modelData.id))
-                                        Hypr.moveWindowToWorkspace(ov.addr(t), tile.modelData.id);
+                                    if (t && t.workspaceId !== tile.modelData.id)
+                                        Compositor.moveWindowToWorkspace(ov.addr(t), tile.modelData.id);
                                 }
                             }
 
                             Repeater {
                                 // Least recently focused first, so the most recent is on top.
-                                model: ov.windows.filter(t => t.workspace === tile.ws && tile.ws !== null)
-                                    .sort((a, b) => {
-                                        const ha = a.lastIpcObject.focusHistoryID ?? 0;
-                                        const hb = b.lastIpcObject.focusHistoryID ?? 0;
-                                        return hb - ha;
-                                    })
+                                model: ScriptModel {
+                                    objectProp: "id"
+                                    values: ov.windows.filter(t => tile.ws !== null && t.workspaceId === tile.ws.id)
+                                        .sort((a, b) => b.focusOrder - a.focusOrder)
+                                }
                                 delegate: Item {
                                     id: win
                                     required property var modelData
-                                    readonly property var o: modelData.lastIpcObject
+                                    readonly property var o: modelData
                                     readonly property bool hit: ov.matches(modelData)
                                     readonly property var entry: DesktopEntries.heuristicLookup(ov.klass(modelData))
                                     property real dx: 0
                                     property real dy: 0
-                                    readonly property bool dragged: ov.dragging === modelData
+                                    readonly property bool dragged: ov.dragging !== null && ov.dragging.id === modelData.id
 
                                     x: (o.at ? (o.at[0] - tile.monX) * tile.k : 0) + dx
                                     y: (o.at ? (o.at[1] - tile.monY) * tile.k : 0) + dy
@@ -286,7 +290,7 @@ Scope {
 
                                     ScreencopyView {
                                         anchors.fill: parent
-                                        captureSource: win.modelData.wayland
+                                        captureSource: win.modelData.toplevel
                                         live: root.open
                                         constraintSize: Qt.size(width, height)
                                     }
@@ -355,7 +359,7 @@ Scope {
                                         }
                                         onClicked: mouse => {
                                             if (moved) return;
-                                            if (mouse.button === Qt.MiddleButton) win.modelData.wayland.close();
+                                            if (mouse.button === Qt.MiddleButton) Compositor.closeWindow(win.modelData.id);
                                             else ov.focusWindow(win.modelData);
                                         }
                                     }
