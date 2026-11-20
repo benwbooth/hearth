@@ -122,6 +122,13 @@ binds {
     Alt+F4 repeat=false { close-window; }
     Mod+Q repeat=false { close-window; }
     Mod+Page_Up { maximize-window-to-edges; }
+    // Minimize keeps a docked window's place; click it in the dock (or
+    // Super+Shift+PgDn) to bring it back there.
+    Mod+Page_Down hotkey-overlay-title="Minimize window" { minimize-window; }
+    Mod+Shift+Page_Down hotkey-overlay-title="Restore last minimized window" { restore-window; }
+    // Tab groups: drop a window on the middle of a docked one to group them.
+    Mod+Comma hotkey-overlay-title="Previous tab" { focus-tab-prev; }
+    Mod+Period hotkey-overlay-title="Next tab" { focus-tab-next; }
     Mod+F { fullscreen-window; }
     // Dock / undock (floating windows live on the Desktop).
     Mod+D hotkey-overlay-title="Dock or undock window" { toggle-window-floating; }
