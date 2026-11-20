@@ -468,6 +468,7 @@ PanelWindow {
                         cellLength: dockWin.cell
                         thickness: dockWin.thickness
                         zoom: dockWin.geo.zoom[slot.index] ?? 1
+                        maxZoom: dockWin.maxZoom
                         showIndicator: dockWin.cfg.showIndicators
                         dragHost: dockWin.dragHost
                         hostHovered: hover.hovered
@@ -588,10 +589,13 @@ PanelWindow {
         readonly property var entry: toplevel ? DesktopEntries.heuristicLookup(toplevel.appId) : null
         hoverEnabled: true
         onClicked: if (toplevel) toplevel.activate()
+        // Built at the largest size and scaled, so magnifying doesn't
+        // re-capture the snapshot or reload the icon every frame.
         Rectangle {
             anchors.centerIn: parent
-            width: dockWin.iconSize * tile.zoom
+            width: Math.ceil(dockWin.iconSize * Math.max(1, dockWin.maxZoom))
             height: width * 0.75
+            scale: dockWin.iconSize * tile.zoom / width
             radius: 4
             color: Theme.bgRaised
             border.color: Theme.glassEdge

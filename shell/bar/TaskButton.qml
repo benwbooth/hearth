@@ -19,6 +19,7 @@ MouseArea {
     property real cellLength: Theme.barHeight + 4   // along the bar/dock
     property real thickness: Theme.barHeight
     property real zoom: 1                            // dock magnification
+    property real maxZoom: 1                         // largest zoom (icon load size)
     property bool showIndicator: true
     // Dock drag-to-reorder/remove: an object with begin(task, p),
     // move(task, p), end(task, p); p in the task's window coordinates.
@@ -118,11 +119,25 @@ MouseArea {
     }
 
     // The dock's icons sit on its inner edge and grow away from it.
-    Icon {
+    // The icon box grows with magnification; the image inside is loaded
+    // once at the largest size and only scaled. (Sizing the image itself by
+    // zoom made it reload, asynchronously, on every frame of the magnify
+    // animation, so icons blanked out while hovering.)
+    Item {
         id: icon
-        implicitSize: task.iconSize * task.zoom
+        readonly property real size: task.iconSize * task.zoom
+        width: size
+        height: size
         opacity: task.dragging ? 0.25 : task.pressed ? 0.7 : 1
-        name: task.entry ? task.entry.icon : (task.windows.length ? task.windows[0].appId : "")
+        Icon {
+            readonly property real full: Math.ceil(task.iconSize * Math.max(1, task.maxZoom))
+            implicitSize: full
+            anchors.centerIn: parent
+            scale: icon.size / full
+            smooth: true
+            mipmap: true
+            name: task.entry ? task.entry.icon : (task.windows.length ? task.windows[0].appId : "")
+        }
         x: !task.dock || !task.vertical ? (parent.width - width) / 2
          : task.edge === "left" ? (task.thickness - task.iconSize) / 2 + bounceOffset.value
          : (task.thickness + task.iconSize) / 2 - width - bounceOffset.value
