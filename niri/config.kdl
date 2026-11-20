@@ -1,0 +1,207 @@
+// Ben's arbor config (arbor = niri fork with a docking layout; niri's KDL
+// config language). Installed as ~/.config/niri/config.kdl by /etc/nixos.
+// Keys follow the Hyprland/Plasma ones wherever arbor has an equivalent.
+// Super+Shift+/ shows every shortcut.
+
+input {
+    keyboard {
+        numlock
+    }
+    touchpad {
+        tap
+        natural-scroll
+    }
+    focus-follows-mouse max-scroll-amount="0%"
+}
+
+// 4/3 like Hyprland (KWin's 130% isn't a whole-pixel size on 5120x2160).
+// No HDR yet: arbor has no colour management, so on this wide-gamut panel
+// use the monitor's own sRGB picture mode for accurate colours.
+output "DP-1" {
+    mode "5120x2160@165.058"
+    scale 1.333333
+    position x=0 y=0
+}
+
+environment {
+    QT_QPA_PLATFORMTHEME "kde"
+    QT_QPA_PLATFORM "wayland;xcb"
+    // arbor draws no title bars yet; Qt apps without their own draw these
+    // (cleaner than Qt's default decoration).
+    QT_WAYLAND_DECORATION "adwaita"
+    XDG_MENU_PREFIX "plasma-"
+    ELECTRON_OZONE_PLATFORM_HINT "auto"
+}
+
+cursor {
+    xcursor-theme "breeze_cursors"
+    xcursor-size 24
+}
+
+layout {
+    gaps 8
+    background-color "transparent"
+    focus-ring {
+        off
+    }
+    border {
+        width 1
+        active-color "#3daee9"
+        inactive-color "#3f444a"
+    }
+    shadow {
+        on
+        softness 30
+        spread 4
+        offset x=0 y=6
+        color "#0008"
+    }
+}
+
+// Rounded windows, macOS-like.
+window-rule {
+    geometry-corner-radius 10
+    clip-to-geometry true
+}
+window-rule {
+    match app-id=r#"^org\.kde\.polkit-kde-authentication-agent-1$"#
+    match app-id=r#"^org\.kde\.kdialog$"#
+    match app-id=r#"^org\.pulseaudio\.pavucontrol$"#
+    match app-id=r#"^com\.gabm\.satty$"#
+    open-floating true
+}
+
+// hearth's menu bar, dock and popups: frosted glass behind their
+// translucent parts.
+layer-rule {
+    match namespace="^hearth-"
+    background-effect {
+        blur true
+        xray false
+    }
+}
+
+hotkey-overlay {
+    skip-at-startup
+}
+
+screenshot-path "~/Pictures/Screenshots/Screenshot_%Y%m%d_%H%M%S.png"
+
+// Startup. niri also starts xwayland-satellite on demand for X11 apps.
+spawn-at-startup "hearth"
+spawn-at-startup "vicinae" "server"
+spawn-sh-at-startup "swaybg -m fill -i ~/.cache/hearth/wallpaper"
+// Night light like KDE Night Color: 4500 K from 19:00 to 07:00.
+spawn-at-startup "wlsunset" "-t" "4500" "-T" "6500" "-S" "07:00" "-s" "19:00"
+// Lock after 10 minutes, screen off after 15, lock before sleep.
+spawn-sh-at-startup "swayidle -w timeout 600 'pidof hyprlock || hyprlock &' timeout 900 'niri msg action power-off-monitors' resume 'niri msg action power-on-monitors' before-sleep 'pidof hyprlock || hyprlock &' lock 'pidof hyprlock || hyprlock &'"
+// KWallet gets SDDM's password (as Plasma's startup does).
+spawn-at-startup "/run/current-system/sw/libexec/pam_kwallet_init"
+spawn-sh-at-startup "systemctl --user start plasma-polkit-agent.service"
+spawn-at-startup "kdeconnect-indicator"
+
+binds {
+    Mod+Shift+Slash { show-hotkey-overlay; }
+
+    // Launcher and clipboard (Vicinae).
+    Alt+Space hotkey-overlay-title="Launcher" { spawn "vicinae" "toggle"; }
+    Alt+F1 { spawn "vicinae" "toggle"; }
+    Mod+V hotkey-overlay-title="Clipboard history" { spawn "vicinae" "cmd" "launch" "clipboard:history"; }
+    Mod+Return hotkey-overlay-title="Terminal" { spawn "konsole"; }
+    Mod+E hotkey-overlay-title="Files" { spawn "dolphin"; }
+
+    // Pinned apps 1-9 (hearth's dock order).
+    Mod+1 { spawn "hearth-ipc" "call" "tasks" "activate" "1"; }
+    Mod+2 { spawn "hearth-ipc" "call" "tasks" "activate" "2"; }
+    Mod+3 { spawn "hearth-ipc" "call" "tasks" "activate" "3"; }
+    Mod+4 { spawn "hearth-ipc" "call" "tasks" "activate" "4"; }
+    Mod+5 { spawn "hearth-ipc" "call" "tasks" "activate" "5"; }
+    Mod+6 { spawn "hearth-ipc" "call" "tasks" "activate" "6"; }
+    Mod+7 { spawn "hearth-ipc" "call" "tasks" "activate" "7"; }
+    Mod+8 { spawn "hearth-ipc" "call" "tasks" "activate" "8"; }
+    Mod+9 { spawn "hearth-ipc" "call" "tasks" "activate" "9"; }
+
+    // Windows.
+    Alt+F4 repeat=false { close-window; }
+    Mod+Q repeat=false { close-window; }
+    Mod+Page_Up { maximize-window-to-edges; }
+    Mod+F { fullscreen-window; }
+    // Dock / undock (floating windows live on the Desktop).
+    Mod+D hotkey-overlay-title="Dock or undock window" { toggle-window-floating; }
+
+    // Focus and move by direction.
+    Mod+Alt+Left  { focus-column-left; }
+    Mod+Alt+Right { focus-column-right; }
+    Mod+Alt+Up    { focus-window-up; }
+    Mod+Alt+Down  { focus-window-down; }
+    Mod+Left  { move-column-left; }
+    Mod+Right { move-column-right; }
+    Mod+Up    { move-window-up; }
+    Mod+Down  { move-window-down; }
+    // Stack with the neighbour / take out of a stack.
+    Mod+BracketLeft  { consume-or-expel-window-left; }
+    Mod+BracketRight { consume-or-expel-window-right; }
+    Mod+Minus { set-column-width "-5%"; }
+    Mod+Equal { set-column-width "+5%"; }
+    Mod+Shift+Minus { set-window-height "-5%"; }
+    Mod+Shift+Equal { set-window-height "+5%"; }
+
+    // Overview (Mission Control) and workspaces.
+    Mod+W repeat=false hotkey-overlay-title="Overview" { toggle-overview; }
+    Mod+G repeat=false { toggle-overview; }
+    Ctrl+F1 { focus-workspace 1; }
+    Ctrl+F2 { focus-workspace 2; }
+    Ctrl+F3 { focus-workspace 3; }
+    Ctrl+F4 { focus-workspace 4; }
+    Ctrl+F5 { focus-workspace 5; }
+    Ctrl+F6 { focus-workspace 6; }
+    Ctrl+F7 { focus-workspace 7; }
+    Ctrl+F8 { focus-workspace 8; }
+    Ctrl+F9 { focus-workspace 9; }
+    Mod+Ctrl+Up    { focus-workspace-up; }
+    Mod+Ctrl+Down  { focus-workspace-down; }
+    Mod+Ctrl+Shift+Up   { move-window-to-workspace-up; }
+    Mod+Ctrl+Shift+Down { move-window-to-workspace-down; }
+    Mod+WheelScrollDown cooldown-ms=150 { focus-workspace-down; }
+    Mod+WheelScrollUp   cooldown-ms=150 { focus-workspace-up; }
+
+    // Session.
+    Mod+L allow-when-locked=false hotkey-overlay-title="Lock screen" { spawn "hearth-ipc" "call" "session" "lock"; }
+    Ctrl+Alt+Delete { spawn "hearth-ipc" "call" "session" "open"; }
+    XF86PowerOff { spawn "hearth-ipc" "call" "session" "open"; }
+
+    // Screenshots: Print = pick a region (Space toggles the pointer,
+    // Ctrl+C copies), Ctrl+Print = whole screen, Alt+Print = window.
+    // Saved to ~/Pictures/Screenshots and copied to the clipboard.
+    Print { screenshot; }
+    Ctrl+Print { screenshot-screen; }
+    Alt+Print { screenshot-window; }
+    Mod+Shift+S { screenshot; }
+
+    // Ben's tools (were KDE custom shortcuts).
+    Mod+H { spawn "dsnote-tts.sh"; }
+    Pause { spawn "whisper-toggle"; }
+    Ctrl+Alt+Shift+C { spawn "flatpak" "run" "net.mkiol.SpeechNote" "--action" "cancel"; }
+    Ctrl+Alt+Shift+P { spawn "flatpak" "run" "net.mkiol.SpeechNote" "--action" "pause-resume-reading"; }
+    Ctrl+Alt+Shift+L { spawn "flatpak" "run" "net.mkiol.SpeechNote" "--action" "start-listening"; }
+    Ctrl+Alt+Shift+K { spawn "flatpak" "run" "net.mkiol.SpeechNote" "--action" "start-listening-active-window"; }
+    Ctrl+Alt+Shift+J { spawn "flatpak" "run" "net.mkiol.SpeechNote" "--action" "start-listening-clipboard"; }
+    Ctrl+Alt+Shift+R { spawn "flatpak" "run" "net.mkiol.SpeechNote" "--action" "start-reading"; }
+    Ctrl+Alt+Shift+E { spawn "flatpak" "run" "net.mkiol.SpeechNote" "--action" "start-reading-clipboard"; }
+    Ctrl+Alt+Shift+S { spawn "flatpak" "run" "net.mkiol.SpeechNote" "--action" "stop-listening"; }
+
+    // Volume, media, brightness.
+    XF86AudioRaiseVolume allow-when-locked=true { spawn-sh "wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+"; }
+    XF86AudioLowerVolume allow-when-locked=true { spawn-sh "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"; }
+    XF86AudioMute        allow-when-locked=true { spawn-sh "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"; }
+    XF86AudioMicMute     allow-when-locked=true { spawn-sh "wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"; }
+    XF86AudioPlay        allow-when-locked=true { spawn "playerctl" "play-pause"; }
+    XF86AudioPause       allow-when-locked=true { spawn "playerctl" "play-pause"; }
+    XF86AudioNext        allow-when-locked=true { spawn "playerctl" "next"; }
+    XF86AudioPrev        allow-when-locked=true { spawn "playerctl" "previous"; }
+    XF86AudioStop        allow-when-locked=true { spawn "playerctl" "stop"; }
+    XF86MonBrightnessUp   allow-when-locked=true { spawn "hearth-ipc" "call" "brightness" "up"; }
+    XF86MonBrightnessDown allow-when-locked=true { spawn "hearth-ipc" "call" "brightness" "down"; }
+
+    Mod+Shift+E { quit; }
+}
