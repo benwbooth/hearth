@@ -75,6 +75,14 @@ hl.config({
   ecosystem = { no_update_news = true, no_donation_nag = true },
 })
 EOF
+  # HEARTH_TEST_CONFIG=FILE: run that config instead (e.g. the real
+  # hyprland.lua with its monitor and autostart taken out), with the repo's
+  # Lua modules next to it and the title bar plugin from the uwsm env.
+  if [[ -n ${HEARTH_TEST_CONFIG:-} ]]; then
+    cp "$repo"/hypr/*.lua "$dir/"
+    cp "$HEARTH_TEST_CONFIG" "$dir/hyprland.lua"
+    [[ -f ~/.config/uwsm/env-hyprland ]] && source ~/.config/uwsm/env-hyprland
+  fi
   before=$(ls "$XDG_RUNTIME_DIR/hypr" 2>/dev/null || true)
   (cd "$dir" && WAYLAND_DISPLAY=$sock daemon "$dir/hypr.pid" "$dir/hypr.log" \
     "$(tool hyprland)/bin/Hyprland" --config "$dir/hyprland.lua")
