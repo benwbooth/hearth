@@ -15,12 +15,18 @@ input {
 }
 
 // 4/3 like Hyprland (KWin's 130% isn't a whole-pixel size on 5120x2160).
-// No HDR yet: arbor has no colour management, so on this wide-gamut panel
-// use the monitor's own sRGB picture mode for accurate colours.
+// HDR like Plasma/Hyprland: arbor drives the panel in HDR (BT.2020, PQ, 10
+// bpc) and shows normal (SDR) content at sdr-brightness nits; ~670 matched
+// Hyprland's 560 x 1.2 that looked right. Brighter/dimmer: change it.
+// Without HDR, `color-profile "edid"` gives accurate SDR colours instead.
 output "DP-1" {
     mode "5120x2160@165.058"
     scale 1.333333
     position x=0 y=0
+    hdr {
+        sdr-brightness 670
+        max-luminance 800
+    }
 }
 
 environment {
