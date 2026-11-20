@@ -18,8 +18,18 @@ hl.monitor({
     -- stayed clamped to 1.3, leaving the right and bottom edges unreachable.
     -- The nearest valid scales on 5120x2160 are 1.25 and 4/3.
     scale    = 4/3,
-    -- No HDR: Hyprland's HDR mode maps SDR content to 80 nits, so
-    -- everything looked faded and brown.
+    -- HDR with the monitor's EDID colour profile, as Plasma had it (KWin:
+    -- HDR on, EDID profile, SDR at 560 nits). Hyprland's default SDR level
+    -- (80 nits) looked faded and brown; this matched it by eye. Chromium /
+    -- Electron windows stay dim unless they run with
+    -- --disable-features=WaylandWpColorManagerV1 (set in /etc/nixos).
+    bitdepth          = 10,
+    cm                = "hdredid",
+    sdr_max_luminance = 560,
+    sdr_min_luminance = 0.005,
+    max_luminance     = 800,
+    sdrbrightness     = 1.2,
+    sdrsaturation     = 1.0,
 })
 -- Anything else plugged in: sensible defaults.
 hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
