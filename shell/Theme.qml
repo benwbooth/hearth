@@ -41,12 +41,14 @@ Singleton {
         const a = 1 - glass * (1 - minAlpha);
         return Qt.rgba(base.r, base.g, base.b, a);
     }
-    readonly property color glassBar: glassColor(dark ? Qt.rgba(0.11, 0.12, 0.13, 1) : Qt.rgba(0.96, 0.96, 0.97, 1), 0.45)
+    readonly property color glassBar: glassColor(dark ? Qt.rgba(0.10, 0.11, 0.12, 1) : Qt.rgba(0.95, 0.95, 0.96, 1), 0.34)
     readonly property color glassDock: glassColor(dark ? Qt.rgba(0.16, 0.17, 0.19, 1) : Qt.rgba(0.97, 0.97, 0.98, 1), 0.40)
     readonly property color glassMenu: glassColor(dark ? Qt.rgba(0.14, 0.15, 0.17, 1) : Qt.rgba(0.97, 0.97, 0.98, 1), 0.62)
     // The thin bright rim and darker outline that make glass read as a pane.
     readonly property color glassRim: dark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.75)
     readonly property color glassEdge: dark ? Qt.rgba(0, 0, 0, 0.55) : Qt.rgba(0, 0, 0, 0.16)
+    // Under menu bar text: lifts it off busy wallpaper behind the glass.
+    readonly property color textHalo: dark ? Qt.rgba(0, 0, 0, 0.45) : Qt.rgba(1, 1, 1, 0.6)
     readonly property color shadow: Qt.rgba(0, 0, 0, dark ? 0.45 : 0.22)
 
     readonly property int barHeight: 44

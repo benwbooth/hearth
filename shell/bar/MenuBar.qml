@@ -50,9 +50,25 @@ PanelWindow {
         y: bar.revealed ? 0 : -height
         Behavior on y { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
 
+        // Liquid glass: a tint over the compositor's blur, a soft specular
+        // sheen from the top, a bright inner line along the top edge and a
+        // dark hairline underneath.
         Rectangle {
             anchors.fill: parent
             color: Theme.glassBar
+        }
+        Rectangle {
+            anchors.fill: parent
+            gradient: Gradient {
+                GradientStop { position: 0; color: Qt.rgba(1, 1, 1, Theme.dark ? 0.10 : 0.35) }
+                GradientStop { position: 0.55; color: Qt.rgba(1, 1, 1, Theme.dark ? 0.02 : 0.08) }
+                GradientStop { position: 1; color: Qt.rgba(1, 1, 1, 0) }
+            }
+        }
+        Rectangle {
+            width: parent.width
+            height: 1
+            color: Qt.rgba(1, 1, 1, Theme.dark ? 0.14 : 0.6)
         }
         Rectangle {
             anchors.bottom: parent.bottom

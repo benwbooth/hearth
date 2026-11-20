@@ -26,6 +26,7 @@ Singleton {
         menubar: {
             autohide: false,
             showAppName: true,
+            logo: "nixos",              // "nixos" | "penguin" | "none"   (shell/assets/<name>.svg)
             clock24h: true,
             showDate: true,
             showWeekday: true,

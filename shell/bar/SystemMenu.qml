@@ -8,11 +8,24 @@ import ".."
 // the launcher, and the session actions from services/Session.qml.
 BarButton {
     id: root
-    icon: "start-here-kde-symbolic"
-    iconFallback: "start-here"
-    tooltip: ""
+    // The logo (Settings > Menu Bar): NixOS snowflake (default), a penguin,
+    // or "none" for a plain menu glyph.
+    readonly property string logo: Settings.menubar.logo || "nixos"
+    icon: logo === "none" ? "application-menu" : ""
+    tooltip: "System menu: settings, sleep, restart, shut down, lock and log out"
     active: menu.open
+    implicitWidth: 34
     onClicked: menu.toggle()
+
+    Logo {
+        // BarButton's default property puts children on its icon, which is
+        // hidden here.
+        parent: root
+        anchors.centerIn: parent
+        visible: root.logo !== "none"
+        name: root.logo
+        size: root.hostHeight > 34 ? 22 : 16
+    }
 
     BarPopup {
         id: menu

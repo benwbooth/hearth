@@ -280,6 +280,13 @@ Scope {
                 SwitchRow { label: "Automatically hide and show the menu bar"; key: "menubar.autohide" }
                 Divider {}
                 SwitchRow { label: "Show the app name"; key: "menubar.showAppName" }
+                Divider {}
+                ChoiceRow {
+                    label: "Menu logo"
+                    note: "The button at the far left that opens the system menu."
+                    key: "menubar.logo"
+                    options: [{ value: "nixos", label: "NixOS" }, { value: "penguin", label: "Penguin" }, { value: "none", label: "None" }]
+                }
             }
             Label { text: "Clock"; font.weight: Font.DemiBold }
             Group {

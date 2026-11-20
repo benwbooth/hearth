@@ -38,6 +38,8 @@ Indicator {
         anchors.centerIn: parent
         text: root.lineText
         font.weight: Font.Medium
+        style: Text.Raised
+        styleColor: Theme.textHalo
     }
 
     tooltip: Qt.formatDateTime(clock.date, "dddd, MMMM d, yyyy")

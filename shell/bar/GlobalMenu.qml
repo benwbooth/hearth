@@ -126,6 +126,8 @@ Row {
             text: t.text
             color: t.enabled ? Theme.fg : Theme.fgDim
             font.weight: t.bold ? Font.Bold : Font.Normal
+            style: Text.Raised
+            styleColor: Theme.textHalo
         }
     }
 }
