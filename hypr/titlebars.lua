@@ -69,6 +69,10 @@ M.csd_classes = {
     "google%-chrome.*", "brave%-browser", "vivaldi.*",
     "code", "code%-url%-handler", "Code", "Slack", "obsidian", "discord", "vesktop",
     "dev%.zed%.Zed",
+    -- Electron/Flutter apps and Ben's own Qt apps with a unified title bar
+    -- (frameless windows with their own buttons).
+    "com%.anthropic%.Claude", "spotify", "Spotify",
+    "almanac", "earshot", "org%.kog%..*", "tessera", "altirraqt",
 }
 
 local function file_exists(p)
