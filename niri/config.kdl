@@ -74,15 +74,9 @@ window-rule {
     open-floating true
 }
 
-// hearth's menu bar, dock and popups: frosted glass behind their
-// translucent parts.
-layer-rule {
-    match namespace="^hearth-"
-    background-effect {
-        blur true
-        xray false
-    }
-}
+// hearth's glass: blur behind the menu bar, menus, popups and notifications
+// (installed next to this file).
+include "hearth-layer-rules.kdl"
 
 hotkey-overlay {
     skip-at-startup
@@ -105,6 +99,7 @@ spawn-at-startup "kdeconnect-indicator"
 
 binds {
     Mod+Shift+Slash { show-hotkey-overlay; }
+    Mod+Slash hotkey-overlay-title="Keyboard shortcuts and help" { spawn "hearth-ipc" "call" "help" "shortcuts"; }
 
     // Launcher and clipboard (Vicinae).
     Alt+Space hotkey-overlay-title="Launcher" { spawn "vicinae" "toggle"; }
