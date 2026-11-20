@@ -279,6 +279,8 @@ hl.bind(M .. " + 0",     function() zoom(0) end)
 
 -- Session
 hl.bind(M .. " + L", hl.dsp.exec_cmd(hearth_ipc .. "session lock"))
+-- hearth Help: the keyboard shortcut cheat sheet.
+hl.bind(M .. " + slash", hl.dsp.exec_cmd(hearth_ipc .. "help shortcuts"))
 hl.bind("CTRL + ALT + Delete", hl.dsp.exec_cmd(hearth_ipc .. "session open"))
 hl.bind("XF86PowerOff", hl.dsp.exec_cmd(hearth_ipc .. "session open"))
 
@@ -371,7 +373,7 @@ hl.window_rule({
 })
 hl.window_rule({
     name   = "hearth-settings",
-    match  = { title = "^hearth Settings$" },
+    match  = { title = "^hearth (Settings|Help)$" },
     float  = true,
     size   = "920 640",
     center = true,

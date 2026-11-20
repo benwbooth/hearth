@@ -97,6 +97,7 @@ PanelWindow {
 
             DevApps { iconSize: Theme.menuBarIconSize; implicitWidth: 30 }
             Tray {}
+            HelpMenu {}
             Clock {}
         }
     }
