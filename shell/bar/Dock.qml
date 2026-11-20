@@ -33,7 +33,10 @@ PanelWindow {
     readonly property real margin: 4
     readonly property real maxZoom: cfg.magnify ? Math.max(1, cfg.magnifySize / iconSize) : 1
     readonly property real extra: iconSize * (maxZoom - 1)
-    readonly property real winThickness: margin + thickness + extra + 14
+    // Room above the icons for the app-name label (drawn inside this
+    // surface, so hovering never maps or unmaps popup windows).
+    readonly property real labelSpace: 36
+    readonly property real winThickness: margin + thickness + extra + 14 + labelSpace
     readonly property bool autohide: cfg.autohide
 
     // Read by BarPopup: popups clear the dock when it reserves no space.
@@ -298,6 +301,46 @@ PanelWindow {
             y: (dockWin.edge === "bottom" ? body.hideOffset : 0) + 0.001
             Behavior on x { NumberAnimation { duration: dockWin.cfg.animationMs; easing.type: Easing.OutCubic } }
             Behavior on y { NumberAnimation { duration: dockWin.cfg.animationMs; easing.type: Easing.OutCubic } }
+        }
+
+        // One app-name label (macOS-style) that glides to the icon under the
+        // pointer, instead of a popup window per icon: those mapped and
+        // unmapped one after another as the pointer crossed the dock, which
+        // read as flicker.
+        Rectangle {
+            id: nameLabel
+            readonly property int idx: dockWin.hotIndex
+            readonly property bool want: idx >= 0 && hover.hovered && !dockWin.menuOpen
+                                         && dockWin.previews === 0 && dockWin.dragKey === ""
+            property string text: ""
+            property real cx: 0
+            property real ext: 0
+            onIdxChanged: if (idx >= 0) {
+                const sl = dockWin.slots[idx];
+                const g = sl && sl.group;
+                text = g && g.entry ? g.entry.name : (sl ? sl.key : "");
+            }
+            // Follow the hot icon's centre and its magnified size.
+            readonly property real tcx: idx >= 0 ? (dockWin.geo.pos[idx] ?? 0) + (dockWin.geo.len[idx] ?? 0) / 2 : cx
+            readonly property real text_ext: idx >= 0 ? dockWin.iconSize * ((dockWin.geo.zoom[idx] ?? 1) - 1) : ext
+            onTcxChanged: cx = tcx
+            onText_extChanged: ext = text_ext
+            Behavior on cx { enabled: nameLabel.opacity > 0.01; NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
+            visible: !dockWin.vertical && opacity > 0
+            opacity: want ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 140 } }
+            width: nameText.implicitWidth + 20
+            height: nameText.implicitHeight + 8
+            radius: height / 2
+            x: Math.round(Math.max(4, Math.min(dockWin.width - width - 4, cx - width / 2)))
+            y: Math.round(dockWin.height - dockWin.margin - dockWin.thickness - ext - height - 8)
+            color: Qt.rgba(Theme.bgRaised.r, Theme.bgRaised.g, Theme.bgRaised.b, 0.92)
+            border.color: Theme.border
+            Label {
+                id: nameText
+                anchors.centerIn: parent
+                text: nameLabel.text
+            }
         }
 
         HoverHandler { id: hover }

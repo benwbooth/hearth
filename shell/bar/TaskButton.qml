@@ -72,6 +72,8 @@ MouseArea {
 
     onPressed: mouse => { pressPos = Qt.point(mouse.x, mouse.y); dragging = false; previewShow.stop(); }
     onPositionChanged: mouse => {
+        // Moving over the icon restarts the rest timer (dock thumbnails).
+        if (task.dock && task.pointed && !preview.visible && !task.pressed) previewShow.restart();
         if (!task.dragHost || !task.pressed || !(task.pressedButtons & Qt.LeftButton)) return;
         const p = task.mapToItem(null, mouse.x, mouse.y);
         if (!task.dragging) {
@@ -225,8 +227,14 @@ MouseArea {
 
         Timer {
             id: previewShow
-            interval: task.dock && !task.running ? 150 : 450
-            onTriggered: preview.visible = ((task.pointed && task.hostHovered) || previewHover.hovered) && !menu.open && !task.dragging && !task.pressed
+            // In the dock the name label is drawn by the dock itself; window
+            // thumbnails only open after the pointer rests on a running app
+            // (restarted on every move), so sweeping across icons never pops
+            // windows in and out.
+            interval: task.dock ? 900 : 450
+            onTriggered: preview.visible = ((task.pointed && task.hostHovered) || previewHover.hovered)
+                                           && !(task.dock && !task.running)
+                                           && !menu.open && !task.dragging && !task.pressed
         }
         Timer {
             id: previewHide
