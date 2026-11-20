@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import ".."
 
 // A bar/tray button: icon and/or text, hover highlight and a tooltip.
@@ -11,19 +12,22 @@ MouseArea {
     property string tooltip: ""
     property string tooltipSub: ""
     property bool active: false
-    property int iconSize: Theme.iconSize
+    // Bar windows may set `barHeight` / `barIconSize` (the thin menu bar).
+    readonly property var hostWindow: root.QsWindow.window
+    readonly property int hostHeight: hostWindow && hostWindow.barHeight ? hostWindow.barHeight : Theme.barHeight
+    property int iconSize: hostWindow && hostWindow.barIconSize ? hostWindow.barIconSize : Theme.iconSize
     property color textColor: Theme.fg
     default property alias overlay: overlayItem.data
 
     hoverEnabled: true
     acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-    implicitHeight: Theme.barHeight
-    implicitWidth: Math.max(Theme.barHeight - 12, row.implicitWidth + 12)
+    implicitHeight: hostHeight
+    implicitWidth: Math.max(hostHeight - 12, row.implicitWidth + 12)
 
     Rectangle {
         anchors.fill: parent
-        anchors.topMargin: 4
-        anchors.bottomMargin: 4
+        anchors.topMargin: root.hostHeight < 36 ? 3 : 4
+        anchors.bottomMargin: root.hostHeight < 36 ? 3 : 4
         radius: Theme.radius
         color: root.pressed ? Theme.pressed
              : (root.containsMouse || root.active) ? Theme.hover

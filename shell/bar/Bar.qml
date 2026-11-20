@@ -12,6 +12,7 @@ PanelWindow {
     id: bar
     required property ShellScreen modelData
     screen: modelData
+    readonly property string edge: "bottom"
 
     anchors {
         left: true

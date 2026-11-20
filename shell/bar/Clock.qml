@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
 import "../widgets"
+import "../services"
 import ".."
 
 // Two-line 24h clock with ISO date, like the Plasma panel; click for a
@@ -10,11 +11,33 @@ import ".."
 Indicator {
     id: root
     ipcName: "clock"
-    implicitWidth: col.implicitWidth + 16
+    // In the menu bar: one line, macOS style ("Thu 19 Nov  21:40"), as set in
+    // Settings > Menu Bar.
+    readonly property bool compact: !!root.QsWindow.window && root.QsWindow.window.edge === "top"
+    readonly property var mb: Settings.menubar
+    readonly property string lineText: {
+        const d = clock.date;
+        const parts = [];
+        if (mb.showWeekday) parts.push(Qt.formatDate(d, "ddd"));
+        if (mb.showDate) parts.push(Qt.formatDate(d, "d MMM"));
+        const t = mb.clock24h ? (mb.showSeconds ? "HH:mm:ss" : "HH:mm") : (mb.showSeconds ? "h:mm:ss AP" : "h:mm AP");
+        parts.push(" " + Qt.formatTime(d, t));
+        return parts.join(" ");
+    }
+    implicitWidth: (compact ? line.implicitWidth : col.implicitWidth) + 16
 
     SystemClock {
         id: clock
-        precision: SystemClock.Minutes
+        precision: root.compact && root.mb.showSeconds ? SystemClock.Seconds : SystemClock.Minutes
+    }
+
+    Label {
+        id: line
+        parent: root
+        visible: root.compact
+        anchors.centerIn: parent
+        text: root.lineText
+        font.weight: Font.Medium
     }
 
     tooltip: Qt.formatDateTime(clock.date, "dddd, MMMM d, yyyy")
@@ -22,6 +45,7 @@ Indicator {
     Column {
         id: col
         parent: root
+        visible: !root.compact
         anchors.centerIn: parent
         Label {
             anchors.horizontalCenter: parent.horizontalCenter
@@ -92,7 +116,7 @@ Indicator {
                 Label {
                     anchors.centerIn: parent
                     text: parent.model.day
-                    color: parent.today ? Theme.bg : parent.model.month === cal.shown.getMonth() ? Theme.fg : Theme.fgDim
+                    color: parent.today ? Theme.accentText : parent.model.month === cal.shown.getMonth() ? Theme.fg : Theme.fgDim
                     font.weight: parent.today ? Font.Bold : Font.Normal
                 }
             }

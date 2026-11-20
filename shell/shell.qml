@@ -15,14 +15,25 @@ ShellRoot {
     // Touch singletons that own IPC targets (or start daemons): singletons
     // are created on first use, so e.g. `session` (Super+L) wouldn't exist.
     Component.onCompleted: { void Swaync; void Session; }
+    // Layout "mac" (default): menu bar + dock; "panel": the classic bottom
+    // panel. Settings > Layout, or settings.json `layout`.
     Variants {
-        model: Quickshell.screens
+        model: Settings.mac ? Quickshell.screens : []
+        MenuBar {}
+    }
+    Variants {
+        model: Settings.mac ? Quickshell.screens : []
+        Dock {}
+    }
+    Variants {
+        model: Settings.mac ? [] : Quickshell.screens
         Bar {}
     }
 
     Osd {}
     BtPairDialog {}
-    ZoneOverlay {}
+    // FanzyZones is Hyprland Lua.
+    LazyLoader { active: Compositor.isHyprland; ZoneOverlay {} }
     Switcher {}
     Overview {}
     WallpaperInfo {}

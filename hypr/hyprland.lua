@@ -58,7 +58,9 @@ hl.config({
     decoration = {
         rounding = 6,
         shadow = { enabled = true, range = 12, render_power = 3, color = "rgba(00000066)" },
-        blur = { enabled = true, size = 4, passes = 2 },
+        -- Frosted glass under hearth's menu bar, dock and menus (layer
+        -- rules below): a wide, soft blur with a little vibrancy.
+        blur = { enabled = true, size = 8, passes = 3, vibrancy = 0.2, noise = 0.02, popups = true, xray = false },
     },
     animations = { enabled = true },
     dwindle = { preserve_split = true },
@@ -308,6 +310,29 @@ hl.bind("XF86AudioPause", hl.dsp.exec_cmd("playerctl play-pause"), { locked = tr
 hl.bind("XF86AudioNext",  hl.dsp.exec_cmd("playerctl next"), { locked = true })
 hl.bind("XF86AudioPrev",  hl.dsp.exec_cmd("playerctl previous"), { locked = true })
 hl.bind("XF86AudioStop",  hl.dsp.exec_cmd("playerctl stop"), { locked = true })
+
+--------------------------------
+---- LAYER RULES ---------------
+--------------------------------
+
+-- hearth's glass: blur what's behind the menu bar, dock, menus/popups and
+-- their tooltips/previews (xdg popups). ignore_alpha keeps the blur off the
+-- transparent parts of the surfaces (the dock window is wider than the
+-- dock) and off faint shadows. Without blur the tints are opaque enough.
+hl.layer_rule({
+    name         = "hearth-glass",
+    match        = { namespace = "^hearth-(menubar|dock|popup|settings)$" },
+    blur         = true,
+    blur_popups  = true,
+    ignore_alpha = 0.25,
+    xray         = false,
+})
+-- Popups of the menu bar slide in rather than pop.
+hl.layer_rule({
+    name      = "hearth-popup-anim",
+    match     = { namespace = "^hearth-popup$" },
+    animation = "fade",
+})
 
 --------------------------------
 ---- WINDOW RULES --------------

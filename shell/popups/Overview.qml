@@ -30,6 +30,10 @@ Scope {
     }
 
     Connections {
+        target: ShellState
+        function onOverviewRequested() { root.open = true; }
+    }
+    Connections {
         target: Compositor
         function onCustomEvent(data) {
             if (!data.startsWith("hearth-overview ")) return;

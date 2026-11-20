@@ -1,0 +1,278 @@
+#!/usr/bin/env python3
+"""Global menu relay: speaks com.canonical.dbusmenu for hearth's menu bar.
+
+The compositor tells hearth where the focused window's menu lives (arbor:
+niri IPC `Window.app_menu = {service_name, object_path}`, set through the
+KDE appmenu Wayland protocol). Quickshell can't call arbitrary DBus, so
+hearth runs this and talks JSON lines:
+
+stdin (one command per line):
+  {"cmd": "watch", "service": S, "path": P}   follow this menu (replaces the last)
+  {"cmd": "unwatch"}
+  {"cmd": "open", "id": N}     a (sub)menu is about to show: AboutToShow + "opened"
+  {"cmd": "close", "id": N}    it closed
+  {"cmd": "click", "id": N}    an item was activated
+
+stdout:
+  {"type": "registrar", "owned": bool}
+  {"type": "menu", "service": S, "path": P, "menu": ITEM}
+      ITEM = {id, label, enabled, visible, type ("standard"|"separator"),
+              toggleType (""|"checkmark"|"radio"), toggleState (-1|0|1),
+              icon, shortcut ("Ctrl+S"), submenu (bool), children: [ITEM]}
+      Labels have their mnemonic underscores removed.
+  {"type": "error", "message": str}
+
+Qt (plasma-integration) and appmenu-gtk-module only export menus when the
+session bus has `com.canonical.AppMenu.Registrar`; Plasma provides it (kded's
+appmenu module). Outside Plasma this registers a minimal one, which also
+records X11 window ids for apps that use RegisterWindow.
+"""
+import json
+import os
+import sys
+import time
+
+import dbus
+import dbus.mainloop.glib
+import dbus.service
+from gi.repository import GLib
+
+DBUSMENU = "com.canonical.dbusmenu"
+REGISTRAR = "com.canonical.AppMenu.Registrar"
+REGISTRAR_PATH = "/com/canonical/AppMenu/Registrar"
+
+bus = None
+current = None  # {"service", "path", "proxy", "matches", "pending"}
+
+
+def out(obj):
+    try:
+        sys.stdout.write(json.dumps(obj) + "\n")
+        sys.stdout.flush()
+    except BrokenPipeError:
+        GLib.idle_add(loop.quit)
+
+
+def strip_mnemonic(s):
+    res, i = [], 0
+    while i < len(s):
+        c = s[i]
+        if c == "_":
+            if i + 1 < len(s) and s[i + 1] == "_":
+                res.append("_")
+                i += 2
+                continue
+            i += 1
+            continue
+        res.append(c)
+        i += 1
+    return "".join(res)
+
+
+KEYNAMES = {"Control": "Ctrl", "Super": "Meta", "Alt": "Alt", "Shift": "Shift"}
+
+
+def shortcut_text(sc):
+    try:
+        return ", ".join("+".join(KEYNAMES.get(str(k), str(k)) for k in combo) for combo in sc)
+    except Exception:
+        return ""
+
+
+def convert(node):
+    nid, props, children = node
+    p = {str(k): v for k, v in props.items()}
+    kids = [convert(c) for c in children]
+    typ = str(p.get("type", "standard"))
+    return {
+        "id": int(nid),
+        "label": strip_mnemonic(str(p.get("label", ""))),
+        "enabled": bool(p.get("enabled", True)),
+        "visible": bool(p.get("visible", True)),
+        "type": typ,
+        "toggleType": str(p.get("toggle-type", "")),
+        "toggleState": int(p.get("toggle-state", -1)),
+        "icon": str(p.get("icon-name", "")),
+        "shortcut": shortcut_text(p.get("shortcut", [])),
+        "submenu": str(p.get("children-display", "")) == "submenu" or len(kids) > 0,
+        "children": kids,
+    }
+
+
+def fetch(cur):
+    """Fetch the whole layout of `cur` and print it (debounced)."""
+    if cur is not current or cur.get("pending"):
+        return
+    cur["pending"] = True
+
+    def run():
+        cur["pending"] = False
+        if cur is not current:
+            return False
+
+        def ok(revision, layout):
+            if cur is current:
+                out({"type": "menu", "service": cur["service"], "path": cur["path"],
+                     "menu": convert(layout)})
+
+        def err(e):
+            if cur is current:
+                out({"type": "error", "message": str(e)})
+
+        cur["iface"].GetLayout(0, -1, dbus.Array([], signature="s"),
+                               reply_handler=ok, error_handler=err)
+        return False
+
+    GLib.timeout_add(40, run)
+
+
+def about_to_show(cur, ids, then=None):
+    left = [len(ids)]
+
+    def done(*_):
+        left[0] -= 1
+        if left[0] <= 0 and then:
+            then()
+
+    if not ids:
+        if then:
+            then()
+        return
+    for i in ids:
+        cur["iface"].AboutToShow(dbus.Int32(i), reply_handler=done, error_handler=done)
+
+
+def unwatch():
+    global current
+    if current:
+        for m in current["matches"]:
+            m.remove()
+    current = None
+
+
+def watch(service, path):
+    global current
+    if current and current["service"] == service and current["path"] == path:
+        fetch(current)
+        return
+    unwatch()
+    try:
+        obj = bus.get_object(service, path, introspect=False)
+    except Exception as e:
+        out({"type": "error", "message": str(e)})
+        return
+    cur = {"service": service, "path": path, "iface": dbus.Interface(obj, DBUSMENU),
+           "matches": [], "pending": False}
+    current = cur
+    for sig in ("LayoutUpdated", "ItemsPropertiesUpdated", "ItemActivationRequested"):
+        cur["matches"].append(bus.add_signal_receiver(
+            lambda *a, _c=cur: fetch(_c), signal_name=sig, dbus_interface=DBUSMENU,
+            bus_name=service, path=path))
+
+    # GTK (appmenu-gtk-module) fills submenus on AboutToShow: ask for the
+    # root and every top-level menu once, then fetch.
+    def after_root(*_):
+        def got(revision, layout):
+            ids = [int(c[0]) for c in layout[2]]
+            about_to_show(cur, ids, lambda: fetch(cur))
+
+        cur["iface"].GetLayout(0, 1, dbus.Array([], signature="s"),
+                               reply_handler=got, error_handler=lambda e: fetch(cur))
+
+    cur["iface"].AboutToShow(dbus.Int32(0), reply_handler=after_root, error_handler=after_root)
+
+
+def event(cur, nid, name):
+    cur["iface"].Event(dbus.Int32(nid), name, dbus.Int32(0, variant_level=1),
+                       dbus.UInt32(int(time.time()) & 0xFFFFFFFF),
+                       reply_handler=lambda *a: None,
+                       error_handler=lambda e: out({"type": "error", "message": str(e)}))
+
+
+def on_stdin(fd, cond):
+    line = sys.stdin.readline()
+    if not line:
+        loop.quit()
+        return False
+    try:
+        c = json.loads(line)
+    except ValueError:
+        return True
+    cmd = c.get("cmd")
+    try:
+        if cmd == "watch":
+            watch(c["service"], c["path"])
+        elif cmd == "unwatch":
+            unwatch()
+        elif current and cmd == "open":
+            nid = int(c["id"])
+            event(current, nid, "opened")
+            about_to_show(current, [nid], lambda: fetch(current))
+        elif current and cmd == "close":
+            event(current, int(c["id"]), "closed")
+        elif current and cmd == "click":
+            event(current, int(c["id"]), "clicked")
+    except Exception as e:
+        out({"type": "error", "message": str(e)})
+    return True
+
+
+class Registrar(dbus.service.Object):
+    """Minimal com.canonical.AppMenu.Registrar (X11 window id -> menu)."""
+
+    def __init__(self, conn):
+        super().__init__(conn, REGISTRAR_PATH)
+        self.windows = {}
+
+    @dbus.service.method(REGISTRAR, in_signature="uo", sender_keyword="sender")
+    def RegisterWindow(self, window_id, menu_path, sender=None):
+        self.windows[int(window_id)] = (str(sender), str(menu_path))
+        self.WindowRegistered(window_id, sender, menu_path)
+
+    @dbus.service.method(REGISTRAR, in_signature="u")
+    def UnregisterWindow(self, window_id):
+        if self.windows.pop(int(window_id), None):
+            self.WindowUnregistered(window_id)
+
+    @dbus.service.method(REGISTRAR, in_signature="u", out_signature="so")
+    def GetMenuForWindow(self, window_id):
+        s, p = self.windows.get(int(window_id), ("", "/"))
+        return s, dbus.ObjectPath(p)
+
+    @dbus.service.method(REGISTRAR, out_signature="a(uso)")
+    def GetMenus(self):
+        return [(dbus.UInt32(w), s, dbus.ObjectPath(p)) for w, (s, p) in self.windows.items()]
+
+    @dbus.service.signal(REGISTRAR, signature="uso")
+    def WindowRegistered(self, window_id, service, path):
+        pass
+
+    @dbus.service.signal(REGISTRAR, signature="u")
+    def WindowUnregistered(self, window_id):
+        pass
+
+
+def main():
+    global bus, loop
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    bus = dbus.SessionBus()
+    loop = GLib.MainLoop()
+
+    owned = False
+    in_kde = "KDE" in os.environ.get("XDG_CURRENT_DESKTOP", "")
+    if not in_kde and os.environ.get("HEARTH_APPMENU_REGISTRAR", "1") != "0":
+        try:
+            r = bus.request_name(REGISTRAR, dbus.bus.NAME_FLAG_DO_NOT_QUEUE)
+            if r in (dbus.bus.REQUEST_NAME_REPLY_PRIMARY_OWNER, dbus.bus.REQUEST_NAME_REPLY_ALREADY_OWNER):
+                Registrar(bus)
+                owned = True
+        except dbus.DBusException as e:
+            out({"type": "error", "message": str(e)})
+    out({"type": "registrar", "owned": owned})
+
+    GLib.io_add_watch(sys.stdin.fileno(), GLib.IO_IN | GLib.IO_HUP, on_stdin)
+    loop.run()
+
+
+if __name__ == "__main__":
+    main()

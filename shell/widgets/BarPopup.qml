@@ -26,19 +26,31 @@ PanelWindow {
     // start. Anchored to the bottom edge it sits just above the bar (the
     // bar's exclusive zone pushes it up), horizontally under its button.
     readonly property var barWindow: anchorItem.QsWindow.window
-    readonly property bool fromTop: !!barWindow && barWindow.edge === "top"
+    readonly property string edge: barWindow && barWindow.edge ? barWindow.edge : "bottom"
+    readonly property bool fromTop: edge === "top"
+    readonly property bool sideways: edge === "left" || edge === "right"
     // Extra gap from the screen edge, for bars that don't reserve space
-    // (the auto-hiding dock).
+    // (the auto-hiding dock / menu bar).
     readonly property int edgeGap: barWindow && barWindow.popupGap !== undefined ? barWindow.popupGap : 0
     screen: barWindow ? barWindow.screen : null
-    anchors.top: fromTop
-    anchors.bottom: !fromTop
-    anchors.left: true
+    anchors.top: edge !== "bottom"
+    anchors.bottom: edge === "bottom"
+    anchors.left: edge !== "right"
+    anchors.right: edge === "right"
     exclusionMode: ExclusionMode.Normal
     exclusiveZone: 0
-    margins.top: 4 + edgeGap
+    margins.top: {
+        if (!sideways) return 4 + edgeGap;
+        void popup.open;
+        if (!barWindow || !screen) return 4;
+        const p = anchorItem.mapToItem(null, 0, anchorItem.height / 2);
+        const h = popup.implicitHeight;
+        return Math.max(4, Math.min(screen.height - h - 4, Math.round(p.y - h / 2)));
+    }
     margins.bottom: 4 + edgeGap
+    margins.right: 4 + edgeGap
     margins.left: {
+        if (edge === "left") return 4 + edgeGap;
         void popup.open;
         if (!barWindow || !screen) return 4;
         const p = anchorItem.mapToItem(null, anchorItem.width / 2, 0);
@@ -93,18 +105,13 @@ PanelWindow {
     function toggle() { open = !open; }
     function close() { open = false; }
 
-    Rectangle {
+    GlassFrame {
         id: frame
         anchors.fill: parent
-        color: Theme.bgAlt
-        border.color: Theme.border
-        border.width: 1
-        radius: Theme.popupRadius
         implicitWidth: body.implicitWidth + popup.padding * 2
         implicitHeight: body.implicitHeight + popup.padding * 2
-        // Popups draw in their own surface, outside the bar's nudge, so they
-        // get their own: keeps text off exact half device pixels at 130%.
-        transform: Translate { x: 0.001; y: 0.001 }
+        // GlassFrame carries the 0.001 px nudge: popups draw in their own
+        // surface, outside the bar's.
 
         Item {
             id: body

@@ -19,7 +19,8 @@ BarButton {
     signal middleClicked()
     signal scrolled(int delta)
 
-    visible: shown
+    // Menu bar settings can hide an indicator by its ipcName.
+    visible: shown && (ipcName === "" || (Settings.menubar.hiddenIndicators || []).indexOf(ipcName) < 0)
     active: pop.open
 
     onClicked: mouse => {

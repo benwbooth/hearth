@@ -9,6 +9,8 @@ Singleton {
     id: root
     // The open BarPopup, so opening one closes the others.
     property var activePopup: null
+    // Ask the overview to open (dock menu "Show All Windows").
+    signal overviewRequested()
 
     // Per-screen bar pieces (IPC targets) act only on the
     // focused monitor, so a second screen (e.g. hypr-rdp's virtual one)

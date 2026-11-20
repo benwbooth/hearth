@@ -10,13 +10,16 @@ PopupWindow {
     property string subtext: ""
     property bool hovered: false
 
-    // Below the item in a top bar, above it elsewhere.
-    readonly property bool below: !!anchorItem.QsWindow.window && anchorItem.QsWindow.window.edge === "top"
+    // Away from the bar's screen edge: below the item in a top bar, beside
+    // it in a side dock, above it otherwise.
+    readonly property string edge: anchorItem.QsWindow.window && anchorItem.QsWindow.window.edge
+        ? anchorItem.QsWindow.window.edge : "bottom"
     anchor.item: anchorItem
-    anchor.edges: below ? Edges.Bottom : Edges.Top
-    anchor.gravity: below ? Edges.Bottom : Edges.Top
+    anchor.edges: edge === "top" ? Edges.Bottom : edge === "left" ? Edges.Right : edge === "right" ? Edges.Left : Edges.Top
+    anchor.gravity: anchor.edges
     anchor.adjustment: PopupAdjustment.Slide
-    anchor.margins.top: below ? 4 : -4
+    anchor.margins.top: edge === "top" ? 4 : edge === "bottom" ? -4 : 0
+    anchor.margins.left: edge === "left" ? 4 : edge === "right" ? -4 : 0
     color: "transparent"
     visible: false
     implicitWidth: frame.implicitWidth
@@ -37,8 +40,8 @@ PopupWindow {
     Rectangle {
         id: frame
         anchors.fill: parent
-        color: Theme.bgRaised
-        border.color: Theme.border
+        color: Theme.glassMenu
+        border.color: Theme.glassEdge
         radius: Theme.radius
         implicitWidth: col.implicitWidth + 16
         implicitHeight: col.implicitHeight + 10
