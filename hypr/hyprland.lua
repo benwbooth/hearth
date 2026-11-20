@@ -100,6 +100,9 @@ hl.config({
 -------------------
 
 hl.on("hyprland.start", function()
+    -- Hand WAYLAND_DISPLAY / HYPRLAND_INSTANCE_SIGNATURE to systemd and mark
+    -- the session ready; units gated on Hyprland (hypridle, hypr-rdp) need it.
+    hl.exec_cmd("uwsm finalize")
     -- 4/3 for X11 apps: with force_zero_scaling they draw at native pixels
     -- and scale themselves from Xft.dpi (Plasma loads this at login; nothing
     -- does under Hyprland). 128 = 96 x 4/3; the X cursor is scaled to match.
