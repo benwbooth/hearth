@@ -26,6 +26,11 @@ MouseArea {
     // False once the pointer has left the dock: previews must close even if
     // the MouseArea missed the leave (input region changed under it).
     property bool hostHovered: true
+    // The dock says which icon is under the pointer from its own layout:
+    // when magnification moves icons under a resting pointer, Qt doesn't
+    // re-enter the new one until the pointer moves.
+    property bool hot: false
+    readonly property bool pointed: containsMouse || hot
     onHostHoveredChanged: if (!hostHovered) previewHide.restart()
     readonly property bool menuOpen: menu.open
     readonly property bool previewOpen: preview.visible
@@ -221,12 +226,12 @@ MouseArea {
         Timer {
             id: previewShow
             interval: task.dock && !task.running ? 150 : 450
-            onTriggered: preview.visible = ((task.containsMouse && task.hostHovered) || previewHover.hovered) && !menu.open && !task.dragging && !task.pressed
+            onTriggered: preview.visible = ((task.pointed && task.hostHovered) || previewHover.hovered) && !menu.open && !task.dragging && !task.pressed
         }
         Timer {
             id: previewHide
             interval: 250
-            onTriggered: if ((!task.containsMouse || !task.hostHovered) && !previewHover.hovered) preview.visible = false
+            onTriggered: if ((!task.pointed || !task.hostHovered) && !previewHover.hovered) preview.visible = false
         }
 
         GlassFrame {
@@ -258,6 +263,14 @@ MouseArea {
                     visible: task.running && task.dock
                     text: task.entry ? task.entry.name : task.modelData.key
                     font.weight: Font.DemiBold
+                }
+                // What a click does, for people new to the dock.
+                Label {
+                    visible: task.dock
+                    text: (task.running ? (task.windows.length > 1 ? "Click to switch between its windows" : "Click to switch to it")
+                                        : "Click to open") + " · right-click for options"
+                    color: Theme.fgDim
+                    font.pointSize: Theme.smallFontSize
                 }
                 Row {
                     spacing: 8
@@ -313,8 +326,8 @@ MouseArea {
         }
     }
 
-    onContainsMouseChanged: {
-        if (containsMouse) { previewHide.stop(); previewShow.restart(); }
+    onPointedChanged: {
+        if (pointed) { previewHide.stop(); previewShow.restart(); }
         else { previewShow.stop(); previewHide.restart(); }
     }
 

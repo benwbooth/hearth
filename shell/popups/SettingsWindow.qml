@@ -277,9 +277,9 @@ Scope {
         ColumnLayout {
             spacing: 14
             Group {
-                SwitchRow { label: "Automatically hide and show the menu bar"; key: "menubar.autohide" }
+                SwitchRow { label: "Automatically hide and show the menu bar"; note: "Hidden until you move the pointer to the top edge."; key: "menubar.autohide" }
                 Divider {}
-                SwitchRow { label: "Show the app name"; key: "menubar.showAppName" }
+                SwitchRow { label: "Show the app name"; note: "The bold name of the app you are using, next to the logo."; key: "menubar.showAppName" }
                 Divider {}
                 ChoiceRow {
                     label: "Menu logo"
@@ -290,7 +290,7 @@ Scope {
             }
             Label { text: "Clock"; font.weight: Font.DemiBold }
             Group {
-                SwitchRow { label: "24-hour time"; key: "menubar.clock24h" }
+                SwitchRow { label: "24-hour time"; note: "13:00 instead of 1:00 PM."; key: "menubar.clock24h" }
                 Divider {}
                 SwitchRow { label: "Show the date"; key: "menubar.showDate" }
                 Divider {}
@@ -334,9 +334,9 @@ Scope {
         ColumnLayout {
             spacing: 14
             Group {
-                SliderRow { label: "Size"; key: "dock.size"; from: 24; to: 96; step: 2; suffix: " px" }
+                SliderRow { label: "Size"; note: "How big the app icons in the Dock are."; key: "dock.size"; from: 24; to: 96; step: 2; suffix: " px" }
                 Divider {}
-                SwitchRow { label: "Magnification"; key: "dock.magnify" }
+                SwitchRow { label: "Magnification"; note: "Icons grow as the pointer moves over them."; key: "dock.magnify" }
                 SliderRow {
                     label: "Magnified size"
                     key: "dock.magnifySize"; from: Settings.dock.size; to: 128; step: 2; suffix: " px"
@@ -350,7 +350,7 @@ Scope {
                 }
             }
             Group {
-                SwitchRow { label: "Automatically hide and show the Dock"; key: "dock.autohide" }
+                SwitchRow { label: "Automatically hide and show the Dock"; note: "Hidden until you move the pointer to the screen edge under it."; key: "dock.autohide" }
                 SliderRow {
                     label: "Hide delay"; key: "dock.autohideDelay"; from: 0; to: 2000; step: 50; suffix: " ms"
                     enabled: Settings.dock.autohide
@@ -361,9 +361,9 @@ Scope {
                 }
             }
             Group {
-                SwitchRow { label: "Show indicators for open applications"; key: "dock.showIndicators" }
+                SwitchRow { label: "Show indicators for open applications"; note: "A small dot under each app that is running."; key: "dock.showIndicators" }
                 Divider {}
-                SwitchRow { label: "Show suggested and recent apps in the Dock"; key: "dock.showRecents" }
+                SwitchRow { label: "Show suggested and recent apps in the Dock"; note: "Up to three apps you used lately, after the divider."; key: "dock.showRecents" }
             }
             Group {
                 ChoiceRow {

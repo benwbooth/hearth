@@ -35,6 +35,7 @@ Row {
         id: appTitle
         text: root.appName
         bold: true
+        tip: "Window commands for " + root.appName + ": new window, minimize, close, quit"
         visible: Settings.menubar.showAppName
         popup: appMenu
     }
@@ -89,6 +90,7 @@ Row {
             MenuTitle {
                 id: title
                 text: topItem.modelData.label
+                tip: "The " + topItem.modelData.label + " menu of " + root.appName
                 enabled: topItem.modelData.enabled
                 popup: pop
             }
@@ -116,6 +118,7 @@ Row {
         property string text
         property bool bold: false
         property var popup
+        property string tip: ""
         hoverEnabled: true
         implicitHeight: Theme.menuBarHeight
         implicitWidth: label.implicitWidth + 20
@@ -127,6 +130,11 @@ Row {
             anchors.bottomMargin: 3
             radius: Theme.radius
             color: t.popup && t.popup.open ? Theme.selected : t.containsMouse ? Theme.hover : "transparent"
+        }
+        Tooltip {
+            anchorItem: t
+            text: t.tip
+            hovered: t.containsMouse && !(t.popup && t.popup.open)
         }
         Label {
             id: label

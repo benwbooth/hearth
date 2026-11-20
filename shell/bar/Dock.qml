@@ -105,7 +105,7 @@ PanelWindow {
         function state(): string {
             return JSON.stringify({ shown: dockWin.shown, held: dockWin.held, hovered: hover.hovered, pointer: dockWin.pointer,
                                     frame: [frameMask.x, frameMask.y, frameMask.width, frameMask.height],
-                                    win: [dockWin.width, dockWin.height], previews: dockWin.previews, drag: [dockWin.dragKey, dockWin.dragIndex, dockWin.dragOut] });
+                                    win: [dockWin.width, dockWin.height], previews: dockWin.previews, hot: (() => { const o = []; for (let k = 0; k < rep.count; k++) { const it = rep.itemAt(k); if (it && it.task && it.task.containsMouse) o.push(it.modelData.key + "@" + Math.round(it.x) + "+" + Math.round(it.width)); } return o; })(), drag: [dockWin.dragKey, dockWin.dragIndex, dockWin.dragOut] });
         }
     }
 
@@ -209,6 +209,15 @@ PanelWindow {
         const start = pos.length ? pos[0] : baseStart;
         const end = pos.length ? pos[pos.length - 1] + lens[lens.length - 1] : baseStart + cell;
         return { zoom: z, pos: pos, len: lens, start: start, end: Math.max(end, start + cell) };
+    }
+
+    // The slot under the pointer, from the drawn layout.
+    readonly property int hotIndex: {
+        if (!hover.hovered || dragKey !== "") return -1;
+        const p = livePointer + baseStart;
+        for (let i = 0; i < slots.length; i++)
+            if (slots[i].kind === "app" && p >= geo.pos[i] && p < geo.pos[i] + geo.len[i]) return i;
+        return -1;
     }
 
     // Super+N activates the Nth app.
@@ -419,6 +428,7 @@ PanelWindow {
                         showIndicator: dockWin.cfg.showIndicators
                         dragHost: dockWin.dragHost
                         hostHovered: hover.hovered
+                        hot: dockWin.hotIndex === slot.index
                     }
                 }
                 Component {
