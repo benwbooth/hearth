@@ -57,14 +57,21 @@
         cp -r shell helpers hypr vicinae swaync $out/share/hearth/
         chmod +x $out/share/hearth/helpers/*
         patchShebangs $out/share/hearth/helpers
-        for exe in hearth hearth-ipc; do
-          args=""
-          [ $exe = hearth-ipc ] && args="ipc"
-          makeWrapper ${quickshell}/bin/quickshell $out/bin/$exe \
-            --add-flags "-p $out/share/hearth/shell $args" \
-            --prefix PATH : ${lib.makeBinPath runtimeDeps}:$out/share/hearth/helpers \
-            --prefix QML_IMPORT_PATH : ${qmlPath}
-        done
+        makeWrapper ${quickshell}/bin/quickshell $out/bin/hearth \
+          --add-flags "-p $out/share/hearth/shell" \
+          --prefix PATH : ${lib.makeBinPath runtimeDeps}:$out/share/hearth/helpers \
+          --prefix QML_IMPORT_PATH : ${qmlPath}
+        # Talk to the running hearth whichever build started it: quickshell
+        # matches instances by config path, so after a rebuild (or a bar
+        # started from another build) `-p` finds nothing and every keybind
+        # through hearth-ipc silently fails. Pick the newest hearth by pid.
+        cat > $out/bin/hearth-ipc <<EOF
+        #!${pkgs.runtimeShell}
+        pid=\$(${pkgs.procps}/bin/pgrep -nf 'quickshell -p /nix/store/[^ ]*-hearth-[^ ]*/share/hearth/shell')
+        if [ -n "\$pid" ]; then exec ${quickshell}/bin/quickshell ipc --pid "\$pid" "\$@"; fi
+        exec ${quickshell}/bin/quickshell ipc -p $out/share/hearth/shell "\$@"
+        EOF
+        chmod +x $out/bin/hearth-ipc
         runHook postInstall
       '';
       meta.mainProgram = "hearth";
