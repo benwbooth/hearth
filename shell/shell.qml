@@ -24,4 +24,5 @@ ShellRoot {
     Switcher {}
     Overview {}
     WallpaperInfo {}
+    Screenshot {}
 }

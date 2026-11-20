@@ -279,19 +279,15 @@ for key, action in pairs(speechnote) do
 end
 hl.bind("Pause",     hl.dsp.exec_cmd("whisper-toggle"))
 
--- Screenshots (Spectacle needs KWin): grimblast captures, satty opens it to
--- annotate, then Enter copies / Ctrl+S saves to ~/Pictures/Screenshots
--- (~/.config/satty/config.toml).
-local shot = function(what)
-    return hl.dsp.exec_cmd("grimblast --freeze save " .. what .. " - | satty --filename -")
-end
-hl.bind("Print",               shot("output"))   -- this screen
-hl.bind("SHIFT + Print",       shot("area"))     -- drag a region or click a window
-hl.bind(M .. " + SHIFT + S",   shot("area"))
-hl.bind("ALT + Print",         shot("active"))   -- the focused window
-hl.bind(M .. " + Print",       shot("active"))
--- Straight to the clipboard, no editor.
-hl.bind("CTRL + Print",        hl.dsp.exec_cmd("grimblast --notify --freeze copy area"))
+-- Screenshots (Spectacle needs KWin). Print freezes the screen under
+-- hearth's capture overlay (shell/popups/Screenshot.qml): Region / Window /
+-- Screen, then satty to annotate, copy (Enter) or save (Ctrl+S).
+hl.bind("Print", hl.dsp.exec_cmd(hearth_ipc .. "screenshot open"))
+-- Quick region (as Spectacle's Meta+Shift+S): drag a region or click a
+-- window, then annotate in satty (Enter copies, Ctrl+S saves).
+hl.bind(M .. " + SHIFT + S", hl.dsp.exec_cmd("grimblast --freeze save area - | satty --filename -"))
+-- Region straight to the clipboard.
+hl.bind("CTRL + Print", hl.dsp.exec_cmd("grimblast --notify --freeze copy area"))
 
 -- Media and volume keys (work on the lock screen too).
 local lr = { locked = true, repeating = true }
