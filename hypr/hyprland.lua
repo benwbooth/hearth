@@ -235,6 +235,15 @@ end
 -- Overview (KDE Meta+W) and Grid View (Meta+G): shell/popups/Overview.qml.
 hl.bind(M .. " + W", hl.dsp.event("hearth-overview toggle"))
 hl.bind(M .. " + G", hl.dsp.event("hearth-overview toggle"))
+-- Trackpad, macOS-style: 3/4 fingers up opens Mission Control (the
+-- overview), down closes it, sideways switches workspaces (Spaces).
+for _, f in ipairs({ 3, 4 }) do
+    hl.gesture({ fingers = f, direction = "up",
+        action = function() hl.dispatch(hl.dsp.event("hearth-overview open")) end })
+    hl.gesture({ fingers = f, direction = "down",
+        action = function() hl.dispatch(hl.dsp.event("hearth-overview close")) end })
+    hl.gesture({ fingers = f, direction = "horizontal", action = "workspace" })
+end
 
 -- Workspaces (KDE: Ctrl+F1..F4, Meta+Ctrl+arrows; with Shift moves the window).
 for i = 1, 9 do
