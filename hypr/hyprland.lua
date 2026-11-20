@@ -330,7 +330,7 @@ hl.bind("XF86AudioStop",  hl.dsp.exec_cmd("playerctl stop"), { locked = true })
 -- dock) and off faint shadows. Without blur the tints are opaque enough.
 hl.layer_rule({
     name         = "hearth-glass",
-    match        = { namespace = "^hearth-(menubar|dock|popup|settings)$" },
+    match        = { namespace = "^(hearth-(menubar|dock|popup)|swaync-control-center|swaync-notification-window)$" },
     blur         = true,
     blur_popups  = true,
     ignore_alpha = 0.25,
@@ -357,6 +357,13 @@ hl.window_rule({
     match  = { class = "^(com.gabm.satty)$" },
     float  = true,
     size   = "monitor_w*0.8 monitor_h*0.8",
+    center = true,
+})
+hl.window_rule({
+    name   = "hearth-settings",
+    match  = { title = "^hearth Settings$" },
+    float  = true,
+    size   = "920 640",
     center = true,
 })
 hl.window_rule({

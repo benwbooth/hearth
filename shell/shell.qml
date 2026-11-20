@@ -38,4 +38,5 @@ ShellRoot {
     Overview {}
     WallpaperInfo {}
     Screenshot {}
+    SettingsWindow {}
 }
