@@ -38,7 +38,7 @@ PopupWindow {
         color: Theme.bgRaised
         border.color: Theme.border
         radius: Theme.radius
-        implicitWidth: Math.min(col.implicitWidth, 480) + 16
+        implicitWidth: col.implicitWidth + 16
         implicitHeight: col.implicitHeight + 10
         transform: Translate { x: 0.001; y: 0.001 }
 
@@ -46,23 +46,27 @@ PopupWindow {
             id: col
             x: 8
             y: 5
-            width: parent.width - 16
             spacing: 2
+            // Each label is its natural width up to 464 px, then wraps. Tray
+            // apps send HTML tooltips: as RichText their implicit width
+            // follows the width they're given, which collapsed the tooltip
+            // to a blob; StyledText keeps a natural width (b/i/br/font).
             Label {
-                width: parent.width
-                text: tip.text
+                width: Math.min(implicitWidth, 464)
+                text: tip.text.replace(/\n/g, "<br>")
+                textFormat: Text.StyledText
                 font.weight: Font.DemiBold
                 wrapMode: Text.Wrap
                 elide: Text.ElideNone
             }
             Label {
-                width: parent.width
+                width: Math.min(implicitWidth, 464)
                 visible: tip.subtext !== ""
-                text: tip.subtext
+                text: tip.subtext.replace(/\n/g, "<br>")
                 color: Theme.fgDim
                 wrapMode: Text.Wrap
                 elide: Text.ElideNone
-                textFormat: Text.PlainText
+                textFormat: Text.StyledText
             }
         }
     }

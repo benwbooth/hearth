@@ -6,7 +6,8 @@ import "../widgets"
 import ".."
 
 // The bottom panel, laid out like the Plasma panel it replaces:
-// [spacer] launcher, tasks, devapps [spacer] system monitor, pager | tray, clock, show desktop
+// launcher, tasks, devapps centered on the screen; system monitor, pager | tray,
+// clock, show desktop on the right
 PanelWindow {
     id: bar
     required property ShellScreen modelData
@@ -29,18 +30,30 @@ PanelWindow {
         color: Theme.border
     }
 
+    // Launcher, tasks and dev apps are centered on the screen (not on the
+    // space left of the tray); they slide left only if they'd run into it.
     RowLayout {
-        anchors.fill: parent
+        id: center
+        height: parent.height
         spacing: 2
+        x: Math.max(0, Math.min(Math.round((bar.width - width) / 2),
+                                right.x - width - 8))
         // At 130% a coordinate ending in .5 rounds glyphs one by one; keep
         // everything a hair off the half pixel.
         transform: Translate { x: 0.001; y: 0.001 }
 
-        Item { Layout.fillWidth: true }
         Launcher {}
         Tasks {}
         DevApps {}
-        Item { Layout.fillWidth: true }
+    }
+
+    RowLayout {
+        id: right
+        anchors.right: parent.right
+        height: parent.height
+        spacing: 2
+        transform: Translate { x: 0.001; y: 0.001 }
+
         SysMonitor {}
         Workspaces { screen: bar.modelData }
         Rectangle {
