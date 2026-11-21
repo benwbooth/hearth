@@ -12,16 +12,17 @@ BarButton {
     id: root
     icon: "help-contextual"
     iconFallback: "help-about"
-    implicitWidth: 30
+    implicitWidth: Theme.menuBarItemWidth
     tooltip: "Help: find a shortcut, setting or action, or read a guide"
     active: menu.open
-    onClicked: menu.toggle()
+    menuPopup: menu
+    onClicked: if (!menuPress) menu.toggle()
 
     BarPopup {
         id: menu
-        readonly property bool menuBarMenu: true
+        menuBarMenu: true
         anchorItem: root
-        padding: 6
+        padding: Theme.menuPadding
         keyboardFocus: WlrKeyboardFocus.OnDemand
         onOpenChanged: if (open) { field.text = ""; focusSoon.restart(); }
         Timer { id: focusSoon; interval: 160; onTriggered: field.forceActiveFocus() }

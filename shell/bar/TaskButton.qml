@@ -235,13 +235,16 @@ MouseArea {
         anchor.gravity: anchor.edges
         anchor.adjustment: PopupAdjustment.Slide
         // Clear the (magnified) icon, which grows out of the item.
-        readonly property real gap: 8 + task.iconSize * (task.zoom - 1)
+        // The surface has room for the glass's shadow around the pane.
+        readonly property real pad: previewFrame.shadowPad
+        readonly property real gap: 8 + task.iconSize * (task.zoom - 1) - pad
         anchor.margins.top: task.edge === "bottom" ? -gap : task.edge === "top" ? gap : 0
         anchor.margins.left: task.edge === "left" ? gap : task.edge === "right" ? -gap : 0
         color: "transparent"
         visible: false
-        implicitWidth: previewFrame.implicitWidth
-        implicitHeight: previewFrame.implicitHeight
+        implicitWidth: previewFrame.implicitWidth + 2 * pad
+        implicitHeight: previewFrame.implicitHeight + 2 * pad
+        mask: Region { item: previewFrame }
 
         Timer {
             id: previewShow
@@ -262,10 +265,13 @@ MouseArea {
 
         GlassFrame {
             id: previewFrame
-            anchors.fill: parent
+            x: preview.pad
+            y: preview.pad
+            width: implicitWidth
+            height: implicitHeight
             implicitWidth: previewCol.implicitWidth + 16
             implicitHeight: previewCol.implicitHeight + 16
-            radius: task.running ? Theme.popupRadius : Theme.radius
+            radius: Theme.menuRadius
 
             HoverHandler { id: previewHover; onHoveredChanged: if (!hovered) previewHide.restart() }
 
@@ -361,16 +367,14 @@ MouseArea {
     BarPopup {
         id: menu
         anchorItem: task
-        padding: 6
+        padding: Theme.menuPadding
         Column {
-            width: 240
+            width: Math.round(220 * Theme.pt)
             spacing: 0
-            Label {
-                x: 8
-                height: 28
-                width: parent.width - 16
+            // Rows line up past the checkmark/icon column.
+            readonly property bool menuGutter: true
+            MenuHeader {
                 text: task.entry ? task.entry.name : task.modelData.key
-                font.weight: Font.DemiBold
             }
             Repeater {
                 model: task.windows.length > 1 ? task.windows : []
@@ -454,13 +458,7 @@ MouseArea {
 
             // Options (macOS's Options submenu, KDE's pin / edit entries).
             MenuSeparator {}
-            Label {
-                x: 8
-                height: 22
-                text: "Options"
-                color: Theme.fgDim
-                font.pointSize: Theme.smallFontSize
-            }
+            MenuHeader { text: "Options" }
             MenuItem {
                 visible: !!task.entry
                 readonly property bool pinned: Pins.isPinned(task.modelData.key)

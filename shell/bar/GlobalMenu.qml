@@ -25,11 +25,6 @@ Row {
     }
     property bool anyOpen: false
 
-    function hoverOpen(popup) {
-        // Another title's menu is open: move to this one.
-        if (ShellState.activePopup && ShellState.activePopup !== popup && ShellState.activePopup.menuBarMenu)
-            popup.open = true;
-    }
 
     MenuTitle {
         id: appTitle
@@ -41,12 +36,12 @@ Row {
     }
     BarPopup {
         id: appMenu
-        readonly property bool menuBarMenu: true
-                align: "start"
+        menuBarMenu: true
+        align: "start"
         anchorItem: appTitle
-        padding: 5
+        padding: Theme.menuPadding
         Column {
-            width: 240
+            width: Math.round(220 * Theme.pt)
             MenuItem {
                 text: "New Window"
                 visible: !!root.entry
@@ -96,7 +91,7 @@ Row {
             }
             BarPopup {
                 id: pop
-                readonly property bool menuBarMenu: true
+                menuBarMenu: true
                 align: "start"
                 anchorItem: title
                 padding: 0
@@ -113,28 +108,40 @@ Row {
         }
     }
 
+    // A menu title: macOS 26 metrics (13 pt, ~10 pt padding each side), the
+    // translucent capsule while its menu is open; opens on press like
+    // macOS (MenuBar.qml pressTitle/dragTitle/releaseTitle/hoverTitle).
     component MenuTitle: MouseArea {
         id: t
         property string text
         property bool bold: false
         property var popup
+        readonly property var menuPopup: popup
+        readonly property bool menuPress: !!bar && bar.pressTitle !== undefined
+        readonly property var bar: t.QsWindow.window
         property string tip: ""
         hoverEnabled: true
         implicitHeight: Theme.menuBarHeight
-        implicitWidth: label.implicitWidth + 18
-        onClicked: popup.toggle()
-        onContainsMouseChanged: if (containsMouse && enabled) root.hoverOpen(popup)
+        implicitWidth: label.implicitWidth + 2 * Math.round(9.5 * Theme.pt)
+        onPressed: mouse => { ShellState.pressedIn(t); if (menuPress) bar.pressTitle(t, popup, mouse); else popup.toggle(); }
+        onPositionChanged: mouse => { if (menuPress && pressed) bar.dragTitle(t, popup, mouse); }
+        onReleased: mouse => { if (menuPress) bar.releaseTitle(t, popup, mouse); }
+        onContainsMouseChanged: if (containsMouse && enabled && menuPress) bar.hoverTitle(popup)
+        Component.onCompleted: if (menuPress) bar.registerTitle(t)
+        Component.onDestruction: if (menuPress && bar) bar.unregisterTitle(t)
         Rectangle {
             anchors.fill: parent
-            anchors.topMargin: 3
-            anchors.bottomMargin: 3
-            radius: Theme.radius
-            color: t.popup && t.popup.open ? Theme.selected : t.containsMouse ? Theme.hover : "transparent"
+            anchors.topMargin: 2
+            anchors.bottomMargin: 2
+            radius: height / 2
+            color: Theme.menuBarHighlight
+            opacity: t.popup && t.popup.open ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: t.popup && t.popup.open ? 0 : 140; easing.type: Easing.OutCubic } }
         }
         Tooltip {
             anchorItem: t
             text: t.tip
-            hovered: t.containsMouse && !(t.popup && t.popup.open)
+            hovered: t.containsMouse && !(t.popup && t.popup.open) && !ShellState.activePopup
         }
         Label {
             id: label
@@ -143,8 +150,7 @@ Row {
             color: t.enabled ? Theme.fg : Theme.fgDim
             font.pointSize: Theme.menuBarFontSize
             font.weight: t.bold ? Font.Bold : Font.Normal
-            style: Text.Raised
-            styleColor: Theme.textHalo
+            font.letterSpacing: Theme.menuTracking
         }
     }
 }

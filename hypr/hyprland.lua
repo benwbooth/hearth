@@ -341,20 +341,23 @@ hl.bind("XF86AudioStop",  hl.dsp.exec_cmd("playerctl stop"), { locked = true })
 -- hearth's glass: blur what's behind the menu bar, dock, menus/popups and
 -- their tooltips/previews (xdg popups). ignore_alpha keeps the blur off the
 -- transparent parts of the surfaces (the dock window is wider than the
--- dock) and off faint shadows. Without blur the tints are opaque enough.
+-- dock) and off the drop shadows, whose peak opacity hearth keeps under
+-- 0.3 (Theme.shadowOpacity). Without blur the tints are opaque enough.
 hl.layer_rule({
     name         = "hearth-glass",
     match        = { namespace = "^(hearth-(menubar|dock|popup)|swaync-control-center|swaync-notification-window)$" },
     blur         = true,
     blur_popups  = true,
-    ignore_alpha = 0.25,
+    ignore_alpha = 0.3,
     xray         = false,
 })
--- Popups of the menu bar slide in rather than pop.
+-- hearth animates its own menus and popovers (fade + scale from the
+-- anchor, instant when switching between menu bar menus, README "Look");
+-- a compositor fade on top would leave ghosts behind.
 hl.layer_rule({
-    name      = "hearth-popup-anim",
-    match     = { namespace = "^hearth-popup$" },
-    animation = "fade",
+    name    = "hearth-popup-anim",
+    match   = { namespace = "^hearth-popup$" },
+    no_anim = true,
 })
 
 --------------------------------

@@ -587,9 +587,10 @@ PanelWindow {
     BarPopup {
         id: dockMenu
         anchorItem: menuAnchor
-        padding: 5
+        padding: Theme.menuPadding
         Column {
-            width: 230
+            width: Math.round(210 * Theme.pt)
+            readonly property bool menuGutter: true
             MenuItem {
                 text: dockWin.cfg.autohide ? "Turn Hiding Off" : "Turn Hiding On"
                 onTriggered: { dockMenu.close(); Settings.set("dock.autohide", !dockWin.cfg.autohide); }
@@ -599,7 +600,7 @@ PanelWindow {
                 onTriggered: { dockMenu.close(); Settings.set("dock.magnify", !dockWin.cfg.magnify); }
             }
             MenuSeparator {}
-            Label { x: 8; height: 24; text: "Position on Screen"; color: Theme.fgDim; font.pointSize: Theme.smallFontSize }
+            MenuHeader { text: "Position on Screen" }
             Repeater {
                 model: [{ v: "left", l: "Left" }, { v: "bottom", l: "Bottom" }, { v: "right", l: "Right" }]
                 MenuItem {

@@ -22,9 +22,10 @@ BarButton {
     // Menu bar settings can hide an indicator by its ipcName.
     visible: shown && (ipcName === "" || (Settings.menubar.hiddenIndicators || []).indexOf(ipcName) < 0)
     active: pop.open
+    menuPopup: root.popupContent ? pop : null
 
     onClicked: mouse => {
-        if (mouse.button === Qt.LeftButton && root.popupContent) pop.toggle();
+        if (mouse.button === Qt.LeftButton && root.popupContent) { if (!root.menuPress) pop.toggle(); }
         else if (mouse.button === Qt.RightButton) root.rightClicked();
         else if (mouse.button === Qt.MiddleButton) root.middleClicked();
     }

@@ -14,8 +14,9 @@ BarButton {
     icon: logo === "none" ? "application-menu" : ""
     tooltip: "System menu: settings, sleep, restart, shut down, lock and log out"
     active: menu.open
-    implicitWidth: 34
-    onClicked: menu.toggle()
+    implicitWidth: Math.round(32 * Theme.pt)
+    menuPopup: menu
+    onClicked: if (!menuPress) menu.toggle()
 
     Logo {
         // BarButton's default property puts children on its icon, which is
@@ -24,17 +25,17 @@ BarButton {
         anchors.centerIn: parent
         visible: root.logo !== "none"
         name: root.logo
-        size: root.hostHeight > 34 ? 22 : 16
+        size: root.hostHeight > 34 ? 22 : Math.round(14 * Theme.pt)
     }
 
     BarPopup {
         id: menu
-        readonly property bool menuBarMenu: true
-                align: "start"
+        menuBarMenu: true
+        align: "start"
         anchorItem: root
-        padding: 5
+        padding: Theme.menuPadding
         Column {
-            width: 240
+            width: Math.round(220 * Theme.pt)
             MenuItem {
                 text: "About This Computer"
                 onTriggered: { menu.close(); Quickshell.execDetached(["kinfocenter"]); }

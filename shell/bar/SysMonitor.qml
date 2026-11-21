@@ -32,8 +32,14 @@ MouseArea {
     readonly property bool onTop: !!hostWindow && hostWindow.edge === "top"
     readonly property real h: hostHeight - (hostHeight < 36 ? 4 : 8)
 
+    // In the macOS menu bar the graphs blend in like the status icons
+    // around them: monochrome (menu bar text colour), unframed, on a faint
+    // rounded well; the classic panel keeps treetop's colours.
+    readonly property bool blend: onTop
+    readonly property color mono: Theme.fg
+    readonly property var palette: blend ? ({ cpu: mono, mem: mono, gpu: mono, vram: mono, disk: mono, net: mono, temp: mono, warn: "#ff6b5e" }) : treetopPalette
     // Same palette as the treetop app and its tray bars.
-    readonly property var palette: ({ cpu: "#43c96b", mem: "#d6b23e", gpu: "#c06fd8", vram: "#d070a8", disk: "#4fb3d9", net: "#4f8fe0", temp: "#e0894f", warn: "#e05a4f" })
+    readonly property var treetopPalette: ({ cpu: "#43c96b", mem: "#d6b23e", gpu: "#c06fd8", vram: "#d070a8", disk: "#4fb3d9", net: "#4f8fe0", temp: "#e0894f", warn: "#e05a4f" })
 
     implicitWidth: strip.implicitWidth + 8
     implicitHeight: hostHeight
@@ -250,7 +256,7 @@ done`]
     }
     readonly property font monoFont: Qt.font({ family: "monospace", pixelSize: Math.round(root.h * 0.3) })
     readonly property font monoBold: Qt.font({ family: "monospace", pixelSize: Math.round(root.h * 0.3), bold: true })
-    function tempColor(t) { return t >= 80 ? "#e05a4f" : (t >= 60 ? "#e3c25a" : "#43c96b"); }
+    function tempColor(t) { return t >= 80 ? "#e05a4f" : (t >= 60 ? "#e3c25a" : blend ? Theme.fg : "#43c96b"); }
     function pct(v) { return (Number(v) || 0).toFixed(0) + "%"; }
 
     // ---- KStats-style pieces ---------------------------------------------
@@ -282,6 +288,7 @@ done`]
                 elide: Text.ElideNone
                 text: sl.text.charAt(index)
                 color: sl.color
+                opacity: root.blend ? 0.7 : 1
                 font: probe.font
             }
         }
@@ -311,10 +318,10 @@ done`]
             Layout.alignment: Qt.AlignVCenter
             Layout.preferredWidth: Math.max(valueProbe.implicitWidth + 4, Math.round(stat.h * 1.56 * root.graphWidth))
             Layout.preferredHeight: Math.round(stat.h * 0.8)
-            color: "transparent"
-            border.color: Qt.rgba(stat.color.r, stat.color.g, stat.color.b, 0.55)
-            border.width: 1
-            radius: 1
+            color: root.blend ? Qt.rgba(stat.color.r, stat.color.g, stat.color.b, 0.10) : "transparent"
+            border.color: root.blend ? "transparent" : Qt.rgba(stat.color.r, stat.color.g, stat.color.b, 0.55)
+            border.width: root.blend ? 0 : 1
+            radius: root.blend ? 3 : 1
             // Only measures the value's width; the canvas paints it.
             Label {
                 id: valueProbe
@@ -339,14 +346,14 @@ done`]
                         for (let i = 0; i < n; i++) ctx.lineTo(i / (n - 1) * w, y(i));
                         ctx.lineTo(w, hh);
                         ctx.closePath();
-                        ctx.fillStyle = Qt.rgba(stat.color.r, stat.color.g, stat.color.b, 0.6);
+                        ctx.fillStyle = Qt.rgba(stat.color.r, stat.color.g, stat.color.b, root.blend ? 0.32 : 0.6);
                         ctx.fill();
                         ctx.beginPath();
                         for (let i = 0; i < n; i++) {
                             if (i === 0) ctx.moveTo(0, y(i)); else ctx.lineTo(i / (n - 1) * w, y(i));
                         }
-                        ctx.strokeStyle = Qt.lighter(stat.color, 1.25);
-                        ctx.lineWidth = 1.5;
+                        ctx.strokeStyle = root.blend ? Qt.rgba(stat.color.r, stat.color.g, stat.color.b, 0.85) : Qt.lighter(stat.color, 1.25);
+                        ctx.lineWidth = root.blend ? 1.2 : 1.5;
                         ctx.stroke();
                     }
                     // Light digits with a dark halo, lower left (over the
@@ -356,8 +363,9 @@ done`]
                     ctx.textBaseline = "bottom";
                     const bg = Theme.bg;
                     ctx.lineJoin = "round";
-                    ctx.lineWidth = 3;
-                    ctx.strokeStyle = Qt.rgba(bg.r * 0.6, bg.g * 0.6, bg.b * 0.6, 0.92);
+                    ctx.lineWidth = root.blend ? 2.5 : 3;
+                    ctx.strokeStyle = root.blend ? Qt.rgba(bg.r * 0.5, bg.g * 0.5, bg.b * 0.5, 0.55)
+                                                 : Qt.rgba(bg.r * 0.6, bg.g * 0.6, bg.b * 0.6, 0.92);
                     ctx.strokeText(stat.value, 1, hh + 1);
                     ctx.fillStyle = Qt.lighter(Theme.fg, 1.1);
                     ctx.fillText(stat.value, 1, hh + 1);
@@ -583,11 +591,14 @@ done`]
         anchor.edges: root.onTop ? Edges.Bottom : Edges.Top
         anchor.gravity: anchor.edges
         anchor.adjustment: PopupAdjustment.Slide
-        anchor.margins.top: root.onTop ? 4 : -4
+        // The surface has room for the glass's shadow around the pane.
+        readonly property real pad: tipFrame.shadowPad
+        anchor.margins.top: root.onTop ? 4 - pad : -4 + pad
         color: "transparent"
         visible: false
-        implicitWidth: tipFrame.implicitWidth
-        implicitHeight: tipFrame.implicitHeight
+        implicitWidth: tipFrame.implicitWidth + 2 * pad
+        implicitHeight: tipFrame.implicitHeight + 2 * pad
+        mask: Region {}
 
         readonly property bool want: root.containsMouse && !root.pressed
         onWantChanged: {
@@ -596,15 +607,18 @@ done`]
         }
         Timer {
             id: tipTimer
-            interval: 550
+            interval: Theme.tooltipDelayMs
             onTriggered: tip.visible = tip.want
         }
 
         GlassFrame {
             id: tipFrame
-            anchors.fill: parent
+            x: tip.pad
+            y: tip.pad
+            width: implicitWidth
+            height: implicitHeight
             tint: root.onTop ? Theme.glassMenu : Theme.bgRaised
-            radius: Theme.radius
+            radius: Theme.menuRadius
             implicitWidth: tipCol.implicitWidth + 20
             implicitHeight: tipCol.implicitHeight + 16
 

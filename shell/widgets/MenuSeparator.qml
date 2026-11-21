@@ -1,15 +1,16 @@
 import QtQuick
 import ".."
 
-// A divider line between groups of MenuItems.
+// A divider between groups of MenuItems: a 1 px line with 4 pt above and
+// below, inset like the row text (macOS 26 menus).
 Item {
     width: parent ? parent.width : 100
-    implicitHeight: visible ? 9 : 0
+    implicitHeight: visible ? Math.round(9 * Theme.pt) : 0
     Rectangle {
         anchors.verticalCenter: parent.verticalCenter
-        x: 8
-        width: parent.width - 16
+        x: Theme.menuTextInset
+        width: parent.width - 2 * Theme.menuTextInset
         height: 1
-        color: Theme.dark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.12)
+        color: Theme.menuSeparator
     }
 }
