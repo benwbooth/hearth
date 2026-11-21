@@ -21,6 +21,7 @@ Row {
         delegate: TrayItem {}
     }
 
+    Recording { ipcName: "recording" }
     Media { ipcName: "media" }
     Clipboard { ipcName: "clipboard" }
     Zones { ipcName: "zones" }

@@ -38,6 +38,7 @@ ShellRoot {
     Overview {}
     WallpaperInfo {}
     Screenshot {}
+    ScreenshotEditor {}
     SettingsWindow {}
     HotCorners {}
     DisplayConfirm {}

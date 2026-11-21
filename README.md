@@ -33,6 +33,28 @@ indicators for everything the Plasma tray did, Settings and Help windows.
   in corners that have an action. Sleep & Power: hearth runs swayidle
   itself under arbor with the chosen times (restarted on change); the power
   button runs `hearth-ipc call power button`.
+- Screenshots and screen recording (our own Spectacle; Settings >
+  Screenshots): Print opens the capture overlay (`popups/Screenshot.qml`):
+  every screen frozen, Region (magnifier, handles, real-pixel size, last
+  region remembered), Window (hover + click), Screen, All Screens, pointer
+  and delay toggles, Screenshot / Record. Region and Screen without a delay
+  crop the frozen frame, so open menus stay in the picture; windows come
+  from arbor's `ScreenshotWindow` IPC (the window alone even when covered,
+  `decorations`/`shadow` for the title bar and shadow, `clipboard: false`
+  so arbor leaves the clipboard alone); screens and delayed regions from
+  grim. The result window (`popups/ScreenshotEditor.qml`) previews it with
+  annotations (arrow, rectangle, ellipse, freehand, highlighter, text,
+  numbered stamps, blur, pixelate, crop, undo/redo), Copy, Copy Path, Save
+  (auto-named into ~/Pictures/Screenshots, `vips` converts to JPEG/WebP),
+  Save As, show in folder, and drag the picture into other apps. Recording
+  uses wf-recorder (wlr-screencopy, 30 fps H.264 MP4 or VP9 WebM, sound
+  optional); the menu bar shows a red timer that stops it. Keys: Print,
+  Shift+Print (screen), Super/Alt+Print (active window),
+  Super+Shift+Print / Super+Shift+S (region), Super+Shift+R (record),
+  Ctrl+Print (arbor's quick region). IPC: `hearth-ipc call screenshot
+  open|printKey|region|screen|all|activeWindow|record|stopRecording`;
+  `screenshot-overlay` and `screenshot-editor` targets script the open
+  overlay / window.
 
 - `nix run` / `hearth`: run the installed shell. `hearth-ipc call launcher toggle` etc.
 - `nix develop`, then `quickshell -p shell`: run from the checkout; QML hot-reloads on save.

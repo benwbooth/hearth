@@ -31,6 +31,7 @@
       udisks networkmanager
       curl jq libnotify xdg-utils pciutils cups
       wlogout hyprpaper swaynotificationcenter grim satty
+      wf-recorder vips
       pipewire wireplumber
       systemd procps coreutils gnugrep gawk util-linux iproute2
       swayidle

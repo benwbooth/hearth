@@ -222,13 +222,19 @@ binds {
     // Does what Settings > Sleep & Power > "When I press the power button" says.
     XF86PowerOff { spawn "hearth-ipc" "call" "power" "button"; }
 
-    // Screenshots: Print = pick a region (Space toggles the pointer,
-    // Ctrl+C copies), Ctrl+Print = whole screen, Alt+Print = window.
-    // Saved to ~/Pictures/Screenshots and copied to the clipboard.
-    Print { screenshot; }
-    Ctrl+Print { screenshot-screen; }
-    Alt+Print { screenshot-window; }
-    Mod+Shift+S { screenshot; }
+    // Screenshots: hearth's screenshot tool (Spectacle-style; Settings >
+    // Screenshots). Print = the tool (region / window / screen, then copy,
+    // save, mark up), Shift+Print = whole screen, Super/Alt+Print = active
+    // window, Super+Shift+Print / Super+Shift+S = region, Super+Shift+R =
+    // record (again: stop). Ctrl+Print = arbor's quick region to the clipboard.
+    Print hotkey-overlay-title="Screenshot tool: region, window or screen" { spawn "hearth-ipc" "call" "screenshot" "printKey"; }
+    Shift+Print hotkey-overlay-title="Screenshot of the whole screen" { spawn "hearth-ipc" "call" "screenshot" "screen"; }
+    Mod+Print hotkey-overlay-title="Screenshot of the active window" { spawn "hearth-ipc" "call" "screenshot" "activeWindow"; }
+    Alt+Print hotkey-overlay-title="Screenshot of the active window" { spawn "hearth-ipc" "call" "screenshot" "activeWindow"; }
+    Mod+Shift+Print hotkey-overlay-title="Screenshot of a region" { spawn "hearth-ipc" "call" "screenshot" "region"; }
+    Mod+Shift+S hotkey-overlay-title="Screenshot of a region" { spawn "hearth-ipc" "call" "screenshot" "region"; }
+    Mod+Shift+R hotkey-overlay-title="Record the screen (again: stop recording)" { spawn "hearth-ipc" "call" "screenshot" "record"; }
+    Ctrl+Print hotkey-overlay-title="Quick region screenshot to the clipboard" { screenshot; }
 
     // Ben's tools (were KDE custom shortcuts).
     Mod+H { spawn "dsnote-tts.sh"; }

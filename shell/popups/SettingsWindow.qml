@@ -19,7 +19,7 @@ Scope {
         hotcorners: "settings/HotCornersPane.qml", displays: "settings/DisplaysPane.qml",
         keyboard: "settings/KeyboardPane.qml", shortcuts: "settings/ShortcutsPane.qml",
         windowrules: "settings/WindowRulesPane.qml", power: "settings/PowerPane.qml",
-        clipboard: "settings/ClipboardPane.qml"
+        clipboard: "settings/ClipboardPane.qml", screenshots: "settings/ScreenshotsPane.qml"
     })
 
     Connections {
@@ -79,7 +79,8 @@ Scope {
                                 { id: "power", label: "Sleep & Power", icon: "preferences-system-power-management" },
                                 { id: "night", label: "Night Light", icon: "redshift-status-on" },
                                 { id: "notifications", label: "Notifications", icon: "preferences-desktop-notification" },
-                                { id: "clipboard", label: "Clipboard", icon: "klipper-symbolic" }
+                                { id: "clipboard", label: "Clipboard", icon: "klipper-symbolic" },
+                                { id: "screenshots", label: "Screenshots", icon: "camera-photo" }
                             ]
                             MouseArea {
                                 id: navItem
@@ -132,7 +133,7 @@ Scope {
                             text: ({ appearance: "Appearance", menubar: "Menu Bar", dock: "Desktop & Dock", layout: "Layout",
                                      wallpaper: "Wallpaper", mouse: "Mouse & Touchpad", night: "Night Light", notifications: "Notifications",
                                      hotcorners: "Hot Corners", displays: "Displays", keyboard: "Keyboard", shortcuts: "Keyboard Shortcuts",
-                                     windowrules: "Window Rules", power: "Sleep & Power", clipboard: "Clipboard" })[root.pane] || ""
+                                     windowrules: "Window Rules", power: "Sleep & Power", clipboard: "Clipboard", screenshots: "Screenshots" })[root.pane] || ""
                             font.pointSize: Theme.fontSize + 6
                             font.weight: Font.Bold
                         }
