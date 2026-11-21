@@ -29,6 +29,7 @@ Singleton {
             style: "transparent",       // "transparent" (macOS 26 default) | "glass" | "solid"
             opacity: 0.36,              // glass strip opacity, 0.32 .. 0.95
             showSysMonitor: true,       // treetop's CPU/memory/GPU graphs
+            monochromeIcons: true,      // status icons in the text colour, like SF Symbols
             showAppName: true,
             logo: "nixos",              // "nixos" | "penguin" | "none"   (shell/assets/<name>.svg)
             clock24h: true,

@@ -246,6 +246,7 @@ PanelWindow {
                 DevApps { iconSize: Theme.menuBarIconSize; implicitWidth: Theme.menuBarItemWidth }
                 Tray {}
                 HelpMenu {}
+                ControlCenter {}
                 Clock {}
             }
         }

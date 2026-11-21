@@ -31,6 +31,13 @@ BarButton {
     }
     onWheel: w => root.scrolled(w.angleDelta.y !== 0 ? w.angleDelta.y : w.angleDelta.x)
 
+    Connections {
+        target: ShellState
+        function onOpenIndicator(name) {
+            if (name === root.ipcName && root.ipcHere && root.popupContent && root.visible) pop.open = true;
+        }
+    }
+
     IpcHandler {
         target: root.ipcName && root.ipcHere ? "indicator-" + root.ipcName : ""
         enabled: target !== ""

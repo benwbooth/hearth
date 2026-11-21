@@ -55,8 +55,12 @@ Row {
     component TrayItem: BarButton {
         id: item
         required property var modelData
-        implicitWidth: 30
+        implicitWidth: Theme.menuBarItemWidth
         icon: modelData.icon
+        // Apps' own tray icons are usually full-colour pictures that turn
+        // into blobs as silhouettes: only their symbolic/panel icons go
+        // monochrome.
+        monochrome: Settings.menubar.monochromeIcons !== false && /symbolic|panel|tray|indicator|-mono/i.test(String(modelData.icon))
         tooltip: modelData.tooltipTitle || modelData.title || modelData.id
         tooltipSub: modelData.tooltipDescription
 

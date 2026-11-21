@@ -10,7 +10,8 @@ import "../.."
 // and a place search to set the location.
 Indicator {
     id: root
-    icon: Weather.icon
+    // Monochrome menu bar: Breeze's symbolic weather glyphs, not silhouettes.
+    icon: Weather.icon + (root.menuBarItem && root.monochrome ? "-symbolic" : "")
     text: Weather.current ? Math.round(Weather.current.temp) + "°" : ""
     tooltip: !Weather.hasLocation ? "Weather: set location"
            : Weather.current ? `${Weather.locationName}: ${Math.round(Weather.current.temp)}${Weather.tempUnit}, ${Weather.current.text}`

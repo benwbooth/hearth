@@ -11,20 +11,22 @@ import ".."
 Indicator {
     id: root
     ipcName: "clock"
-    // In the menu bar: one line, macOS style ("Thu 19 Nov  21:40"), as set in
-    // Settings > Menu Bar.
+    // In the menu bar: one line, macOS style: "Fri Nov 20  4:50 PM" in the
+    // locale's date order ("Fri 20 Nov" where the day comes first), two
+    // spaces before the time, as set in Settings > Menu Bar.
     readonly property bool compact: !!root.QsWindow.window && root.QsWindow.window.edge === "top"
     readonly property var mb: Settings.menubar
     readonly property string lineText: {
         const d = clock.date;
         const parts = [];
         if (mb.showWeekday) parts.push(Qt.formatDate(d, "ddd"));
-        if (mb.showDate) parts.push(Qt.formatDate(d, "d MMM"));
+        if (mb.showDate) parts.push(Qt.formatDate(d, dayFirst ? "d MMM" : "MMM d"));
         const t = mb.clock24h ? (mb.showSeconds ? "HH:mm:ss" : "HH:mm") : (mb.showSeconds ? "h:mm:ss AP" : "h:mm AP");
         parts.push(" " + Qt.formatTime(d, t));
         return parts.join(" ");
     }
-    implicitWidth: (compact ? line.implicitWidth : col.implicitWidth) + 16
+    readonly property bool dayFirst: { const f = Qt.locale().dateFormat(Locale.ShortFormat); return f.indexOf("d") < f.indexOf("M"); }
+    implicitWidth: compact ? line.implicitWidth + 2 * Math.round(8 * Theme.pt) : col.implicitWidth + 16
 
     SystemClock {
         id: clock
@@ -39,9 +41,8 @@ Indicator {
         text: root.lineText
         // macOS: regular weight, tabular digits so the time doesn't jiggle.
         font.pointSize: Theme.menuBarFontSize
+        font.letterSpacing: Theme.menuTracking
         font.features: { "tnum": 1 }
-        style: Text.Raised
-        styleColor: Theme.textHalo
     }
 
     tooltip: Qt.formatDateTime(clock.date, "dddd, MMMM d, yyyy")

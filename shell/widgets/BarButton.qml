@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import ".."
 import "../services"
@@ -45,12 +46,13 @@ MouseArea {
     readonly property int hostHeight: hostWindow && hostWindow.barHeight ? hostWindow.barHeight : Theme.barHeight
     property int iconSize: hostWindow && hostWindow.barIconSize ? hostWindow.barIconSize : Theme.iconSize
     property color textColor: Theme.fg
+    property bool monochrome: Settings.menubar.monochromeIcons !== false
     default property alias overlay: overlayItem.data
 
     hoverEnabled: true
     acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
     implicitHeight: hostHeight
-    implicitWidth: Math.max(hostHeight - 12, row.implicitWidth + 12)
+    implicitWidth: menuBarItem && text === "" ? Theme.menuBarItemWidth : Math.max(hostHeight - 12, row.implicitWidth + 12)
 
     Rectangle {
         visible: !root.menuBarItem
@@ -85,6 +87,10 @@ MouseArea {
             name: root.icon
             fallback: root.iconFallback
             implicitSize: root.iconSize
+            // Menu bar: monochrome like SF Symbols (Settings > Menu Bar >
+            // Monochrome icons): every status icon in the text colour.
+            layer.enabled: root.menuBarItem && root.monochrome
+            layer.effect: MultiEffect { brightness: Theme.dark ? 1 : -1; saturation: -1 }
             Item {
                 id: overlayItem
                 anchors.fill: parent

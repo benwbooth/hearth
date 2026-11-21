@@ -17,6 +17,8 @@ Singleton {
         const p = activePopup;
         if (p && p.open && p.anchorItem !== item) p.close();
     }
+    // Open a menu bar indicator's menu by its ipcName (Control Center's ›).
+    signal openIndicator(string name)
     // Ask the overview to open (dock menu "Show All Windows").
     signal overviewRequested()
 
