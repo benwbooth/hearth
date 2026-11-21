@@ -81,13 +81,14 @@ Scope {
             if (topHit) add("Top Hit", [topHit]);
             add("Applications", without(apps).slice(0, 5));
             add("System Settings", without(settingsHits));
-            add("Actions", actionHits);
+            const filterOnly = /^(\s*\w+:\S+)+\s*$/.test(q);
+            if (!filterOnly) add("Actions", actionHits);
             if (c.documents) add("Documents", files(["document", "pdf"], 6));
             if (c.folders) add("Folders", files(["folder"], 4));
             if (c.images) add("Images", files(["image"], 6));
             if (c.other) add("Other", files(["music", "video", "other"], 4));
             add("Web Suggestions", webHits);
-            if (Spotlight.cfg.ask && q.trim().length > 2)
+            if (Spotlight.cfg.ask && q.trim().length > 2 && !filterOnly)
                 add("Ask", [{ kind: "ask", query: q.trim(), title: "Ask hearth “" + q.trim() + "”", subtitle: "Assistant (" + win.assistantName() + ")", icon: "audio-input-microphone" }]);
             return g;
         }
@@ -270,7 +271,9 @@ Scope {
                     id: pane
                     tint: win.tint
                     width: parent.width
-                    readonly property real want: win.groups.length ? Math.min(Math.round(440 * win.pt), list.contentHeight + 2 * Math.round(6 * win.pt)) : 0
+                    // At least tall enough for the preview, at most 440 pt.
+                    readonly property real want: win.groups.length
+                        ? Math.max(Math.round(300 * win.pt), Math.min(Math.round(440 * win.pt), list.contentHeight + 2 * Math.round(6 * win.pt))) : 0
                     height: want
                     visible: height > 1
                     radius: Math.round(22 * win.pt)

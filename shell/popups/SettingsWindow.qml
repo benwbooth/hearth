@@ -85,7 +85,7 @@ Scope {
                                 { id: "night", label: "Night Light", icon: "redshift-status-on" },
                                 { id: "notifications", label: "Notifications", icon: "preferences-desktop-notification" },
                                 { id: "spotlight", label: "Spotlight", icon: "search" },
-                                { id: "ai", label: "AI", icon: "preferences-system-network-sharing" },
+                                { id: "ai", label: "AI", icon: Quickshell.shellDir + "/assets/ai.svg" },
                                 { id: "voice", label: "Voice Assistant", icon: "audio-input-microphone" },
                                 { id: "clipboard", label: "Clipboard", icon: "klipper-symbolic" },
                                 { id: "screenshots", label: "Screenshots", icon: "camera-photo" }

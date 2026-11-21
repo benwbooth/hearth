@@ -178,7 +178,7 @@ Singleton {
         { id: "clipboard", label: "Clipboard", icon: "klipper-symbolic", words: "copy paste history" },
         { id: "screenshots", label: "Screenshots", icon: "camera-photo", words: "screen capture record" },
         { id: "spotlight", label: "Spotlight", icon: "search", words: "search index files folders" },
-        { id: "ai", label: "AI", icon: "preferences-system-network-sharing", words: "models ollama llama vram gpu claude codex gemini" },
+        { id: "ai", label: "AI", icon: Quickshell.shellDir + "/assets/ai.svg", words: "models ollama llama vram gpu claude codex gemini" },
         { id: "voice", label: "Voice Assistant", icon: "audio-input-microphone", words: "siri speech microphone whisper voice piper" }
     ]
     function paneMatches(text) {

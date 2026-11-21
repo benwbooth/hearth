@@ -11,7 +11,7 @@ import "../.."
 // while a model is loaded.
 Indicator {
     id: root
-    icon: Ai.loaded.length ? "preferences-system-network-sharing" : "preferences-system-network-sharing"
+    icon: Quickshell.shellDir + "/assets/ai.svg"
     tooltip: Ai.loaded.length ? Ai.loaded.length + (Ai.loaded.length === 1 ? " AI model loaded" : " AI models loaded") : "AI models"
     tooltipSub: (Ai.mainGpu ? `GPU memory: ${Ai.mainGpu.usedText} of ${Ai.mainGpu.totalText}\n` : "") + Ai.loaded.map(m => `${m.name} (${m.providerLabel})`).join("\n")
 
@@ -45,7 +45,7 @@ Indicator {
                 required property var modelData
                 Layout.fillWidth: true
                 spacing: 8
-                Icon { implicitSize: 20; name: "preferences-system-network-sharing" }
+                Icon { implicitSize: 18; name: Quickshell.shellDir + "/assets/ai.svg" }
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 0

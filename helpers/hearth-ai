@@ -607,6 +607,8 @@ class Assistant:
             p = os.path.expanduser(args.get("path", ""))
             if not os.path.exists(p):
                 return "That file doesn't exist."
+            if os.environ.get("HEARTH_AI_DRYRUN"):
+                return "Opened %s (dry run)." % os.path.basename(p)
             subprocess.Popen(["xdg-open", p], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                              start_new_session=True)
             return "Opened %s." % os.path.basename(p)
@@ -642,6 +644,8 @@ class Assistant:
                 "https://duckduckgo.com/?q=" + urllib.parse.quote(args.get("query", ""))
             if not re.match(r"^https?://", url or ""):
                 url = "https://" + (url or "")
+            if os.environ.get("HEARTH_AI_DRYRUN"):
+                return "Opened the browser (dry run)."
             subprocess.Popen(["xdg-open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                              start_new_session=True)
             return "Opened the browser."
