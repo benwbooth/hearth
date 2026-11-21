@@ -405,6 +405,88 @@ pane):
 - The Genie minimize effect is left to the compositor.
 - SF Pro and Apple's cursors aren't shipped (Apple-licensed).
 
+## Login screen
+
+hearth's own login screen, macOS style, replacing SDDM (`shell/greeter.qml`,
+`shell/greeter/`, `nix/greeter.nix`). greetd starts a greeter-only arbor as
+the `greeter` user, and arbor runs `hearth-greeter` (Quickshell's Greetd
+service) in it. It looks like the lock screen and shares its pieces
+(`lock/LockGlass.qml`, `lock/LockButton.qml`, `desktop/StillLayer.qml`):
+
+- the wallpaper hearth copied to `/var/lib/hearth/wallpaper` (still, video
+  or shader; Settings > Wallpaper > "Show on the lock screen and login
+  screen"), else a built-in gradient (or `services.hearth-greeter.wallpaper`);
+  it slows to a still and blurs once you type;
+- date and the big thin clock;
+- one person: picture, name and the glass password field straight away;
+  several: a row of pictures (arrow keys + Return, or click), then the
+  field, with "Other Users" (Esc) to go back. Pictures and real names come
+  from AccountsService (the greeter can't read anyone's home), else one of
+  hearth's built-in pictures (`share/hearth/avatars`, the same one for a
+  name every time), else initials;
+- a wrong password shakes the field and says so in plain words; Caps Lock
+  shows ⇪ and "Caps Lock is on"; locked or expired accounts get their own
+  message;
+- the desktop session under the field (a menu when there are several:
+  arbor, Plasma, ... from `services.displayManager.sessionData.desktops`);
+  each person's last user and session are remembered in
+  `/var/cache/hearth-greeter/state.json`;
+- keyboard layout (when there are several) and Accessibility (Zoom In /
+  Zoom Out / Actual Size, also Super+Alt+= / − / 0) at the top right;
+- Sleep / Restart / Shut Down (the last two ask first), through logind,
+  which polkit allows for the active local session; refused while someone
+  else is still logged in, with a message.
+
+The session starts with `XDG_SESSION_TYPE=wayland`, its `DesktopNames` as
+`XDG_CURRENT_DESKTOP`, and `XDG_SESSION_DESKTOP`/`DESKTOP_SESSION`; greetd
+sources `/etc/profile` and `~/.profile` first. The screens go dark after 5
+minutes without input.
+
+Displays and keyboard: hearth copies `~/.config/hearth/arbor-displays.kdl`
+and `arbor-keyboard.kdl` to `/var/lib/hearth/greeter/` whenever they
+change (Settings > Displays / Keyboard; `services/ArborConfig.qml`), and
+the greeter's arbor includes them, so it starts in your resolution, scale
+and layouts. Before the first copy (or without it): each screen's
+preferred mode, arbor's automatic scale, HDR off;
+`services.hearth-greeter.extraArborConfig` adds output blocks.
+
+NixOS (hearth flake input):
+
+```nix
+imports = [ hearth.nixosModules.greeter ];
+services.hearth-greeter.enable = true;   # turns SDDM off (mkForce)
+```
+
+The module enables greetd (VT 1, `default_session` = the greeter arbor as
+`greeter`), the `greetd` PAM service with pam_kwallet (KWallet unlocks
+with the login password, as with SDDM) and without fingerprint (the
+password is needed for KWallet, like macOS's first login after a restart),
+AccountsService, and `/var/lib/hearth/{wallpaper,greeter}` (2775 root:users)
+and `/var/cache/hearth-greeter` (greeter's). Options: `defaultSession`
+(else `services.displayManager.defaultSession`, else arbor), `wallpaper`,
+`extraArborConfig`, `cursorTheme`, `kwallet`, `environment`, `package`,
+`arborPackage` (default `programs.arbor.package`).
+
+Back to SDDM: remove `services.hearth-greeter.enable = true;` and rebuild.
+
+If it fails at boot (black screen, or the greeter keeps restarting):
+Ctrl+Alt+F2, log in on the text console, set
+`services.hearth-greeter.enable = false;` in /etc/nixos, and
+`sudo nixos-rebuild switch` (or `sudo nixos-rebuild switch --rollback`);
+`sudo systemctl restart display-manager` then brings SDDM back. Or pick the
+previous generation in the boot menu. Logs:
+`/var/cache/hearth-greeter/greeter.log` (arbor), `shell.log` (the greeter;
+`*.old` for the start before), `journalctl -b -u greetd`. A greeter that
+crashes is restarted up to three times, then arbor quits and greetd starts
+it again.
+
+Testing: a NixOS VM test (greetd + arbor + greeter, a test user) drives it
+with QEMU key and mouse events and takes screenshots with grim (arbor
+needs a real GPU: virtio-vga-gl with `-display egl-headless`, so the test
+driver runs outside the Nix sandbox). `HEARTH_GREETER_DRYRUN=1` logs
+instead of launching or powering off; with `HEARTH_GREETER_TEST=1`,
+`quickshell ipc -p .../greeter.qml call greeter state|shot PATH`.
+
 ## Boot
 
 `boot/` holds matching boot visuals, built from source (logos rendered from

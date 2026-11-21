@@ -92,6 +92,37 @@ mv -f "$tmp" "$1"'
         p.running = true;
     }
 
+    // The login screen (greeter.qml) runs its own arbor as the `greeter`
+    // user, which can't read ~: the display and keyboard pieces are copied
+    // to /var/lib/hearth/greeter (README "Login screen") whenever they
+    // change, so it starts with your resolution, scale and layouts. Skipped
+    // when that directory is missing, in test sessions and in the greeter.
+    readonly property var greeterFiles: ["arbor-displays.kdl", "arbor-keyboard.kdl"]
+    readonly property string greeterDir: Quickshell.env("HEARTH_GREETER_DIR") || "/var/lib/hearth/greeter"
+    readonly property bool mirrorForGreeter: Quickshell.env("HEARTH_SESSION_DRYRUN") !== "1"
+                                             && Quickshell.env("HEARTH_GREETER") !== "1"
+    readonly property string mirrorScript: '
+d=$1; src=$2; name=$(basename "$src")
+[ -d "$d" ] && [ -w "$d" ] || exit 0
+if [ -f "$src" ]; then
+  # Colour profiles in your home are out of the greeter\'s reach.
+  grep -v "color-profile \"/home/" "$src" > "$d/.$name.tmp" && chmod 664 "$d/.$name.tmp" && mv -f "$d/.$name.tmp" "$d/$name"
+elif [ "$3" = removed ]; then
+  rm -f "$d/$name"
+fi'
+    function mirror(name, removed) {
+        if (!root.mirrorForGreeter || root.greeterFiles.indexOf(name) < 0) return;
+        const p = mirrorComp.createObject(root);
+        p.command = ["sh", "-c", root.mirrorScript, "sh", root.greeterDir, root.path(name), removed ? "removed" : ""];
+        p.running = true;
+    }
+    Component {
+        id: mirrorComp
+        Process { onExited: Qt.callLater(() => destroy()) }
+    }
+    onWritten: name => root.mirror(name, true)
+    Component.onCompleted: { for (const n of root.greeterFiles) root.mirror(n, false); }
+
     // KDL string literal.
     function str(s) { return '"' + String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"'; }
     // KDL raw string (regexes).

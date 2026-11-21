@@ -102,6 +102,18 @@
         exec ${quickshell}/bin/quickshell ipc -p $out/share/hearth/shell "\$@"
         EOF
         chmod +x $out/bin/hearth-ipc
+        # The login screen (README "Login screen", nix/greeter.nix): the
+        # greeter config of the same shell, run by greetd's arbor.
+        makeWrapper ${quickshell}/bin/quickshell $out/bin/hearth-greeter \
+          --add-flags "-p $out/share/hearth/shell/greeter.qml" \
+          --prefix PATH : ${lib.makeBinPath runtimeDeps}:$out/share/hearth/helpers \
+          --prefix QML_IMPORT_PATH : ${qmlPath} \
+          --prefix QT_PLUGIN_PATH : ${pluginPath} \
+          --set HEARTH_GREETER 1 \
+          --set-default HEARTH_AVATAR_DIR $out/share/hearth/avatars \
+          --set-default QT_QPA_PLATFORM wayland \
+          --set-default HEARTH_FONT_DIR ${fontDir} \
+          --set-default HEARTH_XKB_RULES ${pkgs.xkeyboard_config}/share/X11/xkb/rules/evdev.lst
         # From a text console when the lock screen is stuck (README: Lock screen).
         ln -s $out/share/hearth/helpers/hearth-recover-lock $out/bin/hearth-recover-lock
         # GTK_MODULES=appmenu-gtk-module (arbor/config.kdl) finds it through
@@ -123,6 +135,9 @@
       inherit (boot) plymouth-theme-hearth grub-theme-hearth grub-theme-hearth-5k;
       boot-screenshots = import ./boot/vm-test.nix { inherit pkgs boot; };
     };
+
+    # The login screen (README "Login screen"): greetd + arbor + hearth-greeter.
+    nixosModules.greeter = import ./nix/greeter.nix self;
 
     # `nix develop`, then `quickshell -p shell` runs straight from the
     # checkout and hot-reloads on every save.

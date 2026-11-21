@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+"""hearth-greeter-info: what the login screen (shell/greeter/) shows.
+
+Prints one JSON object:
+  users:    [{ name, realName, icon }]  people who can log in (uid 1000..59999,
+            a real shell, not hidden in AccountsService), real name and picture
+            from AccountsService (over D-Bus: the greeter user can't read
+            /var/lib/AccountsService/users), else GECOS and the icons dir.
+            Without a picture: one of hearth's built-in pictures
+            ($HEARTH_AVATAR_DIR, share/hearth/avatars), the same one every
+            time for that name (like macOS's default picture); else none
+            (the greeter shows initials).
+  sessions: [{ id, name, exec, desktopNames, comment }] from the .desktop files
+            in the directories of $HEARTH_GREETER_SESSIONS (colon separated;
+            NixOS: services.displayManager.sessionData.desktops/share/wayland-sessions).
+
+Runs as the `greeter` user; reads nothing private.
+"""
+import configparser
+import glob
+import json
+import os
+import pwd
+import sys
+import zlib
+
+NOLOGIN = ("nologin", "false", "shutdown", "halt", "sync")
+ICON_DIR = "/var/lib/AccountsService/icons"
+
+
+def accounts_service():
+    """{ name: { realName, icon, hidden } } from org.freedesktop.Accounts."""
+    out = {}
+    try:
+        import dbus
+        bus = dbus.SystemBus()
+        mgr = dbus.Interface(bus.get_object("org.freedesktop.Accounts", "/org/freedesktop/Accounts"),
+                             "org.freedesktop.Accounts")
+        for p in pwd.getpwall():
+            if not usable(p):
+                continue
+            try:
+                path = mgr.FindUserByName(p.pw_name, timeout=3)
+                props = dbus.Interface(bus.get_object("org.freedesktop.Accounts", path),
+                                       "org.freedesktop.DBus.Properties")
+                a = props.GetAll("org.freedesktop.Accounts.User", timeout=3)
+                out[p.pw_name] = {
+                    "realName": str(a.get("RealName", "")),
+                    "icon": str(a.get("IconFile", "")),
+                    "hidden": bool(a.get("SystemAccount", False)) or bool(a.get("Locked", False)),
+                }
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return out
+
+
+def usable(p):
+    if not (1000 <= p.pw_uid < 60000):
+        return False
+    shell = os.path.basename(p.pw_shell or "")
+    return bool(shell) and shell not in NOLOGIN
+
+
+def readable_image(path):
+    return bool(path) and os.path.isfile(path) and os.access(path, os.R_OK) and os.path.getsize(path) > 0
+
+
+def users():
+    acc = accounts_service()
+    pics = avatars()
+    res = []
+    for p in sorted(pwd.getpwall(), key=lambda p: p.pw_uid):
+        if not usable(p):
+            continue
+        a = acc.get(p.pw_name, {})
+        if a.get("hidden"):
+            continue
+        real = a.get("realName") or (p.pw_gecos or "").split(",")[0]
+        icon = a.get("icon", "")
+        if not readable_image(icon):
+            icon = os.path.join(ICON_DIR, p.pw_name)
+            if not readable_image(icon):
+                icon = pics[zlib.crc32(p.pw_name.encode()) % len(pics)] if pics else ""
+        res.append({"name": p.pw_name, "realName": real, "icon": icon})
+    return res
+
+
+def sessions():
+    res, seen = [], set()
+    dirs = [d for d in os.environ.get("HEARTH_GREETER_SESSIONS", "").split(":") if d]
+    if not dirs:
+        dirs = ["/run/current-system/sw/share/wayland-sessions", "/usr/share/wayland-sessions"]
+    for d in dirs:
+        for f in sorted(glob.glob(os.path.join(d, "*.desktop"))):
+            sid = os.path.basename(f)[:-len(".desktop")]
+            if sid in seen:
+                continue
+            cp = configparser.ConfigParser(interpolation=None, strict=False)
+            cp.optionxform = str
+            try:
+                cp.read(f, encoding="utf-8")
+                e = cp["Desktop Entry"]
+            except Exception:
+                continue
+            if e.get("Hidden", "").lower() == "true" or e.get("NoDisplay", "").lower() == "true":
+                continue
+            ex = e.get("Exec", "").strip()
+            if not ex:
+                continue
+            seen.add(sid)
+            res.append({
+                "id": sid,
+                "name": e.get("Name", sid),
+                "comment": e.get("Comment", ""),
+                "exec": ex,
+                "desktopNames": [x for x in e.get("DesktopNames", "").split(";") if x],
+            })
+    return res
+
+
+def avatars():
+    """The built-in pictures, in index.json order (else every image there)."""
+    d = os.environ.get("HEARTH_AVATAR_DIR", "")
+    if not d or not os.path.isdir(d):
+        return []
+    try:
+        files = [os.path.join(d, e["file"]) for e in json.load(open(os.path.join(d, "index.json")))]
+    except Exception:
+        files = sorted(glob.glob(os.path.join(d, "*")))
+    return [f for f in files if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp")) and readable_image(f)]
+
+
+if __name__ == "__main__":
+    json.dump({"users": users(), "sessions": sessions()}, sys.stdout)
+    sys.stdout.write("\n")
