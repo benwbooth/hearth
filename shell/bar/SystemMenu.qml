@@ -25,6 +25,7 @@ BarButton {
         anchors.centerIn: parent
         visible: root.logo !== "none"
         name: root.logo
+        color: root.menuBarItem ? Theme.barFg : Theme.fg
         size: root.hostHeight > 34 ? 22 : Math.round(14 * Theme.pt)
     }
 

@@ -36,7 +36,7 @@ MouseArea {
     // around them: monochrome (menu bar text colour), unframed, on a faint
     // rounded well; the classic panel keeps treetop's colours.
     readonly property bool blend: onTop
-    readonly property color mono: Theme.fg
+    readonly property color mono: Theme.barFg
     readonly property var palette: blend ? ({ cpu: mono, mem: mono, gpu: mono, vram: mono, disk: mono, net: mono, temp: mono, warn: "#ff6b5e" }) : treetopPalette
     // Same palette as the treetop app and its tray bars.
     readonly property var treetopPalette: ({ cpu: "#43c96b", mem: "#d6b23e", gpu: "#c06fd8", vram: "#d070a8", disk: "#4fb3d9", net: "#4f8fe0", temp: "#e0894f", warn: "#e05a4f" })
@@ -256,7 +256,7 @@ done`]
     }
     readonly property font monoFont: Qt.font({ family: "monospace", pixelSize: Math.round(root.h * 0.3) })
     readonly property font monoBold: Qt.font({ family: "monospace", pixelSize: Math.round(root.h * 0.3), bold: true })
-    function tempColor(t) { return t >= 80 ? "#e05a4f" : (t >= 60 ? "#e3c25a" : blend ? Theme.fg : "#43c96b"); }
+    function tempColor(t) { return t >= 80 ? "#e05a4f" : (t >= 60 ? "#e3c25a" : blend ? Theme.barFg : "#43c96b"); }
     function pct(v) { return (Number(v) || 0).toFixed(0) + "%"; }
 
     // ---- KStats-style pieces ---------------------------------------------
@@ -361,13 +361,13 @@ done`]
                     ctx.font = "bold " + Math.round(stat.h * 0.3) + "px monospace";
                     ctx.textAlign = "left";
                     ctx.textBaseline = "bottom";
-                    const bg = Theme.bg;
+                    const bg = root.blend ? (Theme.barDark ? Qt.rgba(0, 0, 0, 1) : Qt.rgba(1, 1, 1, 1)) : Theme.bg;
                     ctx.lineJoin = "round";
                     ctx.lineWidth = root.blend ? 2.5 : 3;
                     ctx.strokeStyle = root.blend ? Qt.rgba(bg.r * 0.5, bg.g * 0.5, bg.b * 0.5, 0.55)
                                                  : Qt.rgba(bg.r * 0.6, bg.g * 0.6, bg.b * 0.6, 0.92);
                     ctx.strokeText(stat.value, 1, hh + 1);
-                    ctx.fillStyle = Qt.lighter(Theme.fg, 1.1);
+                    ctx.fillStyle = root.blend ? Theme.barFg : Qt.lighter(Theme.fg, 1.1);
                     ctx.fillText(stat.value, 1, hh + 1);
                 }
             }
@@ -428,8 +428,8 @@ done`]
             Column {
                 Layout.alignment: Qt.AlignVCenter
                 spacing: -2
-                Label { text: "↑" + root.fmtRate(root.netUp); font: root.monoFont }
-                Label { text: "↓" + root.fmtRate(root.netDown); font: root.monoFont }
+                Label { text: "↑" + root.fmtRate(root.netUp); font: root.monoFont; color: root.blend ? Theme.barFg : Theme.fg }
+                Label { text: "↓" + root.fmtRate(root.netDown); font: root.monoFont; color: root.blend ? Theme.barFg : Theme.fg }
             }
         }
         // Temperatures: CPU over GPU, each coloured by heat.

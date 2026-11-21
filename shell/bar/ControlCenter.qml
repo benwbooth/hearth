@@ -39,7 +39,7 @@ Indicator {
                     anchors.fill: parent
                     radius: 3
                     color: "transparent"
-                    border.color: Theme.fg
+                    border.color: Theme.barFg
                     border.width: 1.3
                 }
                 Rectangle {
@@ -47,7 +47,7 @@ Indicator {
                     height: 6
                     radius: 3
                     x: parent.index === 0 ? parent.width - width : 0
-                    color: Theme.fg
+                    color: Theme.barFg
                 }
             }
         }

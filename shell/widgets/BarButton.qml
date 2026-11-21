@@ -45,7 +45,7 @@ MouseArea {
     readonly property var hostWindow: root.QsWindow.window
     readonly property int hostHeight: hostWindow && hostWindow.barHeight ? hostWindow.barHeight : Theme.barHeight
     property int iconSize: hostWindow && hostWindow.barIconSize ? hostWindow.barIconSize : Theme.iconSize
-    property color textColor: Theme.fg
+    property color textColor: menuBarItem ? Theme.barFg : Theme.fg
     property bool monochrome: Settings.menubar.monochromeIcons !== false
     default property alias overlay: overlayItem.data
 
@@ -90,7 +90,7 @@ MouseArea {
             // Menu bar: monochrome like SF Symbols (Settings > Menu Bar >
             // Monochrome icons): every status icon in the text colour.
             layer.enabled: root.menuBarItem && root.monochrome
-            layer.effect: MultiEffect { brightness: Theme.dark ? 1 : -1; saturation: -1 }
+            layer.effect: MultiEffect { brightness: Theme.barDark ? 1 : -1; saturation: -1 }
             Item {
                 id: overlayItem
                 anchors.fill: parent

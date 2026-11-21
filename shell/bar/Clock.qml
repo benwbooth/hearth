@@ -39,6 +39,7 @@ Indicator {
         visible: root.compact
         anchors.centerIn: parent
         text: root.lineText
+        color: Theme.barFg
         // macOS: regular weight, tabular digits so the time doesn't jiggle.
         font.pointSize: Theme.menuBarFontSize
         font.letterSpacing: Theme.menuTracking

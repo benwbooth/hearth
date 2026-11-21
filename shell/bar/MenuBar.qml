@@ -68,6 +68,41 @@ PanelWindow {
     }
     HoverHandler { id: hover }
 
+    // How bright the wallpaper is under the bar (its top 4%), so the
+    // transparent bar's items can be white or black like macOS 26's. The
+    // small Image gives the aspect; the canvas draws the picture scaled down
+    // and averages its top rows.
+    Image {
+        id: wallSample
+        visible: false
+        readonly property string url: Wallpaper.file ? "file://" + Wallpaper.file : ""
+        source: url
+        sourceSize.width: 96
+        asynchronous: true
+        onStatusChanged: if (status === Image.Ready) sampler.loadImage(url)
+    }
+    Canvas {
+        id: sampler
+        width: 96
+        height: Math.max(8, Math.round(96 * wallSample.implicitHeight / Math.max(1, wallSample.implicitWidth)))
+        visible: false
+        renderTarget: Canvas.Image
+        renderStrategy: Canvas.Immediate
+        onImageLoaded: requestPaint()
+        onPaint: {
+            const url = wallSample.url;
+            if (!url || !isImageLoaded(url)) return;
+            const ctx = getContext("2d");
+            ctx.drawImage(url, 0, 0, width, height);
+            const rows = Math.max(1, Math.round(height * 0.04));
+            const d = ctx.getImageData(0, 0, width, rows).data;
+            let sum = 0, n = 0;
+            for (let i = 0; i < d.length; i += 4) { sum += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]; n++; }
+            if (n) Theme.wallpaperLight = sum / n / 255 > 0.62;
+            unloadImage(url);
+        }
+    }
+
     // --- menu behaviour ---
     property var menus: []          // menu bar menus (BarPopup.menuBarMenu), for Left/Right
     function registerMenu(p) { if (menus.indexOf(p) < 0) menus = menus.concat([p]); }
@@ -180,7 +215,7 @@ PanelWindow {
             anchors.fill: parent
             visible: content.style === "transparent"
             gradient: Gradient {
-                GradientStop { position: 0; color: Qt.rgba(0, 0, 0, Theme.dark ? 0.16 : 0.07) }
+                GradientStop { position: 0; color: Theme.barDark ? Qt.rgba(0, 0, 0, 0.16) : Qt.rgba(1, 1, 1, 0.12) }
                 GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0) }
             }
         }
@@ -201,8 +236,8 @@ PanelWindow {
             source: itemsSrc
             anchors.fill: items
             shadowEnabled: true
-            shadowColor: Theme.dark ? "#000000" : "#ffffff"
-            shadowOpacity: Theme.dark ? 0.55 : 0.6
+            shadowColor: Theme.barDark ? "#000000" : "#ffffff"
+            shadowOpacity: Theme.barDark ? 0.55 : 0.6
             shadowBlur: 0.45
             shadowVerticalOffset: 0.5
             shadowHorizontalOffset: 0

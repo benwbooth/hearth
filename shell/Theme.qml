@@ -52,6 +52,13 @@ Singleton {
     readonly property real menuBarOpacity: Math.max(0.32, Math.min(0.95, Number(Settings.menubar.opacity) || 0.36))
     readonly property color menuBarTint: menuBarStyle === "solid" ? bg
         : dark ? Qt.rgba(0.19, 0.20, 0.23, menuBarOpacity) : Qt.rgba(0.97, 0.97, 0.98, menuBarOpacity)
+    // The transparent menu bar's items flip between white and black with the
+    // wallpaper under them, like macOS 26 (MenuBar.qml samples the top of
+    // the wallpaper); glass and solid bars follow light/dark.
+    property bool wallpaperLight: false
+    readonly property bool barDark: menuBarStyle === "transparent" ? !wallpaperLight : dark
+    readonly property color barFg: barDark ? "#ffffff" : "#1d1d1f"
+    readonly property color barFgDim: barDark ? Qt.rgba(1, 1, 1, 0.55) : Qt.rgba(0, 0, 0, 0.45)
     // Specular light on glass edges (widgets/GlassFrame.qml, shaders/glass.frag):
     // lit from the top-left, reflected at the bottom-right.
     readonly property real specular: dark ? 0.42 : 0.9
@@ -102,8 +109,7 @@ Singleton {
     readonly property int spacing: 6
     // Selection and highlight colours (accent fill, white text in menus;
     // a translucent capsule behind open menu bar items).
-    readonly property color menuBarHighlight: dark || menuBarStyle === "transparent"
-        ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.11)
+    readonly property color menuBarHighlight: barDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.11)
     readonly property color menuSeparator: dark ? Qt.rgba(1, 1, 1, 0.13) : Qt.rgba(0, 0, 0, 0.11)
     readonly property color fgDisabled: dark ? Qt.rgba(1, 1, 1, 0.28) : Qt.rgba(0, 0, 0, 0.26)
     readonly property color fgSecondary: dark ? Qt.rgba(1, 1, 1, 0.55) : Qt.rgba(0, 0, 0, 0.5)

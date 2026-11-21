@@ -147,7 +147,7 @@ Row {
             id: label
             anchors.centerIn: parent
             text: t.text
-            color: t.enabled ? Theme.fg : Theme.fgDim
+            color: t.enabled ? Theme.barFg : Theme.barFgDim
             font.pointSize: Theme.menuBarFontSize
             font.weight: t.bold ? Font.Bold : Font.Normal
             font.letterSpacing: Theme.menuTracking
