@@ -37,7 +37,7 @@ Singleton {
         c.timeout = Settings.notifications.timeout;
         return JSON.stringify(c, null, 2);
     }
-    onConfigChanged: if (config) { out.setText(config); }
+    onConfigChanged: if (config) { out.setText(config); startAnyway.restart(); }
 
     function setDnd(on) { Quickshell.execDetached(["swaync-client", on ? "-dn" : "-df", "-sw"]); }
 
@@ -66,6 +66,14 @@ Singleton {
         // plasmashell is the notification server.
         running: root.wanted && root.written
         onExited: if (root.wanted) restart.start()
+    }
+    // FileView doesn't always report a save (seen when the cached config
+    // was already there from an earlier run), and waiting on it left the
+    // session with no notification server at all. Start regardless.
+    Timer {
+        id: startAnyway
+        interval: 1500
+        onTriggered: root.written = true
     }
     Timer {
         id: restart
