@@ -40,6 +40,10 @@ MouseArea {
     readonly property color mono: Theme.barFg
     readonly property var palette: blend ? ({ cpu: mono, mem: mono, gpu: mono, vram: mono, disk: mono, net: mono, temp: mono, warn: "#ff6b5e" }) : treetopPalette
     // Same palette as the treetop app and its tray bars.
+    // The tooltip's colours: the bar's monochrome (Theme.barFg, white over a
+    // dark wallpaper) is invisible on the tooltip's glass, which follows the
+    // light/dark theme instead; there it's the tooltip's own text colour.
+    readonly property var tipPalette: blend ? ({ cpu: Theme.fg, mem: Theme.fg, gpu: Theme.fg, vram: Theme.fg, disk: Theme.fg, net: Theme.fg, temp: Theme.fg, warn: palette.warn }) : treetopPalette
     readonly property var treetopPalette: ({ cpu: "#43c96b", mem: "#d6b23e", gpu: "#c06fd8", vram: "#d070a8", disk: "#4fb3d9", net: "#4f8fe0", temp: "#e0894f", warn: "#e05a4f" })
 
     implicitWidth: strip.implicitWidth + 8
@@ -585,7 +589,7 @@ done`]
         return fmtRate(v) + "/s";
     }
     readonly property var kindTitle: ({ cpu: "CPU", mem: "Memory", gpu: "GPU", vram: "VRAM", disk: "Disk space by volume", net: "Network", temp: "Temperatures & fans" })
-    readonly property var kindColor: ({ cpu: palette.cpu, mem: palette.mem, gpu: palette.gpu, vram: palette.vram, disk: palette.disk, net: palette.net })
+    readonly property var kindColor: ({ cpu: tipPalette.cpu, mem: tipPalette.mem, gpu: tipPalette.gpu, vram: tipPalette.vram, disk: tipPalette.disk, net: tipPalette.net })
     function esc(t) { return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
     function c(color, t) { return "<font color='" + color + "'>" + t + "</font>"; }
     function row(label, color, value, detail) {
@@ -605,7 +609,7 @@ done`]
         let last = "";
         for (const x of list) {
             const v = x.kind === "fan"
-                ? c(palette.net, "<b>" + x.value.toFixed(0) + " rpm</b>")
+                ? c(tipPalette.net, "<b>" + x.value.toFixed(0) + " rpm</b>")
                 : c(tempColor(x.value), "<b>" + x.value.toFixed(0) + "°C</b>");
             t += "<tr><td>" + (x.dev !== last ? "<b>" + esc(x.dev) + "</b>" : "") + "</td><td>&nbsp;&nbsp;"
                 + c(Theme.fgDim, esc(x.label)) + "</td><td align='right'>&nbsp;&nbsp;" + v + "</td></tr>";
@@ -618,12 +622,12 @@ done`]
     function gpuUnattributedText() {
         const un = topData.gpuUnattributed || 0;
         if (un < 20) return "";
-        let t = c(palette.warn, "<b>" + un.toFixed(0) + "%</b> busy isn't from any program listed.");
+        let t = c(tipPalette.warn, "<b>" + un.toFixed(0) + "%</b> busy isn't from any program listed.");
         const holders = topData.gpuCompute || [];
         if (holders.length) {
             t += "<br>" + c(Theme.fgDim, "Holding ROCm compute queues (not measured per program):") + "<table cellspacing='1'>";
             for (const x of holders)
-                t += "<tr><td align='right'>" + c(palette.vram, "<b>" + fmtRate(x.v) + "</b>") + "</td><td>&nbsp;&nbsp;" + esc(x.name)
+                t += "<tr><td align='right'>" + c(tipPalette.vram, "<b>" + fmtRate(x.v) + "</b>") + "</td><td>&nbsp;&nbsp;" + esc(x.name)
                     + "</td><td>&nbsp;" + c(Theme.fgDim, x.n > 1 ? "×" + x.n : "") + "</td></tr>";
             t += "</table>";
         } else {
@@ -644,7 +648,7 @@ done`]
         if (!diskVolumes.length) return c(Theme.fgDim, "No disks found.");
         let t = "<table cellspacing='1'>";
         for (const v of diskVolumes)
-            t += "<tr><td>" + c(palette.disk, "<b>" + esc(v.mount) + "</b>") + "</td><td align='right'>&nbsp;&nbsp;<b>"
+            t += "<tr><td>" + c(tipPalette.disk, "<b>" + esc(v.mount) + "</b>") + "</td><td align='right'>&nbsp;&nbsp;<b>"
                 + pct(100 * v.used / v.size) + "</b></td><td>&nbsp;&nbsp;" + c(Theme.fgDim, fmtBytes(v.used) + " of " + fmtBytes(v.size)
                 + " · " + fmtBytes(v.size - v.used) + " free") + "</td></tr>";
         return t + "</table>";
@@ -687,21 +691,21 @@ done`]
     // item's own tooltip starts with its row.
     function kindRows(kind) {
         let t = "";
-        if (kind === "cpu") t += row("CPU", palette.cpu, pct(cpuUsage), cpuTempC > 0 ? cpuTempC.toFixed(0) + "°C" : "");
-        if (kind === "mem") t += row("Memory", palette.mem, pct(memPercent), fmtBytes(memUsed) + " of " + fmtBytes(memTotal));
+        if (kind === "cpu") t += row("CPU", tipPalette.cpu, pct(cpuUsage), cpuTempC > 0 ? cpuTempC.toFixed(0) + "°C" : "");
+        if (kind === "mem") t += row("Memory", tipPalette.mem, pct(memPercent), fmtBytes(memUsed) + " of " + fmtBytes(memTotal));
         if (kind === "gpu" || kind === "vram") {
             for (const k of gpuIndexes) {
                 const g = gpuFiles.objectAt(k);
                 if (!g) continue;
                 const n = gpuIndexes.length > 1 ? "GPU" + (k + 1) : "GPU";
                 const name = shortGpuName(g.modelData.name);
-                if (kind === "gpu") t += row(n, palette.gpu, pct(g.usage), esc(name) + (g.tempC > 0 ? (name ? " · " : "") + g.tempC.toFixed(0) + "°C" : ""));
-                else t += row("VRAM", palette.vram, pct(100 * g.vramUsed / Math.max(1, g.modelData.vramTotal)), fmtBytes(g.vramUsed) + " of " + fmtBytes(g.modelData.vramTotal));
+                if (kind === "gpu") t += row(n, tipPalette.gpu, pct(g.usage), esc(name) + (g.tempC > 0 ? (name ? " · " : "") + g.tempC.toFixed(0) + "°C" : ""));
+                else t += row("VRAM", tipPalette.vram, pct(100 * g.vramUsed / Math.max(1, g.modelData.vramTotal)), fmtBytes(g.vramUsed) + " of " + fmtBytes(g.modelData.vramTotal));
             }
         }
         if (kind === "disk" && diskSize > 0)
-            t += row("Disk", palette.disk, pct(diskPercent), fmtBytes(diskUsed) + " of " + fmtBytes(diskSize) + " · " + fmtBytes(diskSize - diskUsed) + " free");
-        if (kind === "net") t += row("Network", palette.net, "↓" + fmtRate(netDown), "↑" + fmtRate(netUp) + "/s");
+            t += row("Disk", tipPalette.disk, pct(diskPercent), fmtBytes(diskUsed) + " of " + fmtBytes(diskSize) + " · " + fmtBytes(diskSize - diskUsed) + " free");
+        if (kind === "net") t += row("Network", tipPalette.net, "↓" + fmtRate(netDown), "↑" + fmtRate(netUp) + "/s");
         return t;
     }
     readonly property string summaryText: {
