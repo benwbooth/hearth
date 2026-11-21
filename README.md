@@ -33,6 +33,51 @@ indicators for everything the Plasma tray did, Settings and Help windows.
   in corners that have an action. Sleep & Power: hearth runs swayidle
   itself under arbor with the chosen times (restarted on change); the power
   button runs `hearth-ipc call power button`.
+- Lock screen (hearth's own, macOS 26 style; `services/Lock.qml`,
+  `lock/`; Settings > Lock Screen): ext-session-lock surfaces on every
+  screen with the current wallpaper (videos and shaders keep playing, then
+  slow to a still and blur when you start typing; Wallpaper Engine shows
+  its preview), date and a big thin clock, now playing, the notification
+  count, keyboard layout / network / battery glyphs, your AccountsService
+  picture (or `~/.face`, else initials) and name, a glass password field
+  on any key or click (shake on a wrong password, Caps Lock warning),
+  "Touch the fingerprint reader", Sleep / Restart / Shut Down (the last
+  two ask first). Other screens show the wallpaper and clock. Locks on
+  Super+L / the menus / hot corners (`hearth-ipc call lock lock`), after
+  the idle time (`hearth-session lock idle`, swayidle), before sleep
+  (`hearth-session lock sleep --wait`, which holds sleep until the lock is
+  up) and for logind's Lock signal (`loginctl lock-session`, swayidle's
+  `lock` event). "Require password after" gives idle locks a grace period;
+  the screens go dark after a minute without input while locked.
+  - Authentication: two PAM conversations at once, as kscreenlocker does,
+    because pam_fprintd blocks its stack until a finger is read: the
+    password one (`hearth-lock`, else KDE's `kde`) when you press Return,
+    and the fingerprint one (`hearth-lock-fingerprint`, else
+    `kde-fingerprint`) for as long as the screen is locked. NixOS:
+    ```nix
+    security.pam.services.hearth-lock = { unixAuth = true; fprintAuth = false; };
+    security.pam.services.hearth-lock-fingerprint = {
+      unixAuth = false; fprintAuth = true;
+      rules.auth.fprintd.args = [ "max-tries=10" ];
+    };
+    ```
+    No pam_kwallet is needed: KWallet stays open while the screen is locked.
+    The password is kept only until it is handed to PAM and never logged.
+  - Safety: only a PAM success (or the grace period) unlocks; nothing
+    else in the shell can. If hearth dies while locked, arbor keeps the
+    session locked (a dead ext-session-lock client leaves the screens
+    blank) and accepts a new locker. hearth leaves
+    `$XDG_RUNTIME_DIR/hearth-locked-$WAYLAND_DISPLAY` while locked and
+    locks again when it starts and finds it. To recover by hand: Ctrl+Alt+F2,
+    log in, `hearth-recover-lock` (restarts hearth in the arbor session;
+    `--hyprlock` takes over with hyprlock instead), back with Ctrl+Alt+F1.
+  - hyprlock is only a fallback: `hearth-session lock` runs it when hearth
+    doesn't answer IPC, and hearth starts it if the compositor never
+    confirms its lock.
+  - Tests: `HEARTH_LOCK_PAM_DIR=<dir>` uses PAM files from `<dir>`
+    (pam_exec with a test password) and turns on the `lock` IPC calls
+    `testType`, `testKey`, `testClick`, `testShot` (arbor takes no
+    screenshots while locked). Never lock the real session from a test.
 - Screenshots and screen recording (our own Spectacle; Settings >
   Screenshots): Print opens the capture overlay (`popups/Screenshot.qml`):
   every screen frozen, Region (magnifier, handles, real-pixel size, last
