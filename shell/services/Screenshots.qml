@@ -24,7 +24,7 @@ Singleton {
     readonly property var defaults: ({
         printAction: "overlay",         // what Print does: "overlay" | "region" | "screen" | "all" | "activeWindow"
         afterCapture: "editor",         // "editor" (result window) | "save" (save + notify, no window)
-        copyOnCapture: false,           // also copy the image when it's taken
+        copyOnCapture: true,            // also copy the image when it's taken (Print lands on the clipboard)
         autoSave: false,                // save every capture straight away
         closeAfterCopy: false,          // close the result window after Copy
         closeAfterSave: false,          // close the result window after Save
