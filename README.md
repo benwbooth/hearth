@@ -13,9 +13,8 @@ indicators for everything the Plasma tray did, Settings and Help windows.
 - Compositor: `shell/services/Compositor.qml` picks Hyprland or arbor (via
   `$ARBOR_SOCKET`; `HEARTH_COMPOSITOR` overrides). On arbor include
   `arbor/hearth-layer-rules.kdl` for blur.
-- Global menu (arbor + mac layout): `helpers/hearth-appmenu` owns
-  `com.canonical.AppMenu.Registrar` (so Qt apps export their menus) and relays
-  com.canonical.dbusmenu; the address comes from arbor IPC `Window.app_menu`.
+- Global menu (arbor + mac layout): the focused app's menus in the menu bar,
+  like macOS and Unity. See "Global menu" below.
 - Help: the ? in the menu bar, `hearth-ipc call help shortcuts` (Super+/).
 - Clipboard history (like Klipper): the clipboard icon in the menu bar or
   Super+V (`hearth-ipc call clipboard toggle`); kept by cliphist, fed by
@@ -189,6 +188,82 @@ Text: every Text uses native rendering (`//@ pragma NativeTextRendering` plus
 `widgets/Label.qml`), and every window/popup root carries a
 `Translate { x: 0.001; y: 0.001 }` so text never lands on an exact half
 device pixel at 130% scale.
+
+## Global menu
+
+The focused app's menus sit in the menu bar after its name (arbor with the
+mac layout). Pieces:
+
+- `helpers/hearth-appmenu` owns `com.canonical.AppMenu.Registrar` (Qt,
+  Chromium, Electron and appmenu-gtk-module only export menus while that
+  name has an owner; Plasma's kded owns it in Plasma, so the helper leaves it
+  alone when `XDG_CURRENT_DESKTOP` is KDE without arbor) and reads three
+  kinds of menus into one tree for `bar/GlobalMenu.qml`:
+  - com.canonical.dbusmenu: address from arbor IPC `Window.app_menu` (KDE
+    appmenu Wayland protocol).
+  - GMenuModel (org.gtk.Menus + org.gtk.Actions, as Unity read GTK apps):
+    address from arbor IPC `Window.gtk_menu`, which arbor gets through GTK's
+    `gtk_shell1.set_dbus_properties`. arbor advertises the `global_menu_bar`
+    capability while the registrar name is owned, so GTK 3/4 hide the
+    in-window menu bar of `GtkApplicationWindow`s exactly while hearth shows
+    it (`global_app_menu` too: a GNOME 3 style app menu shows at the top of
+    the bold app-name menu).
+  - X11 windows (xwayland-satellite): for a window whose Wayland client is
+    the satellite, the helper takes `_NET_ACTIVE_WINDOW` and reads its
+    `_KDE_NET_WM_APPMENU_*` / `_GTK_*` properties with `xprop`, or the menu
+    the app registered for that window id with `RegisterWindow`.
+- `nix/appmenu-gtk-module.nix` (`.#appmenu-gtk-module`, linked into hearth's
+  `lib/gtk-3.0/modules`): vala-panel's appmenu-gtk-module (ex
+  unity-gtk-module) for GTK 3 apps with plain GtkMenuBars, loaded by
+  `GTK_MODULES` in `arbor/config.kdl`. Patched to work on Wayland (register
+  after realize, `run-on-wayland` on, its own schema copy) and without
+  DT_NEEDED on GTK/GLib, so it can't drag a second GTK into apps built
+  against another nixpkgs. It hides menu bars only while the registrar
+  name is owned.
+- Every app also gets the bold app-name menu (About, the GTK app menu, New
+  Window, Close Window, Hide, Hide Others, Show All, Quit) and, unless its
+  own menus have one, a Window menu (Minimize, Zoom, Enter Full Screen,
+  Float, Move to Workspace, Bring All to Front, the app's windows).
+- A window without menus of its own (a dialog, a second X11 window) shows the
+  last menu seen for its app id, like macOS. Titles that would run into the
+  status items are left out. While a hearth menu has the keyboard (arbor
+  then reports no focused window) the menu bar keeps the app it had.
+
+Coverage on arbor (tested in a nested arbor on a private session bus,
+2026-11-20; "before" is hearth/arbor before this work):
+
+| App / toolkit | Before | Now | How |
+|---|---|---|---|
+| Qt 5/6 widgets, KDE apps (KWrite, Konsole, Okular, KeePassXC) on Wayland | yes* | yes | dbusmenu via KDE appmenu protocol |
+| Qt on X11 (`QT_QPA_PLATFORM=xcb`) | no | yes | `_KDE_NET_WM_APPMENU_*` on the X window |
+| Qt Quick with `Qt.labs.platform` MenuBar | yes | yes | dbusmenu (QPlatformMenuBar) |
+| Qt Quick with QtQuick.Controls `MenuBar` (earshot, Kog, almanac, tessera have none) | no | fallback | Qt 6.11 makes it native on macOS only; use `Qt.labs.platform` MenuBar to export |
+| GTK 3 GtkApplication menu bar (gtk3-demo-application, LibreOffice gtk3) | no | yes | GMenuModel via gtk_shell1 |
+| GTK 3 plain GtkMenuBar (tested with a PyGObject app; Emacs pgtk, Inkscape, virt-manager, meld expected) | no | yes | appmenu-gtk-module |
+| GTK 3 on X11 | no | yes | `_GTK_*` properties |
+| GTK 4 GtkApplication menu bar | no | yes | GMenuModel via gtk_shell1 |
+| GTK 4 / libadwaita apps without a menu bar (most GNOME apps) | fallback | fallback | they have none (hamburger menus) |
+| LibreOffice (gtk3 VCL; kf6 VCL in Plasma) | no | yes | its own GMenuModel export |
+| Brave / Chrome / Chromium, Wayland | no | yes | Chromium's dbusmenu via KDE appmenu protocol (needs the registrar) |
+| Brave / Chromium, X11 | no | yes | RegisterWindow on our registrar |
+| Electron on X11 (VS Code/Cursor with `"window.titleBarStyle": "native"`, Slack, Teams, Spotify, ChatGPT app) | no | yes | RegisterWindow; Electron hides its in-window bar |
+| Electron on Wayland (Claude Desktop, VS Code, Cursor by default) | fallback | fallback | Electron has no Wayland global menu; run with `--ozone-platform=x11` to get it |
+| Firefox, Thunderbird | fallback | fallback | no global menu upstream (only distro patches) |
+| JetBrains IDEs (X11 by default) | no | expected yes, untested | IntelliJ's own dbusmenu + RegisterWindow on X11 |
+| Java Swing/AWT | fallback | fallback | no export without jayatana (not packaged) |
+| Wine / Proton games and apps | fallback | fallback | Wine draws its menus in the window |
+| Steam, games, SDL/GLFW | fallback | fallback | no menu bar |
+| Ghostty, Warp, other custom-drawn apps | fallback | fallback | no exported menu |
+
+"fallback": the app-name and Window menus only. *Before, the helper took
+`XDG_CURRENT_DESKTOP=arbor:KDE` for Plasma and left the registrar to a kded
+that arbor sessions don't run, so Qt menus only showed if something else
+owned it.
+
+Testing: `helpers/hearth-appmenu` speaks JSON lines on stdin/stdout (see its
+docstring), so a second copy with `HEARTH_APPMENU_REGISTRAR=0` can watch and
+click any menu on the bus; `hearth-ipc call appmenu dump` prints what the
+menu bar has. Never run the registrar on the live bus from a test session.
 
 ## Look
 

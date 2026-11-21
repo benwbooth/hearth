@@ -31,6 +31,7 @@ Scope {
             focusOrder: o.focusHistoryID !== undefined ? o.focusHistoryID : 1e6,
             special: !!(t.workspace && t.workspace.id < 0),
             appMenu: null,
+            gtkMenu: null,
             toplevel: t.wayland,
             hypr: t
         };

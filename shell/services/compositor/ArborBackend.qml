@@ -66,6 +66,11 @@ Scope {
                 // arbor: {"service_name", "object_path"} of the window's
                 // com.canonical.dbusmenu menu bar (KDE appmenu protocol).
                 appMenu: w.app_menu || null,
+                // arbor: where a GTK window's GMenuModel menus live
+                // (gtk_shell1 set_dbus_properties): unique_bus_name,
+                // menubar_path, app_menu_path, window_object_path,
+                // application_object_path.
+                gtkMenu: w.gtk_menu || null,
                 toplevel: tops[w.id] || null,
                 hypr: null
             };

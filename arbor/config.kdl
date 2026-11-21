@@ -47,6 +47,12 @@ environment {
     QT_QPA_PLATFORM "wayland;xcb"
     XDG_MENU_PREFIX "plasma-"
     ELECTRON_OZONE_PLATFORM_HINT "auto"
+    // Global menu for GTK 3 apps with plain GtkMenuBars (README "Global
+    // menu"): hearth ships the module in lib/gtk-3.0/modules, found through
+    // GTK_PATH's /run/current-system/sw/lib/gtk-3.0. It only hides the
+    // in-window menu bar while hearth's menu bar runs (it watches the
+    // com.canonical.AppMenu.Registrar name).
+    GTK_MODULES "appmenu-gtk-module"
 }
 
 cursor {

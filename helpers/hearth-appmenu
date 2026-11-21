@@ -1,34 +1,54 @@
 #!/usr/bin/env python3
-"""Global menu relay: speaks com.canonical.dbusmenu for hearth's menu bar.
+"""Global menu relay: reads apps' menus off the session bus for hearth's menu bar.
 
-The compositor tells hearth where the focused window's menu lives (arbor:
-arbor IPC `Window.app_menu = {service_name, object_path}`, set through the
-KDE appmenu Wayland protocol). Quickshell can't call arbitrary DBus, so
-hearth runs this and talks JSON lines:
+The compositor tells hearth where the focused window's menu lives. Quickshell
+can't call arbitrary DBus, so hearth runs this and talks JSON lines. Three
+kinds of menus, all turned into the same tree:
+
+  dbusmenu  com.canonical.dbusmenu (Qt/KDE apps, LibreOffice, Chromium and
+            Electron on X11, Java with jayatana). arbor IPC `Window.app_menu`
+            (KDE appmenu Wayland protocol), or the X11 window's
+            _KDE_NET_WM_APPMENU_* properties / RegisterWindow on our registrar.
+  gtk       GMenuModel: org.gtk.Menus + org.gtk.Actions (GtkApplication menu
+            bars in GTK 3 and 4, and plain GtkMenuBars exported by
+            appmenu-gtk-module). arbor IPC `Window.gtk_menu` (gtk_shell1
+            set_dbus_properties) or the X11 window's _GTK_* properties.
+  x11       an X11 window through xwayland-satellite: the helper finds the X
+            window (_NET_ACTIVE_WINDOW, which the satellite sets on focus) and
+            then one of the two above.
 
 stdin (one command per line):
-  {"cmd": "watch", "service": S, "path": P}   follow this menu (replaces the last)
+  {"cmd": "watch", "key": K, "kind": "dbusmenu", "service": S, "path": P}
+  {"cmd": "watch", "key": K, "kind": "gtk", "bus": B, "menubar": P,
+   "appmenu": P, "app": P, "win": P}
+  {"cmd": "watch", "key": K, "kind": "x11", "title": T, "pid": N}
+      (any window without an address: "none" unless pid is the satellite)
   {"cmd": "unwatch"}
-  {"cmd": "open", "id": N}     a (sub)menu is about to show: AboutToShow + "opened"
+  {"cmd": "open", "id": N}     a (sub)menu is about to show
   {"cmd": "close", "id": N}    it closed
   {"cmd": "click", "id": N}    an item was activated
 
 stdout:
   {"type": "registrar", "owned": bool}
-  {"type": "menu", "service": S, "path": P, "menu": ITEM}
+  {"type": "menu", "key": K, "source": "dbusmenu"|"gtk", "menu": ITEM}
       ITEM = {id, label, enabled, visible, type ("standard"|"separator"),
               toggleType (""|"checkmark"|"radio"), toggleState (-1|0|1),
               icon, shortcut ("Ctrl+S"), submenu (bool), children: [ITEM]}
-      Labels have their mnemonic underscores removed.
+      Labels have their mnemonic underscores removed. A GTK app menu (GNOME 3
+      style) comes as a root child with id -2 and an empty label.
+  {"type": "none", "key": K}   the window has no exported menu (x11)
+  {"type": "resolved", "key": K, "request": R}  the x11 window's menu, as a
+      dbusmenu/gtk watch command (hearth keeps it for the app's other windows)
   {"type": "error", "message": str}
 
-Qt (plasma-integration) and appmenu-gtk-module only export menus when the
-session bus has `com.canonical.AppMenu.Registrar`; Plasma provides it (kded's
-appmenu module). Outside Plasma this registers a minimal one, which also
-records X11 window ids for apps that use RegisterWindow.
+Qt (plasma-integration), Chromium, Electron and appmenu-gtk-module only
+export menus when the session bus has `com.canonical.AppMenu.Registrar`;
+Plasma provides it (kded's appmenu module). Outside Plasma this registers a
+minimal one, which records X11 window ids for apps that use RegisterWindow.
 """
 import json
 import os
+import subprocess
 import sys
 import time
 
@@ -38,11 +58,14 @@ import dbus.service
 from gi.repository import GLib
 
 DBUSMENU = "com.canonical.dbusmenu"
+GTK_MENUS = "org.gtk.Menus"
+GTK_ACTIONS = "org.gtk.Actions"
 REGISTRAR = "com.canonical.AppMenu.Registrar"
 REGISTRAR_PATH = "/com/canonical/AppMenu/Registrar"
 
 bus = None
-current = None  # {"service", "path", "proxy", "matches", "pending"}
+registrar = None
+current = None  # the watched source (DbusMenu / GtkMenu / X11Window)
 
 
 def out(obj):
@@ -51,6 +74,10 @@ def out(obj):
         sys.stdout.flush()
     except BrokenPipeError:
         GLib.idle_add(loop.quit)
+
+
+def err(e):
+    out({"type": "error", "message": str(e)})
 
 
 def strip_mnemonic(s):
@@ -79,114 +106,636 @@ def shortcut_text(sc):
         return ""
 
 
-def convert(node):
-    nid, props, children = node
-    p = {str(k): v for k, v in props.items()}
-    kids = [convert(c) for c in children]
-    typ = str(p.get("type", "standard"))
-    return {
-        "id": int(nid),
-        "label": strip_mnemonic(str(p.get("label", ""))),
-        "enabled": bool(p.get("enabled", True)),
-        "visible": bool(p.get("visible", True)),
-        "type": typ,
-        "toggleType": str(p.get("toggle-type", "")),
-        "toggleState": int(p.get("toggle-state", -1)),
-        "icon": str(p.get("icon-name", "")),
-        "shortcut": shortcut_text(p.get("shortcut", [])),
-        "submenu": str(p.get("children-display", "")) == "submenu" or len(kids) > 0,
-        "children": kids,
-    }
+def item(nid, label="", **kw):
+    d = {"id": nid, "label": label, "enabled": True, "visible": True, "type": "standard",
+         "toggleType": "", "toggleState": -1, "icon": "", "shortcut": "",
+         "submenu": False, "children": []}
+    d.update(kw)
+    return d
 
 
-def fetch(cur):
-    """Fetch the whole layout of `cur` and print it (debounced)."""
-    if cur is not current or cur.get("pending"):
-        return
-    cur["pending"] = True
+# ---------------------------------------------------------------- dbusmenu
 
-    def run():
-        cur["pending"] = False
-        if cur is not current:
+class DbusMenu:
+    """com.canonical.dbusmenu at (service, path)."""
+
+    def __init__(self, key, service, path):
+        self.key, self.service, self.path = key, service, path
+        self.matches, self.pending, self.alive = [], False, True
+        obj = bus.get_object(service, path, introspect=False)
+        self.iface = dbus.Interface(obj, DBUSMENU)
+        for sig in ("LayoutUpdated", "ItemsPropertiesUpdated", "ItemActivationRequested"):
+            self.matches.append(bus.add_signal_receiver(
+                lambda *a: self.fetch(), signal_name=sig, dbus_interface=DBUSMENU,
+                bus_name=service, path=path))
+
+        # GTK (appmenu-gtk-module's dbusmenu mode) and Chromium fill submenus
+        # on AboutToShow: ask for the root and every top-level menu once.
+        def after_root(*_):
+            def got(revision, layout):
+                ids = [int(c[0]) for c in layout[2]]
+                self.about_to_show(ids, self.fetch)
+
+            self.iface.GetLayout(0, 1, dbus.Array([], signature="s"),
+                                 reply_handler=got, error_handler=lambda e: self.fetch())
+
+        self.iface.AboutToShow(dbus.Int32(0), reply_handler=after_root, error_handler=after_root)
+
+    def request(self):
+        return {"key": "d\n" + self.service + "\n" + self.path, "kind": "dbusmenu",
+                "service": self.service, "path": self.path}
+
+    def same(self, other):
+        return isinstance(other, DbusMenu) and other.service == self.service and other.path == self.path
+
+    def stop(self):
+        self.alive = False
+        for m in self.matches:
+            m.remove()
+
+    @staticmethod
+    def convert(node):
+        nid, props, children = node
+        p = {str(k): v for k, v in props.items()}
+        kids = [DbusMenu.convert(c) for c in children]
+        return item(
+            int(nid), strip_mnemonic(str(p.get("label", ""))),
+            enabled=bool(p.get("enabled", True)), visible=bool(p.get("visible", True)),
+            type=str(p.get("type", "standard")), toggleType=str(p.get("toggle-type", "")),
+            toggleState=int(p.get("toggle-state", -1)), icon=str(p.get("icon-name", "")),
+            shortcut=shortcut_text(p.get("shortcut", [])),
+            submenu=str(p.get("children-display", "")) == "submenu" or len(kids) > 0,
+            children=kids)
+
+    def fetch(self):
+        """Fetch the whole layout and print it (debounced)."""
+        if not self.alive or self.pending:
+            return
+        self.pending = True
+
+        def run():
+            self.pending = False
+            if not self.alive:
+                return False
+
+            def ok(revision, layout):
+                if self.alive:
+                    out({"type": "menu", "key": self.key, "source": "dbusmenu",
+                         "menu": self.convert(layout)})
+
+            self.iface.GetLayout(0, -1, dbus.Array([], signature="s"),
+                                 reply_handler=ok, error_handler=lambda e: self.alive and err(e))
             return False
 
-        def ok(revision, layout):
-            if cur is current:
-                out({"type": "menu", "service": cur["service"], "path": cur["path"],
-                     "menu": convert(layout)})
+        GLib.timeout_add(40, run)
 
-        def err(e):
-            if cur is current:
-                out({"type": "error", "message": str(e)})
+    def about_to_show(self, ids, then=None):
+        left = [len(ids)]
 
-        cur["iface"].GetLayout(0, -1, dbus.Array([], signature="s"),
-                               reply_handler=ok, error_handler=err)
+        def done(*_):
+            left[0] -= 1
+            if left[0] <= 0 and then:
+                then()
+
+        if not ids:
+            if then:
+                then()
+            return
+        for i in ids:
+            self.iface.AboutToShow(dbus.Int32(i), reply_handler=done, error_handler=done)
+
+    def event(self, nid, name):
+        self.iface.Event(dbus.Int32(nid), name, dbus.Int32(0, variant_level=1),
+                         dbus.UInt32(int(time.time()) & 0xFFFFFFFF),
+                         reply_handler=lambda *a: None, error_handler=err)
+
+    def open(self, nid):
+        self.event(nid, "opened")
+        self.about_to_show([nid], self.fetch)
+
+    def close(self, nid):
+        self.event(nid, "closed")
+
+    def click(self, nid):
+        self.event(nid, "clicked")
+
+
+# ---------------------------------------------------------------- GMenuModel
+
+GTK_KEYS = {
+    "plus": "+", "minus": "-", "equal": "=", "comma": ",", "period": ".", "slash": "/",
+    "backslash": "\\", "question": "?", "semicolon": ";", "apostrophe": "'", "grave": "`",
+    "bracketleft": "[", "bracketright": "]", "Return": "Return", "KP_Enter": "Enter",
+    "Delete": "Del", "Insert": "Ins", "Escape": "Esc", "Page_Up": "PgUp",
+    "Page_Down": "PgDown", "BackSpace": "Backspace", "space": "Space",
+    "KP_Add": "+", "KP_Subtract": "-", "asterisk": "*", "exclam": "!",
+}
+GTK_MODS = {"primary": "Ctrl", "control": "Ctrl", "ctrl": "Ctrl", "shift": "Shift",
+            "alt": "Alt", "mod1": "Alt", "super": "Meta", "meta": "Meta", "hyper": "Hyper"}
+
+
+def gtk_accel_text(accel):
+    """'<Primary><Shift>z' -> 'Ctrl+Shift+Z' (the dbusmenu style above)."""
+    mods, rest = [], accel
+    while rest.startswith("<") and ">" in rest:
+        m, rest = rest[1:].split(">", 1)
+        mods.append(GTK_MODS.get(m.lower(), m))
+    if not rest:
+        return ""
+    key = GTK_KEYS.get(rest, rest.upper() if len(rest) == 1 else rest)
+    return "+".join(mods + [key])
+
+
+def gtk_icon(v):
+    """A serialized GIcon: ('themed', ['name', ...]) or a plain name."""
+    try:
+        if isinstance(v, str):
+            return "" if v.startswith("/") or "://" in v else str(v)
+        if len(v) == 2 and str(v[0]) == "themed":
+            names = v[1]
+            return str(names[0]) if len(names) else ""
+    except Exception:
+        pass
+    return ""
+
+
+def plain(v):
+    """dbus-python value -> plain Python (for comparisons)."""
+    if isinstance(v, (dbus.Boolean,)):
+        return bool(v)
+    if isinstance(v, (dbus.Int16, dbus.Int32, dbus.Int64, dbus.UInt16, dbus.UInt32,
+                      dbus.UInt64, dbus.Byte)):
+        return int(v)
+    if isinstance(v, dbus.Double):
+        return float(v)
+    if isinstance(v, (dbus.String, dbus.ObjectPath, dbus.Signature)):
+        return str(v)
+    if isinstance(v, (dbus.Array, list)):
+        return [plain(x) for x in v]
+    if isinstance(v, (dbus.Struct, tuple)):
+        return tuple(plain(x) for x in v)
+    if isinstance(v, dbus.Dictionary):
+        return {plain(k): plain(x) for k, x in v.items()}
+    return v
+
+
+class ActionGroup:
+    """One org.gtk.Actions object: {name: [enabled, signature, state list]}."""
+
+    def __init__(self, owner, path):
+        self.owner, self.path, self.actions, self.ready = owner, path, {}, False
+        obj = bus.get_object(owner.bus, path, introspect=False)
+        self.iface = dbus.Interface(obj, GTK_ACTIONS)
+        self.match = bus.add_signal_receiver(
+            self.changed, signal_name="Changed", dbus_interface=GTK_ACTIONS,
+            bus_name=owner.bus, path=path)
+        self.iface.DescribeAll(reply_handler=self.described, error_handler=self.failed)
+
+    def described(self, actions):
+        self.actions = {str(k): [bool(v[0]), str(v[1]), list(v[2])] for k, v in actions.items()}
+        self.ready = True
+        self.owner.rebuild()
+
+    def failed(self, e):
+        self.ready = True
+        self.owner.rebuild()
+
+    def changed(self, removed, enabled, state, added):
+        for n in removed:
+            self.actions.pop(str(n), None)
+        for n, e in enabled.items():
+            if str(n) in self.actions:
+                self.actions[str(n)][0] = bool(e)
+        for n, s in state.items():
+            if str(n) in self.actions:
+                self.actions[str(n)][2] = [s]
+        for n, v in added.items():
+            self.actions[str(n)] = [bool(v[0]), str(v[1]), list(v[2])]
+        self.owner.rebuild()
+
+    def stop(self):
+        self.match.remove()
+
+
+class GtkMenu:
+    """A GMenuModel menu bar (org.gtk.Menus) and its actions (org.gtk.Actions)."""
+
+    def __init__(self, key, busname, menubar, appmenu="", app="", win=""):
+        self.key, self.bus = key, busname
+        self.paths = {"menubar": menubar, "appmenu": appmenu}
+        self.app, self.win = app, win
+        self.alive, self.pending = True, False
+        self.models = {}   # which ("menubar"/"appmenu") -> Model
+        self.groups = {}   # path -> ActionGroup
+        self.ids = {}      # (which, group, menu, index) -> int id
+        self.by_id = {}    # id -> {"action", "target", "submenu_action"}
+        self.next_id = 1
+        for which, path in self.paths.items():
+            if path:
+                self.models[which] = GtkModel(self, path)
+        # app. and win. actions; other prefixes (appmenu-gtk-module's "unity")
+        # live next to the menu itself.
+        for path in {app, win, menubar} - {""}:
+            self.groups[path] = ActionGroup(self, path)
+
+    def request(self):
+        return {"key": "g\n" + self.bus + "\n" + self.paths["menubar"] + "\n" + self.win,
+                "kind": "gtk", "bus": self.bus, "menubar": self.paths["menubar"],
+                "appmenu": self.paths["appmenu"], "app": self.app, "win": self.win}
+
+    def same(self, other):
+        return (isinstance(other, GtkMenu) and other.bus == self.bus
+                and other.paths == self.paths and other.app == self.app and other.win == self.win)
+
+    def stop(self):
+        self.alive = False
+        for m in self.models.values():
+            m.stop()
+        for g in self.groups.values():
+            g.stop()
+
+    def group_for(self, prefix, name):
+        """The ActionGroup holding `prefix.name`."""
+        order = []
+        if prefix == "app":
+            order = [self.app]
+        elif prefix == "win":
+            order = [self.win]
+        order += [self.paths["menubar"], self.win, self.app]
+        for p in order:
+            g = self.groups.get(p)
+            if g and name in g.actions:
+                return g
+        return None
+
+    def lookup(self, action):
+        if "." not in action:
+            return None, None
+        prefix, name = action.split(".", 1)
+        g = self.group_for(prefix, name)
+        return g, name
+
+    def rebuild(self):
+        if not self.alive or self.pending:
+            return
+        self.pending = True
+        GLib.timeout_add(30, self._emit)
+
+    def _emit(self):
+        self.pending = False
+        if not self.alive:
+            return False
+        if any(not m.ready for m in self.models.values()) or any(not g.ready for g in self.groups.values()):
+            return False
+        root = item(0)
+        bar = self.models.get("menubar")
+        if bar:
+            root["children"] = self.convert("menubar", bar, (0, 0))
+        am = self.models.get("appmenu")
+        if am:
+            kids = self.convert("appmenu", am, (0, 0))
+            if kids:
+                root["children"].insert(0, item(-2, "", submenu=True, children=kids))
+        out({"type": "menu", "key": self.key, "source": "gtk", "menu": root})
         return False
 
-    GLib.timeout_add(40, run)
+    def nid(self, k):
+        if k not in self.ids:
+            self.ids[k] = self.next_id
+            self.next_id += 1
+        return self.ids[k]
+
+    def convert(self, which, model, gm, depth=0):
+        """Items of menu `gm` (group, menu), with sections flattened."""
+        if depth > 12:
+            return []
+        res = []
+        sections = []  # list of item lists, joined by separators
+        cur = []
+        for idx, attrs in enumerate(model.menus.get(gm, [])):
+            sec = attrs.get(":section")
+            if sec is not None:
+                if cur:
+                    sections.append(cur)
+                    cur = []
+                kids = self.convert(which, model, (int(sec[0]), int(sec[1])), depth + 1)
+                if kids:
+                    sections.append(kids)
+                continue
+            it = self.convert_item(which, model, gm, idx, attrs, depth)
+            if it is not None:
+                cur.append(it)
+        if cur:
+            sections.append(cur)
+        for i, s in enumerate(sections):
+            if i:
+                res.append(item(self.nid((which, gm[0], gm[1], -1 - i)), type="separator"))
+            res.extend(s)
+        return res
+
+    def convert_item(self, which, model, gm, idx, attrs, depth):
+        nid = self.nid((which, gm[0], gm[1], idx))
+        label = strip_mnemonic(str(attrs.get("label", "")))
+        action = str(attrs.get("action", ""))
+        target = attrs.get("target")
+        sub = attrs.get(":submenu")
+        info = {"action": action, "target": target,
+                "submenu_action": str(attrs.get("submenu-action", ""))}
+        self.by_id[nid] = info
+        hidden_when = str(attrs.get("hidden-when", ""))
+        it = item(nid, label, icon=gtk_icon(attrs.get("icon", attrs.get("verb-icon", ""))),
+                  shortcut=gtk_accel_text(str(attrs.get("accel", ""))))
+        if sub is not None:
+            it["submenu"] = True
+            it["children"] = self.convert(which, model, (int(sub[0]), int(sub[1])), depth + 1)
+            return it
+        if not action:
+            it["enabled"] = False
+            return it
+        g, name = self.lookup(action)
+        if g is None:
+            if hidden_when in ("action-missing", "action-disabled"):
+                return None
+            it["enabled"] = False
+            return it
+        enabled, sig, state = g.actions[name]
+        if not enabled and hidden_when == "action-disabled":
+            return None
+        it["enabled"] = enabled
+        if state:
+            s = plain(state[0])
+            if target is not None:
+                it["toggleType"] = "radio"
+                it["toggleState"] = 1 if s == plain(target) else 0
+            elif isinstance(s, bool):
+                it["toggleType"] = "checkmark"
+                it["toggleState"] = 1 if s else 0
+        return it
+
+    def open(self, nid):
+        info = self.by_id.get(nid)
+        if info and info["submenu_action"]:
+            self.set_state(info["submenu_action"], True)
+
+    def close(self, nid):
+        info = self.by_id.get(nid)
+        if info and info["submenu_action"]:
+            self.set_state(info["submenu_action"], False)
+
+    def set_state(self, action, value):
+        g, name = self.lookup(action)
+        if g:
+            g.iface.SetState(name, dbus.Boolean(value, variant_level=1), dbus.Dictionary({}, signature="sv"),
+                             reply_handler=lambda *a: None, error_handler=err)
+
+    def click(self, nid):
+        info = self.by_id.get(nid)
+        if not info or not info["action"]:
+            return
+        g, name = self.lookup(info["action"])
+        if not g:
+            return
+        params = dbus.Array([info["target"]] if info["target"] is not None else [], signature="v")
+        g.iface.Activate(name, params, dbus.Dictionary({}, signature="sv"),
+                         reply_handler=lambda *a: None, error_handler=err)
 
 
-def about_to_show(cur, ids, then=None):
-    left = [len(ids)]
+class GtkModel:
+    """The org.gtk.Menus object at `path`: subscribed groups -> menus."""
 
-    def done(*_):
-        left[0] -= 1
-        if left[0] <= 0 and then:
-            then()
+    def __init__(self, owner, path):
+        self.owner, self.path = owner, path
+        self.menus = {}       # (group, menu) -> [attrs]
+        self.subscribed = set()
+        self.waiting = 0
+        self.ready = False
+        obj = bus.get_object(owner.bus, path, introspect=False)
+        self.iface = dbus.Interface(obj, GTK_MENUS)
+        self.match = bus.add_signal_receiver(
+            self.changed, signal_name="Changed", dbus_interface=GTK_MENUS,
+            bus_name=owner.bus, path=path)
+        self.subscribe([0])
 
-    if not ids:
-        if then:
-            then()
-        return
-    for i in ids:
-        cur["iface"].AboutToShow(dbus.Int32(i), reply_handler=done, error_handler=done)
+    def subscribe(self, groups):
+        groups = [g for g in groups if g not in self.subscribed]
+        if not groups:
+            if not self.waiting:
+                self.ready = True
+                self.owner.rebuild()
+            return
+        self.subscribed.update(groups)
+        self.waiting += 1
 
+        def ok(menus):
+            self.waiting -= 1
+            more = set()
+            for g, m, items in menus:
+                self.menus[(int(g), int(m))] = [self.attrs(i) for i in items]
+                more |= self.links(self.menus[(int(g), int(m))])
+            self.subscribe(sorted(more))
+
+        def bad(e):
+            self.waiting -= 1
+            err(e)
+            self.subscribe([])
+
+        self.iface.Start(dbus.Array([dbus.UInt32(g) for g in groups], signature="u"),
+                         reply_handler=ok, error_handler=bad)
+
+    @staticmethod
+    def attrs(d):
+        return {str(k): v for k, v in d.items()}
+
+    @staticmethod
+    def links(items):
+        gs = set()
+        for a in items:
+            for k in (":section", ":submenu"):
+                if k in a:
+                    gs.add(int(a[k][0]))
+        return gs
+
+    def changed(self, changes):
+        more = set()
+        for g, m, pos, removed, added in changes:
+            key = (int(g), int(m))
+            lst = self.menus.setdefault(key, [])
+            new = [self.attrs(i) for i in added]
+            lst[int(pos):int(pos) + int(removed)] = new
+            more |= self.links(new)
+        self.subscribe(sorted(more))
+        self.owner.rebuild()
+
+    def stop(self):
+        self.match.remove()
+        if self.subscribed:
+            try:
+                self.iface.End(dbus.Array([dbus.UInt32(g) for g in self.subscribed], signature="u"),
+                               reply_handler=lambda *a: None, error_handler=lambda *a: None)
+            except Exception:
+                pass
+
+
+# ---------------------------------------------------------------- X11
+
+X11_PROPS = ["_KDE_NET_WM_APPMENU_SERVICE_NAME", "_KDE_NET_WM_APPMENU_OBJECT_PATH",
+             "_GTK_UNIQUE_BUS_NAME", "_GTK_MENUBAR_OBJECT_PATH", "_GTK_APP_MENU_OBJECT_PATH",
+             "_GTK_APPLICATION_OBJECT_PATH", "_GTK_WINDOW_OBJECT_PATH", "_NET_WM_NAME"]
+
+
+def xprop(args):
+    try:
+        env = dict(os.environ, LC_ALL="C.UTF-8")  # titles as UTF-8, not escaped
+        r = subprocess.run(["xprop"] + args, capture_output=True, text=True, timeout=2, env=env)
+        return r.stdout
+    except Exception:
+        return ""
+
+
+def x11_active_window():
+    o = xprop(["-root", "-notype", "_NET_ACTIVE_WINDOW"])
+    if "#" not in o:
+        return 0
+    try:
+        return int(o.split("#", 1)[1].split(",")[0].strip(), 16)
+    except ValueError:
+        return 0
+
+
+def x11_props(xid):
+    props = {}
+    for line in xprop(["-id", hex(xid), "-notype"] + X11_PROPS).splitlines():
+        if " = " not in line:
+            continue
+        k, v = line.split(" = ", 1)
+        v = v.strip()
+        if v.startswith('"') and v.endswith('"'):
+            v = v[1:-1]
+        props[k.strip()] = v
+    return props
+
+
+def is_satellite(pid):
+    """Whether the Wayland client `pid` is xwayland-satellite (X11 windows)."""
+    try:
+        with open(f"/proc/{int(pid)}/comm") as f:
+            # NixOS wraps it: ".xwayland-satel" (comm is cut at 15 bytes).
+            return "xwayland-sat" in f.read()
+    except (OSError, ValueError):
+        return False
+
+
+class X11Window:
+    """The focused X11 window (xwayland-satellite): resolve, then delegate."""
+
+    def __init__(self, key, title, pid=0):
+        self.key, self.title = key, title
+        self.inner, self.xid, self.alive, self.tries = None, 0, True, 0
+        if pid and not is_satellite(pid):
+            self.alive = False
+            out({"type": "none", "key": key})
+            return
+        self.resolve()
+
+    def same(self, other):
+        return isinstance(other, X11Window) and other.key == self.key
+
+    def resolve(self):
+        if not self.alive:
+            return False
+        xid = x11_active_window()
+        props = x11_props(xid) if xid else {}
+        # The satellite sets _NET_ACTIVE_WINDOW when the Wayland focus
+        # arrives, which may be a moment after arbor reports it.
+        if self.title and props.get("_NET_WM_NAME", self.title) != self.title and self.tries < 5:
+            self.tries += 1
+            GLib.timeout_add(80 * self.tries, self.resolve)
+            return False
+        self.xid = xid
+        new = None
+        try:
+            if props.get("_KDE_NET_WM_APPMENU_SERVICE_NAME") and props.get("_KDE_NET_WM_APPMENU_OBJECT_PATH"):
+                new = DbusMenu(self.key, props["_KDE_NET_WM_APPMENU_SERVICE_NAME"],
+                               props["_KDE_NET_WM_APPMENU_OBJECT_PATH"])
+            elif props.get("_GTK_UNIQUE_BUS_NAME") and (props.get("_GTK_MENUBAR_OBJECT_PATH")
+                                                        or props.get("_GTK_APP_MENU_OBJECT_PATH")):
+                new = GtkMenu(self.key, props["_GTK_UNIQUE_BUS_NAME"],
+                              props.get("_GTK_MENUBAR_OBJECT_PATH", ""),
+                              props.get("_GTK_APP_MENU_OBJECT_PATH", ""),
+                              props.get("_GTK_APPLICATION_OBJECT_PATH", ""),
+                              props.get("_GTK_WINDOW_OBJECT_PATH", ""))
+            elif registrar and xid in registrar.windows:
+                s, p = registrar.windows[xid]
+                new = DbusMenu(self.key, s, p)
+        except dbus.DBusException as e:
+            err(e)
+        if self.inner and new and self.inner.same(new):
+            new.stop()
+            return False
+        if self.inner:
+            self.inner.stop()
+        self.inner = new
+        if new is None:
+            out({"type": "none", "key": self.key})
+        else:
+            out({"type": "resolved", "key": self.key, "request": new.request()})
+        return False
+
+    def registered(self, xid):
+        if xid == self.xid and self.alive:
+            self.resolve()
+
+    def stop(self):
+        self.alive = False
+        if self.inner:
+            self.inner.stop()
+
+    def open(self, nid):
+        if self.inner:
+            self.inner.open(nid)
+
+    def close(self, nid):
+        if self.inner:
+            self.inner.close(nid)
+
+    def click(self, nid):
+        if self.inner:
+            self.inner.click(nid)
+
+
+# ---------------------------------------------------------------- commands
 
 def unwatch():
     global current
     if current:
-        for m in current["matches"]:
-            m.remove()
+        current.stop()
     current = None
 
 
-def watch(service, path):
+def watch(c):
     global current
-    if current and current["service"] == service and current["path"] == path:
-        fetch(current)
+    kind = c.get("kind", "dbusmenu")
+    key = c.get("key") or (c.get("service", "") + "\n" + c.get("path", ""))
+    if kind == "dbusmenu":
+        new = DbusMenu(key, c["service"], c["path"])
+    elif kind == "gtk":
+        new = GtkMenu(key, c["bus"], c.get("menubar", ""), c.get("appmenu", ""),
+                      c.get("app", ""), c.get("win", ""))
+    elif kind == "x11":
+        new = X11Window(key, c.get("title", ""), c.get("pid", 0))
+    else:
+        return
+    if current and current.same(new) and getattr(current, "key", None) == key:
+        new.stop()
+        if hasattr(current, "fetch"):
+            current.fetch()
+        elif hasattr(current, "rebuild"):
+            current.rebuild()
+        elif isinstance(current, X11Window):
+            current.resolve()
         return
     unwatch()
-    try:
-        obj = bus.get_object(service, path, introspect=False)
-    except Exception as e:
-        out({"type": "error", "message": str(e)})
-        return
-    cur = {"service": service, "path": path, "iface": dbus.Interface(obj, DBUSMENU),
-           "matches": [], "pending": False}
-    current = cur
-    for sig in ("LayoutUpdated", "ItemsPropertiesUpdated", "ItemActivationRequested"):
-        cur["matches"].append(bus.add_signal_receiver(
-            lambda *a, _c=cur: fetch(_c), signal_name=sig, dbus_interface=DBUSMENU,
-            bus_name=service, path=path))
-
-    # GTK (appmenu-gtk-module) fills submenus on AboutToShow: ask for the
-    # root and every top-level menu once, then fetch.
-    def after_root(*_):
-        def got(revision, layout):
-            ids = [int(c[0]) for c in layout[2]]
-            about_to_show(cur, ids, lambda: fetch(cur))
-
-        cur["iface"].GetLayout(0, 1, dbus.Array([], signature="s"),
-                               reply_handler=got, error_handler=lambda e: fetch(cur))
-
-    cur["iface"].AboutToShow(dbus.Int32(0), reply_handler=after_root, error_handler=after_root)
-
-
-def event(cur, nid, name):
-    cur["iface"].Event(dbus.Int32(nid), name, dbus.Int32(0, variant_level=1),
-                       dbus.UInt32(int(time.time()) & 0xFFFFFFFF),
-                       reply_handler=lambda *a: None,
-                       error_handler=lambda e: out({"type": "error", "message": str(e)}))
+    current = new
 
 
 inbuf = b""
@@ -215,19 +764,17 @@ def handle(line):
     cmd = c.get("cmd")
     try:
         if cmd == "watch":
-            watch(c["service"], c["path"])
+            watch(c)
         elif cmd == "unwatch":
             unwatch()
         elif current and cmd == "open":
-            nid = int(c["id"])
-            event(current, nid, "opened")
-            about_to_show(current, [nid], lambda: fetch(current))
+            current.open(int(c["id"]))
         elif current and cmd == "close":
-            event(current, int(c["id"]), "closed")
+            current.close(int(c["id"]))
         elif current and cmd == "click":
-            event(current, int(c["id"]), "clicked")
+            current.click(int(c["id"]))
     except Exception as e:
-        out({"type": "error", "message": str(e)})
+        err(e)
 
 
 class Registrar(dbus.service.Object):
@@ -236,16 +783,28 @@ class Registrar(dbus.service.Object):
     def __init__(self, conn):
         super().__init__(conn, REGISTRAR_PATH)
         self.windows = {}
+        # Forget windows whose app left the bus.
+        conn.add_signal_receiver(self.owner_changed, signal_name="NameOwnerChanged",
+                                 dbus_interface="org.freedesktop.DBus")
+
+    def owner_changed(self, name, old, new):
+        if old and not new:
+            for w in [w for w, (s, _) in self.windows.items() if s == old]:
+                self.UnregisterWindow(dbus.UInt32(w))
 
     @dbus.service.method(REGISTRAR, in_signature="uo", sender_keyword="sender")
     def RegisterWindow(self, window_id, menu_path, sender=None):
         self.windows[int(window_id)] = (str(sender), str(menu_path))
         self.WindowRegistered(window_id, sender, menu_path)
+        if isinstance(current, X11Window):
+            current.registered(int(window_id))
 
     @dbus.service.method(REGISTRAR, in_signature="u")
     def UnregisterWindow(self, window_id):
         if self.windows.pop(int(window_id), None):
             self.WindowUnregistered(window_id)
+            if isinstance(current, X11Window):
+                current.registered(int(window_id))
 
     @dbus.service.method(REGISTRAR, in_signature="u", out_signature="so")
     def GetMenuForWindow(self, window_id):
@@ -266,21 +825,24 @@ class Registrar(dbus.service.Object):
 
 
 def main():
-    global bus, loop
+    global bus, loop, registrar
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     bus = dbus.SessionBus()
     loop = GLib.MainLoop()
 
     owned = False
-    in_kde = "KDE" in os.environ.get("XDG_CURRENT_DESKTOP", "")
+    # Plasma's kded owns the registrar there. An arbor session says
+    # "arbor:KDE" (for KDE apps' sake) but has no kded appmenu module.
+    desktops = os.environ.get("XDG_CURRENT_DESKTOP", "").split(":")
+    in_kde = "KDE" in desktops and "arbor" not in desktops
     if not in_kde and os.environ.get("HEARTH_APPMENU_REGISTRAR", "1") != "0":
         try:
             r = bus.request_name(REGISTRAR, dbus.bus.NAME_FLAG_DO_NOT_QUEUE)
             if r in (dbus.bus.REQUEST_NAME_REPLY_PRIMARY_OWNER, dbus.bus.REQUEST_NAME_REPLY_ALREADY_OWNER):
-                Registrar(bus)
+                registrar = Registrar(bus)
                 owned = True
         except dbus.DBusException as e:
-            out({"type": "error", "message": str(e)})
+            err(e)
     out({"type": "registrar", "owned": owned})
 
     GLib.io_add_watch(sys.stdin.fileno(), GLib.IO_IN | GLib.IO_HUP, on_stdin)

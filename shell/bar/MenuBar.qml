@@ -266,7 +266,9 @@ PanelWindow {
                 spacing: 0
                 transform: Translate { x: 0.001; y: 0.001 }
                 SystemMenu {}
-                GlobalMenu {}
+                // Menus that would run into the status items are left out
+                // (macOS drops them too); the space ends 12 pt before them.
+                GlobalMenu { maxWidth: right.x - left.x - x - Math.round(12 * Theme.pt) }
             }
 
             RowLayout {

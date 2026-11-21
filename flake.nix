@@ -36,6 +36,7 @@
       systemd procps coreutils gnugrep gawk util-linux iproute2
       swayidle
       python
+      xprop   # hearth-appmenu: X11 windows' menu properties (xwayland-satellite)
       # Wallpaper engine (helpers/hearth-wallpaper, desktop/Background.qml):
       # Wallpaper Engine projects, macOS .heic dynamic desktops, video
       # posters, Shadertoy compiles (qsb), API keys in the Secret Service.
@@ -59,6 +60,9 @@
     # Apple-licensed, so never shipped). Theme.qml loads it from here with a
     # FontLoader, so it works without a system-wide install.
     fontDir = "${pkgs.inter}/share/fonts/truetype";
+
+    # Global menus for plain GtkMenuBars (README "Global menu").
+    appmenu-gtk-module = pkgs.callPackage ./nix/appmenu-gtk-module.nix { };
 
     hearth = pkgs.stdenvNoCC.mkDerivation {
       pname = "hearth";
@@ -100,6 +104,10 @@
         chmod +x $out/bin/hearth-ipc
         # From a text console when the lock screen is stuck (README: Lock screen).
         ln -s $out/share/hearth/helpers/hearth-recover-lock $out/bin/hearth-recover-lock
+        # GTK_MODULES=appmenu-gtk-module (arbor/config.kdl) finds it through
+        # GTK_PATH's /run/current-system/sw/lib/gtk-3.0 with hearth installed.
+        mkdir -p $out/lib/gtk-3.0/modules
+        ln -s ${appmenu-gtk-module}/lib/gtk-3.0/modules/libappmenu-gtk-module.so $out/lib/gtk-3.0/modules/
         runHook postInstall
       '';
       meta.mainProgram = "hearth";
@@ -111,7 +119,7 @@
   in {
     packages.${system} = {
       default = hearth;
-      inherit hearth quickshell;
+      inherit hearth quickshell appmenu-gtk-module;
       inherit (boot) plymouth-theme-hearth grub-theme-hearth grub-theme-hearth-5k;
       boot-screenshots = import ./boot/vm-test.nix { inherit pkgs boot; };
     };
