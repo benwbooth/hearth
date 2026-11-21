@@ -140,6 +140,7 @@ Singleton {
         { title: "Clipboard history: copy something you copied earlier (paste, Klipper)", keys: "Super+V", run: () => Clipboard.toggleRequested() },
         { title: "Clipboard: in the history, ↑ ↓ choose, Return copies, Delete removes, Ctrl+P pins, Ctrl+E edits, Ctrl+O opens a link", keys: "Super+V", run: () => Clipboard.toggleRequested() },
         { title: "Settings: clipboard history size, pictures, passwords, apps to ignore, clear on logout", pane: "clipboard" },
+        { title: "Settings: Bluetooth: turn it on or off, connect, disconnect or forget your devices, pair new headphones, keyboards and mice", pane: "bluetooth" },
         { title: "Settings: displays: resolution, refresh rate, scale, arrangement, rotation, HDR, adaptive sync", pane: "displays" },
         { title: "Settings: keyboard layouts, key repeat, Num Lock", pane: "keyboard" },
         { title: "Settings: change keyboard shortcuts, add your own, app shortcuts", pane: "shortcuts" },

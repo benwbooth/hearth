@@ -202,6 +202,7 @@ Singleton {
         { id: "wallpaper", label: "Wallpaper", icon: "preferences-desktop-wallpaper", words: "background desktop picture slideshow" },
         { id: "lockscreen", label: "Lock Screen", icon: "system-lock-screen", words: "password lock fingerprint" },
         { id: "hotcorners", label: "Hot Corners", icon: "preferences-desktop-screensaver", words: "corner" },
+        { id: "bluetooth", label: "Bluetooth", icon: "preferences-system-bluetooth", words: "headphones keyboard mouse pair airpods speaker wireless" },
         { id: "displays", label: "Displays", icon: "preferences-desktop-display", words: "monitor screen resolution scale refresh hdr arrange" },
         { id: "keyboard", label: "Keyboard", icon: "preferences-desktop-keyboard", words: "layout repeat input language" },
         { id: "shortcuts", label: "Keyboard Shortcuts", icon: "preferences-desktop-keyboard-shortcut", words: "keys binds hotkeys" },

@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Bluetooth
 import "../../widgets"
+import "../../services"
 import "../.."
 
 // Bluetooth: adapter power, paired devices (connect/disconnect, battery) and
@@ -146,7 +147,7 @@ Indicator {
             icon: "preferences-system-bluetooth"
             text: "Bluetooth settings…"
             onTriggered: {
-                Quickshell.execDetached(["tessera", "--new-window", "--run", "bluetuith"]);
+                Settings.openRequested("bluetooth");
                 root.popup.close();
             }
         }

@@ -22,7 +22,8 @@ Scope {
         clipboard: "settings/ClipboardPane.qml", screenshots: "settings/ScreenshotsPane.qml",
         wallpaper: "settings/WallpaperPane.qml", lockscreen: "settings/LockScreenPane.qml",
         users: "settings/UsersPane.qml", spotlight: "settings/SpotlightPane.qml",
-        ai: "settings/AiPane.qml", voice: "settings/VoicePane.qml"
+        ai: "settings/AiPane.qml", voice: "settings/VoicePane.qml",
+        bluetooth: "settings/BluetoothPane.qml"
     })
 
     Connections {
@@ -76,6 +77,7 @@ Scope {
                                 { id: "wallpaper", label: "Wallpaper", icon: "preferences-desktop-wallpaper" },
                                 { id: "lockscreen", label: "Lock Screen", icon: "system-lock-screen" },
                                 { id: "hotcorners", label: "Hot Corners", icon: "preferences-desktop-screensaver" },
+                                { id: "bluetooth", label: "Bluetooth", icon: "preferences-system-bluetooth" },
                                 { id: "displays", label: "Displays", icon: "preferences-desktop-display" },
                                 { id: "keyboard", label: "Keyboard", icon: "preferences-desktop-keyboard" },
                                 { id: "shortcuts", label: "Keyboard Shortcuts", icon: "preferences-desktop-keyboard-shortcut" },
@@ -142,7 +144,7 @@ Scope {
                                      wallpaper: "Wallpaper", mouse: "Mouse & Touchpad", night: "Night Light", notifications: "Notifications",
                                      hotcorners: "Hot Corners", displays: "Displays", keyboard: "Keyboard", shortcuts: "Keyboard Shortcuts",
                                      windowrules: "Window Rules", power: "Sleep & Power", lockscreen: "Lock Screen", clipboard: "Clipboard", screenshots: "Screenshots",
-                                     users: "Users & Accounts", spotlight: "Search", ai: "AI", voice: "Voice Assistant" })[root.pane] || ""
+                                     users: "Users & Accounts", spotlight: "Search", bluetooth: "Bluetooth", ai: "AI", voice: "Voice Assistant" })[root.pane] || ""
                             font.pointSize: Theme.fontSize + 6
                             font.weight: Font.Bold
                         }
