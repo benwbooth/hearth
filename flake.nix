@@ -110,7 +110,8 @@
         # Apps launched from the dock inherit the bar's working directory;
         # start in $HOME so a bar run from a since-deleted directory doesn't
         # hand every app a dangling cwd.
-        makeWrapper ${quickshell}/bin/quickshell $out/bin/hearth \
+        mkdir -p $out/libexec
+        makeWrapper ${quickshell}/bin/quickshell $out/libexec/hearth-shell \
           --run 'cd "$HOME"' \
           --add-flags "-p $out/share/hearth/shell" \
           --prefix PATH : ${lib.makeBinPath runtimeDeps}:$out/share/hearth/helpers \
@@ -122,6 +123,24 @@
           --set-default HEARTH_VERSION "${hearthVersion}" \
           --set-default HEARTH_SOUND_DIR ${pkgs.sound-theme-freedesktop}/share/sounds/freedesktop/stereo \
           --set-default HEARTH_XKB_RULES ${pkgs.xkeyboard_config}/share/X11/xkb/rules/evdev.lst
+        # hearth runs the shell and starts it again when it quits with 75:
+        # arbor restarted in place (`arbor msg action reload-binary`, or after
+        # a crash), which ends the shell's Wayland connection (ArborBackend.qml).
+        cat > $out/bin/hearth <<EOF
+        #!${pkgs.bash}/bin/bash
+        export HEARTH_RESTARTER=1
+        child=
+        trap '[ -n "\$child" ] && kill -TERM "\$child" 2>/dev/null; wait "\$child"; exit 143' TERM INT HUP
+        while :; do
+          $out/libexec/hearth-shell "\$@" &
+          child=\$!
+          wait "\$child"; rc=\$?
+          [ "\$rc" = 75 ] || exit "\$rc"
+          echo "hearth: arbor restarted; starting the shell again" >&2
+          sleep 0.3
+        done
+        EOF
+        chmod +x $out/bin/hearth
         # Talk to the running hearth whichever build started it: quickshell
         # matches instances by config path, so after a rebuild (or a bar
         # started from another build) `-p` finds nothing and every keybind

@@ -55,6 +55,13 @@ environment {
     GTK_MODULES "appmenu-gtk-module"
 }
 
+// The shell's own windows (Help, Settings) come back with the shell, never
+// as a second copy of it: not relaunched by session restore, nor after arbor
+// restarts in place (arbor msg action reload-binary, new devloop builds).
+session-restore {
+    exclude-app-ids "org.quickshell"
+}
+
 cursor {
     xcursor-theme "Adwaita"
     xcursor-size 24

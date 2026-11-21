@@ -87,6 +87,8 @@ Singleton {
         { title: "Restart…", run: () => Session.run("reboot") },
         { title: "Shut down…", run: () => Session.run("poweroff") },
         { title: "Log out…", run: () => Session.run("logout") },
+        { title: "Restart the window manager (arbor) without logging out: Qt/KDE apps stay open and in place, other apps (browsers, Electron, GTK) reopen, the menu bar restarts", run: () => Quickshell.execDetached(["arbor", "msg", "action", "reload-binary"]) },
+        { title: "New arbor builds (devloop) switch in automatically the same way; to stop that: touch ~/.local/state/devloop/arbor/no-reload (delete the file to turn it back on)" },
         { title: "Window zones: snap the focused window into zone 1 … 9 (FancyZones)", keys: "Super+Ctrl+1 … 9" },
         { title: "Window zones: hold Shift while dragging a window to drop it into the zone under the pointer", keys: "Shift+drag" },
         { title: "Window zones: next zone layout (the tray's zones picker lists and edits them)", keys: "Super+Ctrl+PgDn", run: () => ArborZones.setLayout("", "next") },

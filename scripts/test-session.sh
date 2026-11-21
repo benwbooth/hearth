@@ -49,7 +49,8 @@ runtime_path() {
   local f=$XDG_RUNTIME_DIR/hearth-test/.runtime-path
   if [[ ! -s $f ]]; then
     local p; p=$(nix build --no-link --print-out-paths "$repo#hearth" | tail -1)
-    grep -oE "'/nix/store/[^']+/bin'" "$p/bin/hearth" | tr -d "'" | sort -u | paste -sd: > "$f"
+    local w=$p/libexec/hearth-shell; [[ -e $w ]] || w=$p/bin/hearth
+    grep -oE "'/nix/store/[^']+/bin'" "$w" | tr -d "'" | sort -u | paste -sd: > "$f"
   fi
   cat "$f"
 }

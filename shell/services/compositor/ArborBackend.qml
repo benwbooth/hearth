@@ -197,6 +197,16 @@ Scope {
                 flush();
                 root.streaming = true;
             } else {
+                // arbor restarted in place (reload-binary, or after a crash: its
+                // supervisor keeps the sockets). Qt could reconnect this shell's
+                // Wayland connection, but Quickshell's own protocol objects (layer
+                // surfaces, toplevel handles, screencopy) don't survive that, so
+                // quit and let the hearth wrapper start a fresh shell (exit 75,
+                // see flake.nix). Only under that wrapper; test runs reconnect.
+                if (root.streaming && Quickshell.env("HEARTH_RESTARTER") === "1") {
+                    console.info("arbor restarted: restarting the shell");
+                    Qt.exit(75);
+                }
                 root.streaming = false;
                 if (root.socketPath !== "") reconnect.start();
             }
