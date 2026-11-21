@@ -170,13 +170,16 @@ done`]
     property real peakNet: 1
     property int tick: 0
     property var lastCpu: null
+    property int cpuCount: 0       // logical CPUs, for a program's share of the whole machine
     property var lastNet: null
 
     function push(a, v) { const b = a.slice(a.length >= historyLength ? 1 : 0); b.push(Math.max(0, v || 0)); return b; }
 
     function sample() {
         // CPU: busy share of the jiffies since the last sample.
-        const cl = statFile.read().split("\n", 1)[0].trim().split(/\s+/).slice(1).map(Number);
+        const stat = statFile.read();
+        if (!cpuCount) cpuCount = (stat.match(/^cpu\d+ /gm) || []).length;
+        const cl = stat.split("\n", 1)[0].trim().split(/\s+/).slice(1).map(Number);
         if (cl.length >= 4) {
             const idle = cl[3] + (cl[4] || 0);
             const total = cl.reduce((s, x, i) => i < 8 ? s + x : s, 0);
@@ -643,12 +646,25 @@ done`]
         if (kind === "disk") return volumesText();
         return head + (head ? "<br>" : "") + topList(kind);
     }
+    // A text bar for a share (0..1): whole blocks, an eighth block for the
+    // remainder, and a dim track (the tooltip's font is monospace).
+    function bar(frac, color) {
+        const w = 10;
+        const f = Math.max(0, Math.min(1, frac || 0)) * w;
+        let full = Math.floor(f);
+        const part = Math.round((f - full) * 8);
+        let s = "█".repeat(full);
+        if (part === 8) { s += "█"; full++; }
+        else if (part > 0 && full < w) s += "▏▎▍▌▋▊▉"[part - 1];
+        const used = full + (part > 0 && part < 8 && full < w ? 1 : 0);
+        return c(color, s) + c(Theme.fgDim, "░".repeat(Math.max(0, w - used)));
+    }
     // Disk space per volume: used share, used of size, and what's free.
     function volumesText() {
         if (!diskVolumes.length) return c(Theme.fgDim, "No disks found.");
         let t = "<table cellspacing='1'>";
         for (const v of diskVolumes)
-            t += "<tr><td>" + c(tipPalette.disk, "<b>" + esc(v.mount) + "</b>") + "</td><td align='right'>&nbsp;&nbsp;<b>"
+            t += "<tr><td>" + c(tipPalette.disk, "<b>" + esc(v.mount) + "</b>") + "</td><td>&nbsp;&nbsp;" + bar(v.used / v.size, tipPalette.disk) + "</td><td align='right'>&nbsp;<b>"
                 + pct(100 * v.used / v.size) + "</b></td><td>&nbsp;&nbsp;" + c(Theme.fgDim, fmtBytes(v.used) + " of " + fmtBytes(v.size)
                 + " · " + fmtBytes(v.size - v.used) + " free") + "</td></tr>";
         return t + "</table>";
@@ -662,9 +678,15 @@ done`]
         // amount (CPU and GPU are percentages already).
         const total = kind === "mem" ? memTotal
             : kind === "vram" ? gpus.reduce((a, g) => a + (g.vramTotal || 0), 0) : 0;
+        // The bar: share of the total; CPU of the whole machine (a program's
+        // % is per core), GPU of its busy time. Rates (disk, net) get none.
+        const share = x => total > 0 ? x.v / total
+            : kind === "cpu" ? x.v / (100 * Math.max(1, cpuCount))
+            : kind === "gpu" ? x.v / 100 : -1;
         let t = "<table cellspacing='1'>";
         for (const x of list)
-            t += "<tr><td align='right'>" + c(kindColor[kind], "<b>" + fmtTop(kind, x.v) + "</b>") + "</td>"
+            t += "<tr>" + (share(x) >= 0 ? "<td>" + bar(share(x), kindColor[kind]) + "&nbsp;</td>" : "")
+                + "<td align='right'>" + c(kindColor[kind], "<b>" + fmtTop(kind, x.v) + "</b>") + "</td>"
                 + (total > 0 ? "<td align='right'>&nbsp;" + c(kindColor[kind], (x.v / total * 100).toFixed(x.v / total < 0.1 ? 1 : 0) + "%") + "</td>" : "")
                 + "<td>&nbsp;&nbsp;" + esc(x.name)
                 + "</td><td>&nbsp;" + c(Theme.fgDim, x.n > 1 ? "×" + x.n : "") + "</td></tr>";
