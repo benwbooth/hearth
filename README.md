@@ -15,6 +15,9 @@ indicators for everything the Plasma tray did, Settings and Help windows.
   `arbor/hearth-layer-rules.kdl` for blur.
 - Global menu (arbor + mac layout): the focused app's menus in the menu bar,
   like macOS and Unity. See "Global menu" below.
+- Spotlight (Super+Space), the voice assistant (Super+Alt+Space) and the AI
+  hub (models, VRAM): see "Spotlight", "AI" and "Voice assistant" below.
+  NixOS: `imports = [ hearth.nixosModules.ai ]; services.hearth-ai.enable = true;`
 - Help: the ? in the menu bar, `hearth-ipc call help shortcuts` (Super+/).
 - Clipboard history (like Klipper): the clipboard icon in the menu bar or
   Super+V (`hearth-ipc call clipboard toggle`); kept by cliphist, fed by
@@ -404,6 +407,93 @@ pane):
   plus the edge lensing highlight stands in for it.
 - The Genie minimize effect is left to the compositor.
 - SF Pro and Apple's cursors aren't shipped (Apple-licensed).
+
+## Spotlight
+
+Super+Space or the magnifier in the menu bar (`hearth-ipc call spotlight
+toggle`, or `search "TEXT"`) opens a liquid-glass field near the top of the
+screen. Results come grouped: Top Hit, Applications, System Settings,
+Actions, Documents, Folders, Images, Other, the calculator, web suggestions
+(off by default) and "Ask hearth", with a preview of the selected one
+(thumbnail, kind, size, date, where, a matching snippet).
+
+- Keys: ↑ ↓ choose; Tab, Shift+Tab or ⌘↑ ⌘↓ (Super or Ctrl) jump between
+  groups; Return opens; ⌘Return shows the file in the file manager (grove,
+  through `org.freedesktop.FileManager1.ShowItems`); ⌘C copies a path or
+  result; Esc clears the field, then closes.
+- Search words: `kind:pdf|image|folder|document|music|video|spreadsheet`,
+  `date:today|yesterday|week|month|year|2026-11-20`. The last word is a
+  prefix, and every word matches file names as well as contents.
+- Calculator and conversions (libqalculate's `qalc`): `2^10`, `15% of 80`,
+  `5 ft to m`, `72F in C`, `100 USD in EUR`. Return copies the result.
+- Never blocks the shell: apps, settings panes and actions are matched in
+  memory; files, sums and web suggestions come from `helpers/hearth-search`,
+  a long-running helper that answers in JSON lines and streams files in
+  batches. Each keystroke supersedes the last query.
+- Indexer: recoll (Xapian), packaged without its GUI in `nix/recoll.nix`.
+  It was chosen over localsearch/tracker3 (GNOME), Baloo (KDE) and
+  plocate/fsearch (names only, root-run updatedb). recoll is standalone,
+  reads document contents through its filters, keeps kind and dates, has a
+  Python API and watches folders with inotify. `hearth-indexer.service`
+  (`nixosModules.ai`) runs `recollindex -m` at idle CPU and I/O priority:
+  one catch-up pass a minute after login, then near zero cost. Config:
+  `~/.config/hearth/recoll/recoll.conf`, written from Settings > Spotlight
+  (folders, Privacy exclusions, contents on/off, hidden files); index in
+  `~/.cache/hearth/recoll`. recollindex notices config changes by itself.
+- Motion (macOS 26 Spotlight, matched by eye from recordings; est.): the
+  field springs in from 92% with a slight overshoot while it fades in
+  (340 ms OutBack, fade 180 ms). The results pane grows under it (220 ms
+  ease-out). Closing fades and shrinks to 97% (160 ms).
+
+## AI
+
+One hub for every model the desktop uses: `helpers/hearth-ai`,
+`services/Ai.qml`, Settings > AI and the AI item in the menu bar.
+
+- Backends: Ollama (the system's `services.ollama`), llama.cpp
+  (`hearth-llama-server.service`: llama-server in router mode over a models
+  folder, Vulkan build; started and stopped from Settings > AI), any other
+  running `llama-server` (found by its process; usable, and stoppable to
+  free memory), and the coding-agent CLIs Claude Code, Codex and Gemini.
+  The CLIs are cloud AI. They are off unless "Allow cloud AI" is on, and
+  they run one prompt at a time without their own tools.
+- Models: installed and loaded per backend, with parameters, quantisation,
+  size and capabilities. You can load, unload, download (Ollama names) and
+  delete (asks first). Models stay loaded for the "Keep models loaded" time
+  and can be unloaded whenever something goes full screen.
+- Graphics memory: used/total per GPU from amdgpu's sysfs, and per process
+  from DRM fdinfo (`drm-memory-vram`). The helper polls every 2 s while a
+  view shows it, otherwise every 30 s.
+- Assistant: the model in Settings > AI > Assistant (default Ollama
+  `qwen3.5:4b`) gets tools: search files (through hearth-search), open or
+  reveal a file, launch an app, set or change the volume (wpctl), desktop
+  actions (lock, sleep, dark mode, Do Not Disturb, screenshot, show desktop,
+  overview, next wallpaper, brightness, open a Settings pane), the weather
+  (hearth's Open-Meteo data), calculate, and web search or open a URL in the
+  browser. Shell-side tools run in the shell; the rest run in the helper.
+- `hearth-ai --state` prints everything; `hearth-ipc call ai state|unloadAll`.
+
+## Voice assistant
+
+Super+Alt+Space or the microphone in the menu bar: speak, and it stops by
+itself after a second of quiet (press again to stop early). Like Siri, a
+glow of shifting colour runs along the screen edges and swells with your
+voice (`shaders/siri.frag`), and a glass card under the menu bar shows what
+it heard, each step it took, and the answer.
+
+- Speech to text: `helpers/hearth-voice` streams the microphone
+  (`pw-record`, 16 kHz) to whisper-typer's WhisperLive server
+  (`ws://127.0.0.1:9090`, GPU), so no second Whisper is loaded. The
+  language, model, pause length and server are set in Settings > Voice
+  Assistant. Nothing is recorded while it isn't listening, and there is no
+  wake word.
+- Understanding and actions: the assistant above (Settings > AI).
+- Spoken replies (off by default): Piper, with voices downloaded from
+  rhasspy/piper-voices into `~/.local/share/hearth/piper` from the Settings
+  pane.
+- Spotlight's "Ask hearth" row sends the typed text to the same assistant.
+- `hearth-ipc call voice toggle|start|stop|cancel|ask "TEXT"|state`;
+  `HEARTH_VOICE_INPUT=file.wav` replaces the microphone (tests).
 
 ## Login screen
 
