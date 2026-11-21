@@ -293,10 +293,9 @@ Scope {
                 Divider {}
                 ChoiceRow {
                     label: "Pointer"
-                    note: Mouse.macInstalled ? "macOS-style: a black arrow with a white outline, sized like a Mac's. Breeze: KDE's pointer."
-                                             : "macOS-style needs the apple-cursor package installed (system packages); until then the pointer stays Breeze."
+                    note: "Adwaita: a clean black arrow (the default). macOS-style: a black arrow with a white outline, sized like a Mac's. Breeze: KDE's pointer."
                     key: "appearance.cursor"
-                    options: [{ value: "macos", label: "macOS-style" }, { value: "breeze", label: "Breeze" }]
+                    options: [{ value: "adwaita", label: "Adwaita" }, { value: "macos", label: "macOS-style" }, { value: "breeze", label: "Breeze" }]
                 }
             }
         }

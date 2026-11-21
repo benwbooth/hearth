@@ -25,7 +25,7 @@ Singleton {
             realGlass: true,            // arbor: the compositor draws refracting liquid glass under panes
             realGlassStrength: 1.0,     // 0..1: refraction, blur, rim and vibrancy together
             font: "auto",               // "auto" (SF Pro if installed, else Inter) | "sf" | "inter" | "noto"
-            cursor: "macos"             // "macos" (apple-cursor's macOS theme, if installed) | "breeze"
+            cursor: "adwaita"           // "adwaita" | "macos" (apple-cursor's macOS theme, if installed) | "breeze"
         },
         menubar: {
             autohide: false,

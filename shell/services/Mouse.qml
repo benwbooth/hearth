@@ -12,7 +12,7 @@ import Quickshell.Io
 Singleton {
     id: root
 
-    property real speed: 0.3          // -1 .. 1
+    property real speed: -0.1         // -1 .. 1 (libinput accel-speed)
     property bool acceleration: true  // adaptive, as Plasma; off = flat
     property bool naturalScroll: true // touchpad: content follows fingers
     property bool loaded: false
@@ -59,20 +59,29 @@ cursor {
     Process { id: hypr }
 
     // --- pointer (Settings > Appearance > Pointer) ---
-    // "macos": the open macOS-style cursors (nixpkgs apple-cursor, theme
-    // "macOS": black arrow, white outline) at 28, which on Ben's 4/3
-    // display is the size of macOS's arrow on a 5K Mac; "breeze": KDE's.
+    // "adwaita" (default): GNOME's Adwaita cursors (adwaita-icon-theme, data
+    // only); "macos": the open macOS-style cursors (nixpkgs apple-cursor,
+    // theme "macOS") at 28; "breeze": KDE's.
     // Applied live (hyprctl setcursor / arbor's cursor block) when the
     // theme is installed; otherwise the compositor keeps its own.
-    readonly property string cursorChoice: Settings.appearance.cursor || "macos"
-    readonly property string cursorTheme: cursorChoice === "macos" && macInstalled ? "macOS" : "breeze_cursors"
+    readonly property string cursorChoice: Settings.appearance.cursor || "adwaita"
+    readonly property string cursorTheme: cursorChoice === "macos" && macInstalled ? "macOS"
+                                        : cursorChoice === "adwaita" && adwaitaInstalled ? "Adwaita"
+                                        : "breeze_cursors"
     readonly property int cursorSize: cursorTheme === "macOS" ? 28 : 24
     property bool macInstalled: false
+    property bool adwaitaInstalled: false
     Process {
         id: findTheme
         running: true
-        command: ["sh", "-c", "for d in \"$HOME/.icons\" \"$HOME/.local/share/icons\" $(echo \"${XDG_DATA_DIRS:-/run/current-system/sw/share}\" | tr : ' ' | sed 's|$|/icons|g') /run/current-system/sw/share/icons; do [ -d \"$d/macOS/cursors\" ] && exit 0; done; exit 1"]
-        onExited: code => { root.macInstalled = code === 0; root.applyCursor(); }
+        command: ["sh", "-c", "for d in \"$HOME/.icons\" \"$HOME/.local/share/icons\" $(echo \"${XDG_DATA_DIRS:-/run/current-system/sw/share}\" | tr : ' ' | sed 's|$|/icons|g') /run/current-system/sw/share/icons; do for t in macOS Adwaita; do [ -d \"$d/$t/cursors\" ] && echo $t; done; done; true"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.macInstalled = text.indexOf("macOS") >= 0;
+                root.adwaitaInstalled = text.indexOf("Adwaita") >= 0;
+                root.applyCursor();
+            }
+        }
     }
     onCursorThemeChanged: applyCursor()
     function applyCursor() {

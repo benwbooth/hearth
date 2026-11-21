@@ -73,7 +73,7 @@ let
     for f in greeter shell; do [ -f $state/$f.log ] && mv -f $state/$f.log $state/$f.log.old; done
     exec >$state/greeter.log 2>&1
     export XDG_DATA_DIRS=${pkgs.kdePackages.breeze-icons}/share:${pkgs.hicolor-icon-theme}/share:/run/current-system/sw/share
-    export XCURSOR_PATH=/run/current-system/sw/share/icons:${pkgs.kdePackages.breeze}/share/icons
+    export XCURSOR_PATH=/run/current-system/sw/share/icons:${pkgs.adwaita-icon-theme}/share/icons:${pkgs.kdePackages.breeze}/share/icons
     export HEARTH_GREETER=1
     export HEARTH_GREETER_STATE_DIR=$state
     export HEARTH_GREETER_SESSIONS=${sessions}/share/wayland-sessions
@@ -144,7 +144,7 @@ in
 
     cursorTheme = lib.mkOption {
       type = lib.types.str;
-      default = "breeze_cursors";
+      default = "Adwaita";
       description = "Cursor theme on the login screen.";
     };
 
@@ -200,7 +200,7 @@ in
       "/var/lib/hearth/greeter".d = { user = "root"; group = "users"; mode = "2775"; };
     };
 
-    # Breeze icons and cursors for the greeter's own environment.
-    environment.systemPackages = [ pkgs.kdePackages.breeze-icons ];
+    # Icons and cursors for the greeter's own environment.
+    environment.systemPackages = [ pkgs.kdePackages.breeze-icons pkgs.adwaita-icon-theme ];
   };
 }
