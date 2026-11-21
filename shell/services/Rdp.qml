@@ -3,15 +3,18 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// The hypr-rdp systemd user service (RDP into this Hyprland session).
-// State comes from `systemctl --user show`; the listening address and the
-// connected clients from `ss`, matched on the service's MainPID (hypr-rdp
-// itself has no status IPC).
+// The arbor-rdp systemd user service (RDP into this arbor session; arbor's
+// NixOS module `programs.arbor.rdp` installs it, with its config passed as
+// `--config` in ExecStart). State comes from `systemctl --user show`; the
+// listening address and the connected clients from `ss`, matched on the
+// service's MainPID (arbor-rdp itself has no status IPC). The unit only runs
+// inside arbor (ConditionEnvironment=ARBOR_SOCKET); hearth isn't used under
+// Plasma, where KRDP has its own tray icon.
 Singleton {
     id: root
 
     // HEARTH_RDP_UNIT points it at another unit (headless tests).
-    property string unit: Quickshell.env("HEARTH_RDP_UNIT") || "hypr-rdp.service"
+    property string unit: Quickshell.env("HEARTH_RDP_UNIT") || "arbor-rdp.service"
     readonly property int defaultPort: 3389
 
     // LoadState=not-found until the unit is installed: the tray hides then.
@@ -88,7 +91,7 @@ Singleton {
         }
         if (!listenAddr) {
             // Not running: what it would listen on. CLI beats config file;
-            // hypr-rdp's own default is loopback only.
+            // arbor-rdp's own default is loopback only.
             const m = (props.ExecStart || "").match(/--bind[= ]([^\s;]+)/);
             const cfg = (parts.find(p => p.startsWith("cfg\n")) || "").match(/bind\s*=\s*["']([^"']+)["']/);
             listenAddr = m ? m[1] : cfg ? cfg[1] : "127.0.0.1:" + root.defaultPort;
@@ -104,7 +107,9 @@ Singleton {
             echo '--- ss'
             ss -Htanp 2>/dev/null
             echo '--- cfg'
-            grep -sE '^[[:space:]]*bind[[:space:]]*=' "\${XDG_CONFIG_HOME:-$HOME/.config}/hypr-rdp/config.toml"
+            # The config file from ExecStart's --config, else the default.
+            cfg=$(systemctl --user show "$1" -p ExecStart --value 2>/dev/null | grep -oE -- '--config[= ][^ ;]+' | head -n1 | cut -c10-)
+            grep -sE '^[[:space:]]*bind[[:space:]]*=' "\${cfg:-\${XDG_CONFIG_HOME:-$HOME/.config}/arbor-rdp/config.toml}"
             true`, "sh", root.unit]
         stdout: StdioCollector {
             onStreamFinished: root.parse(text)

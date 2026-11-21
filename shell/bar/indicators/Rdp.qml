@@ -3,8 +3,8 @@ import "../../widgets"
 import "../../services"
 import "../.."
 
-// Remote desktop (hypr-rdp), replacing KRDP's tray icon. Hidden unless the
-// hypr-rdp user unit is installed; highlighted while a client is connected.
+// Remote desktop (arbor-rdp), replacing KRDP's tray icon. Hidden unless the
+// arbor-rdp user unit is installed; highlighted while a client is connected.
 Indicator {
     id: root
     shown: Rdp.installed
@@ -12,9 +12,10 @@ Indicator {
     iconFallback: "network-server-symbolic"
     active: popup.open || Rdp.connected
     tooltip: "Remote Desktop"
-    tooltipSub: Rdp.connected ? "Connected: " + Rdp.clients.join(", ")
-              : Rdp.running ? "Listening on " + Rdp.listen
-              : Rdp.failed ? "Failed" : "Stopped"
+    tooltipSub: Rdp.connected ? "Someone is viewing this screen from " + Rdp.clients.join(", ")
+              : Rdp.running ? "On: other computers can connect to " + Rdp.listen
+              : Rdp.failed ? "Couldn't start. Click for details"
+              : "Off. Click to let another computer see and control this screen"
     onMiddleClicked: Rdp.toggle()
 
     // Dim when stopped, accent dot while running, green ring while connected.
@@ -52,10 +53,31 @@ Indicator {
                         : Rdp.connected ? (Rdp.clients.length === 1 ? "1 client connected" : Rdp.clients.length + " clients connected")
                         : Rdp.running ? "Waiting for connections"
                         : Rdp.activeState === "activating" ? "Starting…"
-                        : Rdp.failed ? "Failed (journalctl --user -u hypr-rdp)"
-                        : "Stopped"
+                        : Rdp.failed ? "Couldn't start"
+                        : "Off"
                 }
             }
+        }
+
+        // What this is, in plain words.
+        Label {
+            width: parent.width
+            wrapMode: Text.Wrap
+            font.pointSize: Theme.smallFontSize
+            color: Theme.fgDim
+            text: "Lets another computer see and control this screen with a Remote Desktop (RDP) app, "
+                + "such as Windows' Remote Desktop Connection or FreeRDP. Sign in with your usual password."
+        }
+
+        // Why it failed, and where to look.
+        Label {
+            visible: Rdp.failed
+            width: parent.width
+            wrapMode: Text.Wrap
+            font.pointSize: Theme.smallFontSize
+            color: Theme.bad
+            text: "The server stopped with an error. Another program may already be using the port, "
+                + "or the screen named in its settings doesn't exist. Details: journalctl --user -u arbor-rdp"
         }
 
         Rectangle { width: parent.width; height: 1; color: Theme.border }
@@ -65,7 +87,7 @@ Indicator {
             columnSpacing: 12
             rowSpacing: 4
             Label { text: "Address"; color: Theme.fgDim }
-            Label { text: Rdp.listen; font.family: Theme.monoFamily }
+            Label { text: Rdp.listen.startsWith("127.") ? Rdp.listen + " (this computer only)" : Rdp.listen; font.family: Theme.monoFamily }
         }
 
         // Connected clients, highlighted.
@@ -95,6 +117,12 @@ Indicator {
             icon: Rdp.running ? "media-playback-stop" : "media-playback-start"
             enabled: !Rdp.busy
             onTriggered: Rdp.toggle()
+            Tooltip {
+                anchorItem: parent
+                hovered: parent.containsMouse
+                text: Rdp.running ? "Stop accepting remote connections (anyone connected is disconnected)"
+                                  : "Start accepting remote connections until you log out"
+            }
         }
         MenuItem {
             text: "Start at login"
@@ -102,6 +130,12 @@ Indicator {
             enabled: !Rdp.busy && Rdp.canSetEnabled
             opacity: enabled ? 1 : 0.6
             onTriggered: Rdp.setEnabled(!Rdp.enabled)
+            Tooltip {
+                anchorItem: parent
+                hovered: parent.containsMouse
+                text: Rdp.canSetEnabled ? "Turn the server on automatically every time you log in to arbor"
+                                        : "Fixed by the system configuration"
+            }
             // On/off switch (systemctl --user enable/disable).
             Rectangle {
                 anchors.right: parent.right
