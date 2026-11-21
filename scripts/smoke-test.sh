@@ -64,6 +64,13 @@ cleanup() {
   pids=$(ours | grep -vx "$$")
   [[ -n $pids ]] && kill -9 $pids 2>/dev/null
   [[ -f $work/dbus.pid ]] && kill "$(cat "$work/dbus.pid")" 2>/dev/null
+  # KWin runs through a capability wrapper: its environment isn't readable,
+  # so it's ended by pid and process group (Xwayland).
+  if [[ -n ${kwin_pid:-} ]]; then
+    kill -- "-$kwin_pid" "$kwin_pid" 2>/dev/null
+    sleep 0.3
+    kill -9 -- "-$kwin_pid" "$kwin_pid" 2>/dev/null
+  fi
   fusermount -u "$run/doc" 2>/dev/null
   rm -rf "$run"
 }
@@ -78,12 +85,20 @@ export QT_WAYLAND_RECONNECT=1 HEARTH_POLKIT=0 HEARTH_APPMENU_REGISTRAR=0 HEARTH_
   QT_QPA_PLATFORM=wayland
 mkdir -p "$XDG_CONFIG_HOME/arbor" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$work/kwin"
 
-dbus-daemon --session --fork --print-address=1 --print-pid=3 >"$work/dbus.addr" 3>"$work/dbus.pid" ||
+# A private bus with nothing to activate: the real session's services
+# (portals, KWallet...) must not start in here.
+printf '%s\n' '<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN"' \
+  ' "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">' \
+  '<busconfig><type>session</type>' "<listen>unix:dir=$run</listen>" '<auth>EXTERNAL</auth>' \
+  '<policy context="default"><allow send_destination="*" eavesdrop="true"/><allow eavesdrop="true"/><allow own="*"/></policy>' \
+  '</busconfig>' >"$work/dbus.conf"
+dbus-daemon --config-file="$work/dbus.conf" --fork --print-address=1 --print-pid=3 >"$work/dbus.addr" 3>"$work/dbus.pid" ||
   { log "can't start dbus"; exit 2; }
 export DBUS_SESSION_BUS_ADDRESS=$(cat "$work/dbus.addr")
 
 XDG_CONFIG_HOME=$work/kwin setsid kwin_wayland --virtual --no-lockscreen --socket=kwin \
   --width 3840 --height 1620 >"$work/kwin.log" 2>&1 </dev/null &
+kwin_pid=$!
 for _ in $(seq 100); do [[ -S $run/kwin ]] && break; sleep 0.1; done
 [[ -S $run/kwin ]] || { log "nested KWin didn't start (see $work/kwin.log)"; exit 2; }
 
@@ -205,6 +220,8 @@ if ((${#fails[@]})); then
   exit 1
 fi
 log "passed"
+# Stop the session first: its processes still write under $work.
+cleanup; trap - EXIT
 ((keep)) || rm -rf "$work"
 # Keep the last 5 failed runs.
 ls -dt "$state_root"/hearth-smoke/run.* 2>/dev/null | grep -vxF "$work" | tail -n +6 | xargs -r rm -rf
