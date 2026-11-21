@@ -16,7 +16,8 @@ input {
         tap
         natural-scroll
     }
-    focus-follows-mouse max-scroll-amount="0%"
+    // No focus-follows-mouse: like macOS, a window gets focus (and comes
+    // forward) when you click it, not when the pointer passes over it.
 }
 
 // Displays from hearth's Settings window (Settings > Displays). arbor uses

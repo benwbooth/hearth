@@ -133,8 +133,11 @@ Indicator {
             anchors.fill: parent
             radius: 2
             color: "transparent"
-            border.color: Theme.fgDim
+            // The menu bar's text colour (white or black with the wallpaper,
+            // like every status icon), not the window text colour.
+            border.color: root.menuBarItem ? Theme.barFg : Theme.fgDim
             border.width: 1
+            opacity: root.menuBarItem ? 0.6 : 1
         }
         Repeater {
             model: root.activeLayout ? root.activeLayout.zones : []
@@ -144,7 +147,7 @@ Indicator {
                 y: 2 + Math.round(modelData.y * 12)
                 width: Math.max(2, Math.round(modelData.width * 20) - 1)
                 height: Math.max(2, Math.round(modelData.height * 12) - 1)
-                color: Theme.fg
+                color: root.menuBarItem ? Theme.barFg : Theme.fg
                 opacity: 0.85
             }
         }

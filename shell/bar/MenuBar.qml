@@ -50,7 +50,13 @@ PanelWindow {
     // pointer), and hands the keys to the menu: arrows, Return, Escape and
     // type-ahead work right after clicking a title, before the pointer
     // ever enters the menu.
-    WlrLayershell.keyboardFocus: popupOpen ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    // Handing the keyboard back waits until the menu has faded out: changing
+    // it reconfigures the bar's layer surface, and doing that in the same
+    // frame the menu unmapped made the bar flicker for a frame on arbor.
+    property bool keyboardHeld: false
+    onPopupOpenChanged: { if (popupOpen) { keyboardRelease.stop(); keyboardHeld = true; } else keyboardRelease.restart(); }
+    Timer { id: keyboardRelease; interval: Theme.menuOutMs + 60; onTriggered: bar.keyboardHeld = false }
+    WlrLayershell.keyboardFocus: popupOpen || keyboardHeld ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     Item {
         focus: true
         Keys.onPressed: event => {

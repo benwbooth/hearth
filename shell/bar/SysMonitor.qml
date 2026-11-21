@@ -256,6 +256,11 @@ done`]
     }
     readonly property font monoFont: Qt.font({ family: "monospace", pixelSize: Math.round(root.h * 0.3) })
     readonly property font monoBold: Qt.font({ family: "monospace", pixelSize: Math.round(root.h * 0.3), bold: true })
+    // Menu bar (blend): two lines like iStat Menus: a small caps label over
+    // the value, in the bar's font with even-width digits so values don't
+    // jiggle. Sized from the bar: 8 + 11 px on the 27 px menu bar.
+    readonly property font capFont: Qt.font({ family: Theme.fontFamily, pixelSize: Math.max(7, Math.round(root.h * 0.34)), weight: Font.DemiBold, letterSpacing: 0.3, features: { "tnum": 1 } })
+    readonly property font valFont: Qt.font({ family: Theme.fontFamily, pixelSize: Math.max(9, Math.round(root.h * 0.48)), weight: Font.Medium, features: { "tnum": 1 } })
     function tempColor(t) { return t >= 80 ? "#e05a4f" : (t >= 60 ? "#e3c25a" : blend ? Theme.barFg : "#43c96b"); }
     function pct(v) { return (Number(v) || 0).toFixed(0) + "%"; }
 
@@ -309,15 +314,27 @@ done`]
         HoverHandler { onHoveredChanged: root.setHover(stat.kind, hovered) }
 
         StackedLabel {
+            visible: !root.blend
             Layout.alignment: Qt.AlignVCenter
             text: stat.label
             h: stat.h
             color: stat.color
         }
+        // Menu bar: label over value, then the graph on its own.
+        Column {
+            visible: root.blend
+            Layout.alignment: Qt.AlignVCenter
+            spacing: -1
+            Label { text: stat.label; font: root.capFont; color: Theme.barFgDim; height: Math.ceil(root.capFont.pixelSize * 1.1) }
+            Label { text: stat.value; font: root.valFont; color: Theme.barFg; height: Math.ceil(root.valFont.pixelSize * 1.15)
+                    // Widest value, so the graph beside it never moves.
+                    width: Math.max(implicitWidth, widest.implicitWidth)
+                    Label { id: widest; visible: false; text: "100%"; font: root.valFont } }
+        }
         Rectangle {
             Layout.alignment: Qt.AlignVCenter
-            Layout.preferredWidth: Math.max(valueProbe.implicitWidth + 4, Math.round(stat.h * 1.56 * root.graphWidth))
-            Layout.preferredHeight: Math.round(stat.h * 0.8)
+            Layout.preferredWidth: root.blend ? Math.round(stat.h * 1.1) : Math.max(valueProbe.implicitWidth + 4, Math.round(stat.h * 1.56 * root.graphWidth))
+            Layout.preferredHeight: root.blend ? Math.round(stat.h * 0.62) : Math.round(stat.h * 0.8)
             color: root.blend ? Qt.rgba(stat.color.r, stat.color.g, stat.color.b, 0.10) : "transparent"
             border.color: root.blend ? "transparent" : Qt.rgba(stat.color.r, stat.color.g, stat.color.b, 0.55)
             border.width: root.blend ? 0 : 1
@@ -356,6 +373,7 @@ done`]
                         ctx.lineWidth = root.blend ? 1.2 : 1.5;
                         ctx.stroke();
                     }
+                    if (root.blend) return;    // the value sits beside the graph
                     // Light digits with a dark halo, lower left (over the
                     // oldest history, leaving the current end in view).
                     ctx.font = "bold " + Math.round(stat.h * 0.3) + "px monospace";
@@ -420,6 +438,7 @@ done`]
             spacing: Math.round(root.h * 0.08)
             HoverHandler { onHoveredChanged: root.setHover("net", hovered) }
             StackedLabel {
+                visible: !root.blend
                 Layout.alignment: Qt.AlignVCenter
                 text: "NET"
                 h: root.h
@@ -427,9 +446,11 @@ done`]
             }
             Column {
                 Layout.alignment: Qt.AlignVCenter
-                spacing: -2
-                Label { text: "↑" + root.fmtRate(root.netUp); font: root.monoFont; color: root.blend ? Theme.barFg : Theme.fg }
-                Label { text: "↓" + root.fmtRate(root.netDown); font: root.monoFont; color: root.blend ? Theme.barFg : Theme.fg }
+                spacing: root.blend ? -1 : -2
+                Label { text: "↑ " + root.fmtRate(root.netUp); font: root.blend ? root.capFont : root.monoFont; color: root.blend ? Theme.barFg : Theme.fg
+                        width: root.blend ? Math.max(implicitWidth, netW.implicitWidth) : implicitWidth
+                        Label { id: netW; visible: false; text: "↑ 888.8M"; font: root.capFont } }
+                Label { text: "↓ " + root.fmtRate(root.netDown); font: root.blend ? root.capFont : root.monoFont; color: root.blend ? Theme.barFg : Theme.fg }
             }
         }
         // Temperatures: CPU over GPU, each coloured by heat.
@@ -438,12 +459,24 @@ done`]
             spacing: Math.round(root.h * 0.08)
             HoverHandler { onHoveredChanged: root.setHover("temp", hovered) }
             StackedLabel {
+                visible: !root.blend
                 Layout.alignment: Qt.AlignVCenter
                 text: "TEMP"
                 h: root.h
                 color: root.palette.temp
             }
+            Repeater {
+                model: root.blend ? [["CPU", root.cpuTempC], ["GPU", root.gpuTempC]].filter(t => t[1] > 0) : []
+                Column {
+                    required property var modelData
+                    Layout.alignment: Qt.AlignVCenter
+                    spacing: -1
+                    Label { text: modelData[0]; font: root.capFont; color: Theme.barFgDim; height: Math.ceil(root.capFont.pixelSize * 1.1) }
+                    Label { text: modelData[1].toFixed(0) + "°"; font: root.valFont; color: root.tempColor(modelData[1]); height: Math.ceil(root.valFont.pixelSize * 1.15) }
+                }
+            }
             Column {
+                visible: !root.blend
                 Layout.alignment: Qt.AlignVCenter
                 spacing: -2
                 Label {

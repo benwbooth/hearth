@@ -1,0 +1,18 @@
+--- a/src/launch/launch.cpp	2026-11-21 10:27:00.523432390 -0800
++++ b/src/launch/launch.cpp	2026-11-21 10:27:00.542862603 -0800
+@@ -288,6 +288,15 @@
+ 		app = new QGuiApplication(qArgC, argv);
+ 	}
+ 
++	// hearth: Qt read QT_WAYLAND_RECONNECT while connecting above, so the shell itself
++	// never reconnects (it exits when the compositor goes and is started again); the
++	// apps it launches get the variable back (the wrapper set it aside as
++	// QS_CHILD_QT_WAYLAND_RECONNECT).
++	if (qEnvironmentVariableIsSet("QS_CHILD_QT_WAYLAND_RECONNECT")) {
++		qputenv("QT_WAYLAND_RECONNECT", qgetenv("QS_CHILD_QT_WAYLAND_RECONNECT"));
++		qunsetenv("QS_CHILD_QT_WAYLAND_RECONNECT");
++	}
++
+ 	LogManager::initThreadLogging();
+ 	LogManager::initFs();
+ 

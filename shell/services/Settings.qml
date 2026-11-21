@@ -47,9 +47,10 @@ Singleton {
             magnifySize: 80,            // icon px under the pointer
             position: "bottom",         // "bottom" | "left" | "right"
             autohide: true,
-            autohideDelay: 600,         // ms after the pointer leaves
-            showDelay: 500,             // ms at the edge before it shows (macOS autohide-delay 0.5 s)
-            animationMs: 300,           // slide in/out
+            autohideDelay: 250,         // ms after the pointer leaves
+            showDelay: 120,             // ms at the edge before it shows (just enough that
+                                        // passing the edge on the way somewhere doesn't pop it)
+            animationMs: 220,           // slide in/out
             showIndicators: true,
             showRecents: true,          // recently used, unpinned apps
             recents: [],                // kept by the dock
