@@ -16,7 +16,7 @@ import ".."
 Singleton {
     id: root
 
-    readonly property bool wanted: !(Quickshell.env("XDG_CURRENT_DESKTOP") || "").includes("KDE")
+    readonly property bool wanted: !Compositor.underPlasma
     readonly property string basePath: Quickshell.shellDir + "/../swaync/config.json"
     readonly property string configPath: Quickshell.cachePath("swaync-config.json")
     property string base: ""

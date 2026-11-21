@@ -21,7 +21,7 @@ Singleton {
         const force = Quickshell.env("HEARTH_BT_AGENT");
         if (force === "1") return true;
         if (force === "0") return false;
-        return !(Quickshell.env("XDG_CURRENT_DESKTOP") ?? "").split(":").includes("KDE");
+        return !Compositor.underPlasma;
     }
     readonly property bool running: proc.running
 

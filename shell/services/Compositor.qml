@@ -35,6 +35,14 @@ Singleton {
     }
     readonly property bool isHyprland: type === "hyprland"
     readonly property bool isArbor: type === "arbor"
+    // Inside a Plasma session (or a test session that inherited its
+    // environment), where plasmashell owns notifications and the Bluetooth
+    // agent. arbor's own XDG_CURRENT_DESKTOP is "arbor:KDE" (so apps pick
+    // KDE portals), which is not Plasma.
+    readonly property bool underPlasma: {
+        const d = (Quickshell.env("XDG_CURRENT_DESKTOP") || "").split(":");
+        return d.includes("KDE") && !d.includes("arbor");
+    }
 
     LazyLoader { id: hyprLoader; active: root.isHyprland; HyprBackend {} }
     LazyLoader { id: arborLoader; active: root.isArbor; ArborBackend {} }
