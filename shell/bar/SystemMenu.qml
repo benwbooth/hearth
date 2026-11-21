@@ -48,6 +48,7 @@ BarButton {
             }
             MenuItem {
                 text: "Spotlight Search…"
+                shortcut: Binds.menuShortcut(/"spotlight" "toggle"/)
                 onTriggered: { menu.close(); Spotlight.open = true; }
             }
             MenuSeparator {}
@@ -55,8 +56,8 @@ BarButton {
             MenuItem { text: "Restart…"; onTriggered: { menu.close(); Session.run("reboot"); } }
             MenuItem { text: "Shut Down…"; onTriggered: { menu.close(); Session.run("poweroff"); } }
             MenuSeparator {}
-            MenuItem { text: "Lock Screen"; onTriggered: { menu.close(); Session.run("lock"); } }
-            MenuItem { text: "Log Out…"; onTriggered: { menu.close(); Session.run("logout"); } }
+            MenuItem { text: "Lock Screen"; shortcut: Binds.menuShortcut(/"session" "lock"/); onTriggered: { menu.close(); Session.run("lock"); } }
+            MenuItem { text: "Log Out…"; shortcut: Binds.menuShortcut(/"session" "open"/); onTriggered: { menu.close(); Session.run("logout"); } }
         }
     }
 }

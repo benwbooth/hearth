@@ -55,6 +55,19 @@ Singleton {
         XF86AudioMicMute: "Mic Mute", XF86AudioPlay: "Play", XF86AudioPause: "Pause (media)", XF86AudioNext: "Next Track",
         XF86AudioPrev: "Previous Track", XF86AudioStop: "Stop", XF86MonBrightnessUp: "Brightness Up",
         XF86MonBrightnessDown: "Brightness Down", XF86PowerOff: "Power button" })
+    // The shortcut bound to an action (a regex on the bind's action, e.g.
+    // /^close-window$/ or /"session" "lock"/), as "Super+Q" for menus
+    // (MenuItem draws it as ⌘Q). Super binds first; "" when none.
+    function menuShortcut(re) {
+        const hits = root.effective.filter(e => !e.off && re.test(e.action));
+        if (!hits.length) return "";
+        hits.sort((a, b) => (/^(Mod|Super)\+/.test(b.key) ? 1 : 0) - (/^(Mod|Super)\+/.test(a.key) ? 1 : 0));
+        const s = splitKey(hits[0].key);
+        const glyph = { Slash: "/", Backslash: "\\", Comma: ",", Period: ".", Minus: "-", Equal: "=", Grave: "`",
+                        BracketLeft: "[", BracketRight: "]", Semicolon: ";", Apostrophe: "'",
+                        Page_Up: "PageUp", Page_Down: "PageDown", BackSpace: "Backspace", Escape: "Esc" };
+        return s.mods.map(m => m === "Mod" ? "Super" : m).concat([glyph[s.key] || s.key]).join("+");
+    }
     function pretty(k) {
         const s = splitKey(k);
         return s.mods.map(m => m === "Mod" ? "Super" : m === "ISO_Level3_Shift" ? "AltGr" : m)

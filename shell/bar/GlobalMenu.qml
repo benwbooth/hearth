@@ -104,6 +104,7 @@ Row {
             }
             MenuItem {
                 text: "Close Window"
+                shortcut: Binds.menuShortcut(/^close-window$/)
                 visible: root.hasWindow
                 onTriggered: {
                     appMenu.close();
@@ -141,6 +142,7 @@ Row {
             MenuSeparator {}
             MenuItem {
                 text: "Quit " + root.appName
+                shortcut: Binds.menuShortcut(/^close-window$/)
                 enabled: root.appWindows.length > 0
                 onTriggered: { appMenu.close(); for (const t of root.appWindows) t.close(); }
             }
@@ -245,6 +247,7 @@ Row {
             width: Math.round(240 * Theme.pt)
             MenuItem {
                 text: "Minimize"
+                shortcut: Binds.menuShortcut(/^minimize-window$/)
                 onTriggered: {
                     winMenu.close();
                     if (root.win) Compositor.minimize(root.win.id);
@@ -253,16 +256,19 @@ Row {
             }
             MenuItem {
                 text: "Zoom"
+                shortcut: Binds.menuShortcut(/^maximize-window-to-edges$/)
                 visible: Compositor.isArbor && root.win !== null
                 onTriggered: { winMenu.close(); Compositor.arborAction("MaximizeWindowToEdges", { id: Number(root.win.id) }); }
             }
             MenuItem {
                 text: "Enter Full Screen"
+                shortcut: Binds.menuShortcut(/^fullscreen-window$/)
                 visible: Compositor.isArbor && root.win !== null
                 onTriggered: { winMenu.close(); Compositor.arborAction("FullscreenWindow", { id: Number(root.win.id) }); }
             }
             MenuItem {
                 text: root.win && root.win.floating ? "Move Window to Layout" : "Float Window"
+                shortcut: Binds.menuShortcut(/^toggle-window-floating$/)
                 visible: Compositor.isArbor && root.win !== null
                 onTriggered: { winMenu.close(); Compositor.arborAction("ToggleWindowFloating", { id: Number(root.win.id) }); }
             }
