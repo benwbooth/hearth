@@ -34,18 +34,26 @@ Indicator {
     }
 
     // Building or deploying: a spinner on the icon; failed: a red dot.
+    // Both sit on the button itself, not inside the icon: in the menu bar the
+    // icon is drawn through a monochrome layer the size of the icon, which
+    // cut the badge off at its edge (and greyed it).
     Spinner {
+        parent: root
         visible: root.anyBusy
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.margins: -2
-        size: Math.round(parent.width * 0.6)
+        z: 2
+        anchors.centerIn: parent
+        anchors.horizontalCenterOffset: Math.round(root.iconSize * 0.4)
+        anchors.verticalCenterOffset: Math.round(root.iconSize * 0.35)
+        size: Math.max(10, Math.round(root.iconSize * 0.6))
     }
     Rectangle {
+        parent: root
         visible: root.anyFailed && !root.anyBusy
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        width: Math.round(parent.width * 0.35)
+        z: 2
+        anchors.centerIn: parent
+        anchors.horizontalCenterOffset: Math.round(root.iconSize * 0.4)
+        anchors.verticalCenterOffset: Math.round(root.iconSize * 0.35)
+        width: Math.max(6, Math.round(root.iconSize * 0.35))
         height: width
         radius: width / 2
         color: Theme.bad
@@ -210,8 +218,9 @@ Indicator {
             onPaint: {
                 const ctx = getContext("2d");
                 ctx.reset();
-                const r = width / 2 - 1.5;
                 ctx.lineWidth = Math.max(1.5, width / 8);
+                // The whole stroke inside the canvas (it rotates in place).
+                const r = width / 2 - ctx.lineWidth / 2 - 0.5;
                 ctx.strokeStyle = Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, 0.8);
                 ctx.beginPath();
                 ctx.arc(width / 2, height / 2, r, 0, 2 * Math.PI);
