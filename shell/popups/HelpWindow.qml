@@ -319,7 +319,7 @@ Scope {
             }
             Para {
                 Layout.topMargin: 26
-                text: "Minimize: the yellow button or Super+Page Down; the window waits in the Dock (click it to bring it back). Full screen: Super+F. See every window at once: Super+W or swipe up with three fingers."
+                text: "Minimize: the down-arrow button at the right of the title bar or Super+Page Down; the window waits in the Dock (click it to bring it back). Full screen: Super+F. See every window at once: Super+W or swipe up with three fingers."
             }
             Item { Layout.fillHeight: true }
         }

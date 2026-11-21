@@ -87,7 +87,7 @@ ColumnLayout {
         SettingsDivider {}
         SettingsRow {
             label: "Window title bar and border"
-            note: "Window screenshots include arbor's title bar (the traffic lights) and border."
+            note: "Window screenshots include arbor's title bar (with its minimize, maximize and close buttons) and border."
             Toggle { checked: pane.o("decorations") !== false; onToggled: c => pane.set("decorations", c) }
         }
         SettingsDivider {}

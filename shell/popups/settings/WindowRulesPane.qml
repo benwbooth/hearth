@@ -118,7 +118,7 @@ ColumnLayout {
             SettingsDivider {}
             SettingsRow {
                 label: "Title bar"
-                note: "The bar with the close, minimize and zoom buttons (for apps that use arbor's)."
+                note: "The bar with the minimize, maximize and close buttons (for apps that use arbor's)."
                 Segmented {
                     options: [{ value: "default", label: "Usual" }, { value: "on", label: "Show" }, { value: "off", label: "Hide" }]
                     value: rg.r.titleBar
