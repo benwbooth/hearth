@@ -296,3 +296,45 @@ pane):
   plus the edge lensing highlight stands in for it.
 - The Genie minimize effect is left to the compositor.
 - SF Pro and Apple's cursors aren't shipped (Apple-licensed).
+
+## Boot
+
+`boot/` holds matching boot visuals, built from source (logos rendered from
+nixos-icons' SVG with resvg, GRUB fonts made from Inter with grub-mkfont):
+
+- `packages.x86_64-linux.plymouth-theme-hearth`: Plymouth theme `hearth`
+  (script plugin). Black screen, a flat white NixOS snowflake (0.094 x screen
+  height, fading in over 0.5 s), a thin rounded progress bar under it
+  (0.205 x height wide, white over a 24% track, eased so it glides), all
+  macOS boot proportions. A disk passphrase request swaps the bar for a
+  FileVault-like pill field with white dots and an "Enter Password"
+  placeholder; the disk's own prompt sits small above it. Shutdown and
+  reboot show only the logo. Boot messages stay hidden: Esc toggles
+  plymouth's text view. Images come in size ladders (logo every 8 px from 48
+  to 512, pill caps, dots), so the script never scales a bitmap and stays
+  sharp at any resolution; set `DeviceScale=1`.
+- `packages.x86_64-linux.grub-theme-hearth`: GRUB theme after macOS's Startup
+  Manager. Dark background, centred list of large icons with Inter labels, a
+  rounded glass box on the selection, a small countdown and key hints at the
+  bottom. Icons by GRUB class: `nixos` (colour snowflake), `submenu` (the
+  "All configurations" list), `windows` (os-prober's Windows Boot Manager),
+  `efi`/`uefi-firmware`, and `os` for anything else. GRUB can't scale fonts,
+  so sizes are baked for 3840x1600; `grub-theme-hearth-5k` is the same at
+  5120x2160 (`mkGrubTheme { scale = height / 1600; }` in `boot/default.nix`
+  for others).
+  GRUB's `boot_menu` only lays items out vertically, so macOS's horizontal
+  row of disks becomes a centred column.
+- `packages.x86_64-linux.boot-screenshots`: a NixOS VM test (OVMF -> GRUB ->
+  Plymouth at 3840x1600, with fake Windows and firmware entries) that saves
+  screenshots of the GRUB menu, the splash and the password prompt to
+  `result/`. Nothing touches the host's bootloader.
+
+Use in /etc/nixos:
+
+```nix
+boot.loader.grub.theme = inputs.hearth.packages.${system}.grub-theme-hearth;
+boot.plymouth.theme = "hearth";
+boot.plymouth.themePackages = [ inputs.hearth.packages.${system}.plymouth-theme-hearth ];
+boot.plymouth.font = "${pkgs.inter}/share/fonts/truetype/InterVariable.ttf";
+boot.plymouth.extraConfig = "ShowDelay=0\nDeviceScale=1\n";
+```

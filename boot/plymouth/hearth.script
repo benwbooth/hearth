@@ -1,0 +1,225 @@
+# hearth boot splash: macOS-style. A white NixOS snowflake in the middle of
+# a black screen, a thin rounded progress bar under it, and a FileVault-like
+# password field in place of the bar when a disk asks for its passphrase.
+# Boot messages stay hidden; Esc switches to plymouth's text view.
+#
+# Every size is a fraction of the screen height, measured on a Mac
+# (MacBook Pro 14", 982 pt tall: Apple logo ~92 pt, bar 200x6 pt, ~88 pt
+# below the logo). Images come in pre-rendered size ladders (mkassets.py), so
+# nothing is scaled and everything stays sharp at any resolution and
+# DeviceScale.
+
+Window.SetBackgroundTopColor(0, 0, 0);
+Window.SetBackgroundBottomColor(0, 0, 0);
+
+global.W = Window.GetWidth();
+global.H = Window.GetHeight();
+global.X0 = Window.GetX();
+global.Y0 = Window.GetY();
+
+fun even(v) {
+  return Math.Int(v / 2 + 0.5) * 2;
+}
+
+fun clamp(v, lo, hi) {
+  if (v < lo) return lo;
+  if (v > hi) return hi;
+  return v;
+}
+
+# ---- logo -------------------------------------------------------------------
+logo_size = clamp(Math.Int(H * 0.094 / 8 + 0.5) * 8, 48, 512);
+logo.image = Image("logo-" + logo_size + ".png");
+logo.sprite = Sprite(logo.image);
+logo.x = X0 + Math.Int((W - logo_size) / 2);
+logo.y = Y0 + Math.Int(H * 0.46 - logo_size / 2);
+logo.sprite.SetPosition(logo.x, logo.y, 10);
+logo.sprite.SetOpacity(0);
+
+# ---- pills (progress bar, password field) --------------------------------------
+# A pill is a left cap, a stretched middle and a right cap, so the round ends
+# keep their shape at any width.
+fun pill_new(h, z) {
+  local.p.h = clamp(even(h), 2, 128);
+  local.p.l = Sprite(Image("capl-" + p.h + ".png"));
+  local.p.r = Sprite(Image("capr-" + p.h + ".png"));
+  local.p.m = Sprite();
+  local.p.px = Image("px.png");
+  local.p.mw = -1;
+  local.p.l.SetZ(z);
+  local.p.m.SetZ(z);
+  local.p.r.SetZ(z);
+  return p;
+}
+
+fun pill_set(p, x, y, w, opacity) {
+  half = p.h / 2;
+  if (w < p.h) w = p.h;
+  mw = Math.Int(w - p.h);
+  if (mw != p.mw) {
+    if (mw > 0) p.m.SetImage(p.px.Scale(mw, p.h));
+    p.mw = mw;
+  }
+  p.l.SetPosition(x, y, p.l.GetZ());
+  p.m.SetPosition(x + half, y, p.m.GetZ());
+  p.r.SetPosition(x + half + mw, y, p.r.GetZ());
+  p.l.SetOpacity(opacity);
+  if (mw > 0) p.m.SetOpacity(opacity);
+  else p.m.SetOpacity(0);
+  p.r.SetOpacity(opacity);
+  return p;
+}
+
+fun pill_hide(p) {
+  p.l.SetOpacity(0);
+  p.m.SetOpacity(0);
+  p.r.SetOpacity(0);
+}
+
+# ---- progress bar ---------------------------------------------------------------
+bar.h = clamp(even(H * 0.0062), 4, 32);
+bar.w = Math.Int(H * 0.205);
+bar.x = X0 + Math.Int((W - bar.w) / 2);
+bar.y = logo.y + logo_size + Math.Int(H * 0.09);
+bar.track = pill_new(bar.h, 20);
+bar.fill = pill_new(bar.h, 21);
+bar.target = 0;
+bar.shown = 0;
+
+mode = Plymouth.GetMode();
+global.show_bar = (mode == "boot" || mode == "resume" || mode == "updates" ||
+                   mode == "system-upgrade" || mode == "firmware-upgrade");
+
+# ---- password field -------------------------------------------------------------
+field.h = clamp(even(H * 0.03), 20, 128);
+field.w = Math.Int(H * 0.19);
+field.x = X0 + Math.Int((W - field.w) / 2);
+field.y = bar.y - Math.Int(field.h / 2) + Math.Int(bar.h / 2);
+field.bg = pill_new(field.h, 30);
+field.dot = clamp(even(field.h * 0.24), 4, 48);
+field.dot_image = Image("dot-" + field.dot + ".png");
+field.font = "Inter " + clamp(Math.Int(H * 0.0105 + 0.5), 9, 40);
+field.small = "Inter " + clamp(Math.Int(H * 0.0085 + 0.5), 8, 32);
+field.placeholder = Sprite(Image.Text("Enter Password", 1, 1, 1, 1, field.font));
+field.placeholder.SetZ(31);
+field.placeholder.SetOpacity(0);
+field.prompt = Sprite();
+field.prompt.SetZ(31);
+
+field.ndots = 0;
+global.asking = 0;
+
+fun field_hide() {
+  pill_hide(field.bg);
+  field.placeholder.SetOpacity(0);
+  field.prompt.SetOpacity(0);
+  for (i = 0; i < field.ndots; i++) field.dots[i].SetOpacity(0);
+}
+
+fun show_field(prompt, bullets) {
+  global.asking = 1;
+  pill_hide(bar.track);
+  pill_hide(bar.fill);
+  pill_set(field.bg, field.x, field.y, field.w, 0.16);
+
+  # The disk's own prompt ("Please enter passphrase for disk ...") sits small
+  # above the field, so several disks can be told apart.
+  if (prompt != "") {
+    img = Image.Text(prompt, 1, 1, 1, 1, field.small);
+    field.prompt.SetImage(img);
+    field.prompt.SetPosition(X0 + Math.Int((W - img.GetWidth()) / 2),
+                             field.y - Math.Int(field.h * 0.45) - img.GetHeight(), 31);
+    field.prompt.SetOpacity(0.55);
+  } else {
+    field.prompt.SetOpacity(0);
+  }
+
+  gap = field.dot * 0.7;
+  maxd = Math.Int((field.w - field.h) / (field.dot + gap));
+  n = bullets;
+  if (n > maxd) n = maxd;
+  while (field.ndots < n) {
+    field.dots[field.ndots] = Sprite(field.dot_image);
+    field.dots[field.ndots].SetZ(32);
+    field.ndots++;
+  }
+  startx = field.x + Math.Int(field.h / 2);
+  dy = field.y + Math.Int((field.h - field.dot) / 2);
+  for (i = 0; i < field.ndots; i++) {
+    if (i < n) {
+      field.dots[i].SetPosition(startx + Math.Int(i * (field.dot + gap)), dy, 32);
+      field.dots[i].SetOpacity(1);
+    } else {
+      field.dots[i].SetOpacity(0);
+    }
+  }
+
+  if (n == 0) {
+    pw = field.placeholder.GetImage();
+    field.placeholder.SetPosition(field.x + Math.Int((field.w - pw.GetWidth()) / 2),
+                                  field.y + Math.Int((field.h - pw.GetHeight()) / 2), 31);
+    field.placeholder.SetOpacity(0.4);
+  } else {
+    field.placeholder.SetOpacity(0);
+  }
+}
+
+fun show_question(prompt, entry) {
+  # Questions are rare (fsck, recovery); show the text in the field.
+  show_field(prompt, 0);
+  field.placeholder.SetOpacity(0);
+  if (entry != "") {
+    img = Image.Text(entry, 1, 1, 1, 1, field.font);
+    field.placeholder.SetImage(img);
+    field.placeholder.SetPosition(field.x + Math.Int((field.w - img.GetWidth()) / 2),
+                                  field.y + Math.Int((field.h - img.GetHeight()) / 2), 31);
+    field.placeholder.SetOpacity(1);
+  }
+}
+
+fun display_normal() {
+  global.asking = 0;
+  field_hide();
+  field.placeholder.SetImage(Image.Text("Enter Password", 1, 1, 1, 1, field.font));
+}
+
+# ---- callbacks -----------------------------------------------------------------
+global.frame = 0;
+
+fun refresh() {
+  global.frame++;
+  # Fade the logo in over half a second (plymouth calls this at 50 Hz).
+  a = clamp(frame / 25, 0, 1);
+  logo.sprite.SetOpacity(a * a * (3 - 2 * a));
+
+  if (show_bar && !asking) {
+    # Ease towards the reported progress so the bar glides, never jumps.
+    bar.shown = bar.shown + (bar.target - bar.shown) * 0.08;
+    ba = clamp((frame - 15) / 25, 0, 1);
+    pill_set(bar.track, bar.x, bar.y, bar.w, 0.24 * ba);
+    pill_set(bar.fill, bar.x, bar.y, Math.Int(bar.w * bar.shown), ba);
+  }
+}
+
+fun boot_progress(duration, progress) {
+  # Plymouth's estimate creeps towards 1.0 using the last boot's timings.
+  if (progress > bar.target) bar.target = clamp(progress, 0, 1);
+}
+
+fun quit() {
+  # Plymouth stops drawing right after this; a full bar is the last frame the
+  # login screen fades in over (display managers quit with --retain-splash).
+  if (show_bar && !asking) pill_set(bar.fill, bar.x, bar.y, bar.w, 1);
+}
+
+fun message(text) {
+  # Hidden on purpose: Esc shows plymouth's details view with every message.
+}
+
+Plymouth.SetRefreshFunction(refresh);
+Plymouth.SetBootProgressFunction(boot_progress);
+Plymouth.SetDisplayPasswordFunction(show_field);
+Plymouth.SetDisplayQuestionFunction(show_question);
+Plymouth.SetDisplayNormalFunction(display_normal);
+Plymouth.SetMessageFunction(message);
+Plymouth.SetQuitFunction(quit);

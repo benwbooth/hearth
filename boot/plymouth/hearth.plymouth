@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=hearth
+Description=macOS-style boot: white NixOS snowflake, thin progress bar, minimal password field
+ModuleName=script
+
+[script]
+ImageDir=@out@/share/plymouth/themes/hearth
+ScriptFile=@out@/share/plymouth/themes/hearth/hearth.script

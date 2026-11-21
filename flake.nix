@@ -100,10 +100,16 @@
       '';
       meta.mainProgram = "hearth";
     };
+
+    # Boot visuals ("Boot" in README.md): Plymouth splash and
+    # GRUB menu themes, plus a VM test that screenshots both.
+    boot = import ./boot { inherit pkgs; };
   in {
     packages.${system} = {
       default = hearth;
       inherit hearth quickshell;
+      inherit (boot) plymouth-theme-hearth grub-theme-hearth grub-theme-hearth-5k;
+      boot-screenshots = import ./boot/vm-test.nix { inherit pkgs boot; };
     };
 
     # `nix develop`, then `quickshell -p shell` runs straight from the

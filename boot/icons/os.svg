@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Any other system: a startup disk. -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e8e8ec"/>
+      <stop offset="1" stop-color="#9a9aa2"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="26" width="84" height="48" rx="10" fill="url(#g)"/>
+  <rect x="8" y="58" width="84" height="16" rx="0" fill="#000" fill-opacity="0.12"/>
+  <circle cx="78" cy="66" r="3.5" fill="#34c759"/>
+</svg>
