@@ -1,0 +1,69 @@
+# hearth's built-in user pictures. scripts/build-avatars.sh turns this into
+# avatars/ (512x512 PNGs, index.json, CREDITS.md).
+#
+# id	category	kind	source	options	title
+# kind fluent:   Microsoft Fluent Emoji 3D (MIT), source = asset folder name,
+#                composed on a soft gradient tile (bg=#top,#bottom overrides
+#                the colour picked from the emoji; size = emoji share of the tile).
+# kind commons:  a Wikimedia Commons file by page id; the build refuses
+#                anything whose licence isn't CC0 or public domain.
+#                x/y = crop centre (0..1), zoom = crop tighter than the short side.
+# kind gradient: generated here, source = colours (soft blobs on the first).
+dog	Animals	fluent	Dog face		Dog
+cat	Animals	fluent	Cat face		Cat
+fox	Animals	fluent	Fox	bg=#ffe2c4,#f6b98a	Fox
+panda	Animals	fluent	Panda	bg=#d9f2d0,#9fd69a	Panda
+penguin	Animals	fluent	Penguin	bg=#d4ecff,#8ec5f4	Penguin
+rabbit	Animals	fluent	Rabbit face	bg=#ffe0ec,#f7b2cc	Rabbit
+koala	Animals	fluent	Koala	bg=#e3ecf5,#b2c4d8	Koala
+turtle	Animals	fluent	Turtle	bg=#d6f5ec,#8fd9c2	Turtle
+butterfly	Animals	fluent	Butterfly	bg=#e6e0ff,#b9a8f5	Butterfly
+owl	Animals	commons	136072677	x=0.47;y=0.42;zoom=1.5	Owl
+lake	Nature	commons	61645387	x=0.5;y=0.52;zoom=1.25	Mountain lake
+boathouse	Nature	commons	61911519	x=0.62;y=0.55	Lake and boathouse
+dunes	Nature	commons	58805598	x=0.52;y=0.5	Sand dunes
+waves	Nature	commons	63097365	x=0.5;y=0.5	Ocean
+waterfall	Nature	commons	12801001	x=0.45;y=0.45	Waterfall
+snowpeak	Nature	commons	51439106	x=0.58;y=0.5;zoom=1.2	Snowy mountain
+maple	Nature	commons	86896811	x=0.5;y=0.5	Autumn maple
+cactus	Nature	fluent	Cactus	bg=#fff1c9,#f5cf7a	Cactus
+daisy	Flowers	commons	88860064	x=0.62;y=0.5;zoom=1.35	Daisy
+lotus	Flowers	commons	46646340	x=0.48;y=0.5;zoom=1.25	Lotus
+gerbera	Flowers	commons	165819822	x=0.5;y=0.5	Gerbera
+tulips	Flowers	commons	14060928	x=0.5;y=0.5;zoom=1.15	Tulips
+sunflower	Flowers	fluent	Sunflower	bg=#dff0ff,#9fcdf2	Sunflower
+blossom	Flowers	fluent	Cherry blossom	bg=#fbe3ee,#f0b5cf	Cherry blossom
+tulip	Flowers	fluent	Tulip	bg=#e4f5dc,#acdc9a	Tulip
+hibiscus	Flowers	fluent	Hibiscus	bg=#ffe6d6,#f9b896	Hibiscus
+coffee	Food & Drink	fluent	Hot beverage	bg=#f3e6da,#d7b99c	Coffee
+cupcake	Food & Drink	fluent	Cupcake	bg=#ffe3ef,#f4b1cf	Cupcake
+avocado	Food & Drink	fluent	Avocado	bg=#eef6d6,#c4df8c	Avocado
+pizza	Food & Drink	fluent	Pizza	bg=#fff0cc,#f7c873	Pizza
+strawberry	Food & Drink	fluent	Strawberry	bg=#ffe0de,#f6a9a4	Strawberry
+watermelon	Food & Drink	fluent	Watermelon	bg=#dcf5e3,#97d9ac	Watermelon
+doughnut	Food & Drink	fluent	Doughnut	bg=#e5ecff,#aebef5	Doughnut
+bubbletea	Food & Drink	fluent	Bubble tea	bg=#f5e9dd,#dcbfa3	Bubble tea
+soccer	Sports & Hobbies	fluent	Soccer ball	bg=#d9f3dc,#8fd39a	Football
+basketball	Sports & Hobbies	fluent	Basketball	bg=#ffe6d2,#f7b386	Basketball
+tennis	Sports & Hobbies	fluent	Tennis	bg=#dbeeff,#93c3ef	Tennis
+guitar	Sports & Hobbies	fluent	Guitar	bg=#fbe6d4,#e9b48a	Guitar
+gaming	Sports & Hobbies	fluent	Video game	bg=#e7e1ff,#b4a6f2	Gaming
+palette	Sports & Hobbies	fluent	Artist palette	bg=#fff4d1,#f3d27c	Painting
+camera	Sports & Hobbies	fluent	Camera	bg=#dceefa,#9fc6e4	Photography
+books	Sports & Hobbies	fluent	Books	bg=#f8e9d8,#e4c19b	Reading
+earth	Space	commons	43894484	x=0.5;y=0.5;zoom=1.12	Earth
+earthrise	Space	commons	306267	x=0.55;y=0.64;zoom=2	Earthrise
+mars	Space	commons	19400	x=0.5;y=0.5;zoom=1.08	Mars
+saturn	Space	commons	7228953	x=0.5;y=0.5	Saturn
+neptune	Space	commons	640803	x=0.5;y=0.5;zoom=1.15	Neptune
+pluto	Space	commons	71082408	x=0.5;y=0.5;zoom=1.18	Pluto
+rocket	Space	fluent	Rocket	bg=#2b3a67,#121a33	Rocket
+planet	Space	fluent	Ringed planet	bg=#3a2d6b,#161233	Planet
+sunrise	Abstract	gradient	#ff9a62,#ffd36e,#ff6f91,#ffc3a0		Sunrise
+lagoon	Abstract	gradient	#2ec5d3,#6be3c4,#2a7fd4,#b7f0e8		Lagoon
+dusk	Abstract	gradient	#5b4bd6,#e86fb0,#2d2a7a,#f6a5c0		Dusk
+meadow	Abstract	gradient	#8fd26b,#f3e37a,#3fae7a,#d6f5a6		Meadow
+berry	Abstract	gradient	#b23a7a,#ff7aa8,#5a2a8a,#ffb3c9		Berry
+glacier	Abstract	gradient	#cfe8ff,#8ab8ff,#f2f7ff,#a7d8f0		Glacier
+ember	Abstract	gradient	#e0452f,#ff9f45,#8a1f3d,#ffd08a		Ember
+graphite	Abstract	gradient	#3a3f4b,#6b7385,#1e2129,#9aa3b5		Graphite

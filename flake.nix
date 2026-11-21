@@ -69,6 +69,9 @@
         runHook preInstall
         mkdir -p $out/share/hearth $out/bin
         cp -r shell helpers hypr vicinae swaync $out/share/hearth/
+        # Built-in user pictures (avatars/CREDITS.md), for Settings > Users &
+        # Accounts and the login screen: $out/share/hearth/avatars.
+        cp -r avatars $out/share/hearth/
         chmod +x $out/share/hearth/helpers/*
         patchShebangs $out/share/hearth/helpers
         # Apps launched from the dock inherit the bar's working directory;
@@ -81,6 +84,7 @@
           --prefix QML_IMPORT_PATH : ${qmlPath} \
           --prefix QT_PLUGIN_PATH : ${pluginPath} \
           --set-default HEARTH_BACKGROUND_DIRS ${backgroundDirs} \
+          --set-default HEARTH_AVATAR_DIR $out/share/hearth/avatars \
           --set-default HEARTH_FONT_DIR ${fontDir} \
           --set-default HEARTH_XKB_RULES ${pkgs.xkeyboard_config}/share/X11/xkb/rules/evdev.lst
         # Talk to the running hearth whichever build started it: quickshell

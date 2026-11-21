@@ -123,6 +123,7 @@ Singleton {
         { title: "Settings: window rules: open an app docked or floating, on a workspace, size, title bar, opacity", pane: "windowrules" },
         { title: "Settings: hot corners (Mission Control, Show Desktop, Lock Screen… from a screen corner)", pane: "hotcorners" },
         { title: "Settings: sleep, screen off and lock times, password after sleep, power button", pane: "power" },
+        { title: "Settings: users & accounts: your picture (login and lock screen avatar, photo, webcam, monogram) and full name", pane: "users" },
         { title: "Settings: lock screen: require password after, fingerprint, clock and date, now playing, notifications, animated wallpaper, screen off", pane: "lockscreen" },
         { title: "Lock screen: type your password (any key or click shows the field), Return unlocks, Esc clears; or touch the fingerprint reader", keys: "Super+L" },
         { title: "Lock screen stuck (hearth crashed while locked)? Ctrl+Alt+F2, log in, run hearth-recover-lock, then switch back", keys: "Ctrl+Alt+F2" },

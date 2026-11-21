@@ -78,6 +78,39 @@ indicators for everything the Plasma tray did, Settings and Help windows.
     (pam_exec with a test password) and turns on the `lock` IPC calls
     `testType`, `testKey`, `testClick`, `testShot` (arbor takes no
     screenshots while locked). Never lock the real session from a test.
+- Your picture and name (Settings > Users & Accounts,
+  `popups/settings/UsersPane.qml`): your picture and full name on top, then
+  macOS-style categories of built-in pictures (Animals, Nature, Flowers,
+  Food & Drink, Sports & Hobbies, Space, Abstract) and monograms of your
+  initials; "Choose a Photo…" opens a round crop with drag and zoom (saved
+  at 512x512), "Take a Photo…" uses the webcam (Qt Multimedia, 3-second
+  countdown) and then the same crop. Saving goes through
+  `helpers/hearth-user`: AccountsService on the system bus
+  (`FindUserByName` → `User.SetIconFile` / `SetRealName`; polkit lets you
+  change your own account, `org.freedesktop.accounts.change-own-user-data`)
+  plus a copy at `~/.face` (and `~/.face.icon` when that exists). The lock
+  screen and the login screen read AccountsService first. On NixOS a
+  `users.users.<name>.description` in the config wins over a name set here
+  at the next rebuild.
+  - Built-in pictures: `avatars/` (58 PNGs, 512x512, about 3 MB),
+    installed at `$out/share/hearth/avatars` (`HEARTH_AVATAR_DIR` in the
+    `hearth` wrapper; the greeter can use the same path) with `index.json`
+    (`id, category, title, file, author, licence, source` per picture) and
+    `CREDITS.md`. Only clean licences: Microsoft Fluent Emoji 3D (MIT,
+    `LICENSE.fluentui-emoji`) on generated gradient tiles, NASA images
+    (public domain) and Wikimedia Commons photos marked CC0, plus
+    generated gradients; no KDE artwork, people or trademarks. The images
+    are committed; `scripts/build-avatars.sh [ids]` rebuilds them from
+    `scripts/avatars/manifest.tsv` (pinned Fluent commit, Commons page
+    ids with each licence checked through the Commons API, crop centres),
+    with hearth's locked nixpkgs (Pillow, pngquant, oxipng).
+  - Tests: `HEARTH_USER_MOCK_DIR=<dir>` keeps `hearth-user` off the system
+    bus and out of `$HOME` (the account lives in `<dir>`; the lock screen
+    reads `<dir>/icons` too), `HEARTH_USER_MOCK_FAIL=<message>` makes
+    saving fail, `HEARTH_USER_TEST_NOCAM=1` shows the camera UI without
+    opening the webcam, and the `users-test` IPC target (`pick`,
+    `monogram`, `crop`, `zoom`, `pan`, `saveCrop`, `camera`, `setName`,
+    `status`) stands in for clicks.
 - Screenshots and screen recording (our own Spectacle; Settings >
   Screenshots): Print opens the capture overlay (`popups/Screenshot.qml`):
   every screen frozen, Region (magnifier, handles, real-pixel size, last

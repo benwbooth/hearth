@@ -1,0 +1,223 @@
+#!/usr/bin/env python3
+"""hearth-user: your account's picture and name (Settings > Users & Accounts).
+
+  hearth-user info              -> {"ok", "user", "realName", "icon"}
+  hearth-user set-icon FILE     picture for the login and lock screens
+  hearth-user set-name NAME     the full name shown there
+
+Changes go through AccountsService on the system bus (org.freedesktop.Accounts,
+FindUserByName -> User.SetIconFile / SetRealName; polkit lets you change your
+own account). The picture is also copied to ~/.face (and ~/.face.icon when
+that exists) for apps that read those. Prints one JSON line; on failure
+{"ok": false, "error": "<plain-language reason>"}.
+
+HEARTH_USER_MOCK_DIR=DIR (tests): never touches the system bus or $HOME;
+the "account" lives in DIR/account.json, the icon in DIR/icons/$USER and the
+~/.face copy in DIR/face.
+"""
+import json
+import os
+import pwd
+import shutil
+import sys
+import tempfile
+
+USER = pwd.getpwuid(os.getuid()).pw_name
+HOME = os.path.expanduser("~")
+MOCK = os.environ.get("HEARTH_USER_MOCK_DIR", "")
+ICON_DIR = "/var/lib/AccountsService/icons"
+
+
+def out(**kw):
+    print(json.dumps(kw), flush=True)
+
+
+def fail(msg):
+    out(ok=False, error=msg)
+    sys.exit(1)
+
+
+def gecos_name():
+    try:
+        return pwd.getpwnam(USER).pw_gecos.split(",")[0]
+    except KeyError:
+        return ""
+
+
+def first_readable(*paths):
+    for p in paths:
+        try:
+            if os.path.getsize(p) > 0 and os.access(p, os.R_OK):
+                return p
+        except OSError:
+            pass
+    return ""
+
+
+# ------------------------------------------------------------------ backends
+
+class Mock:
+    def __init__(self):
+        os.makedirs(os.path.join(MOCK, "icons"), exist_ok=True)
+        self.state_path = os.path.join(MOCK, "account.json")
+
+    def _state(self):
+        try:
+            with open(self.state_path) as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return {"realName": gecos_name(), "icon": ""}
+
+    def _save(self, st):
+        with open(self.state_path, "w") as f:
+            json.dump(st, f)
+
+    def info(self):
+        st = self._state()
+        return st.get("realName", ""), st.get("icon", "")
+
+    def set_icon(self, path):
+        if os.environ.get("HEARTH_USER_MOCK_FAIL"):
+            raise Refused(os.environ["HEARTH_USER_MOCK_FAIL"])
+        dest = os.path.join(MOCK, "icons", USER)
+        shutil.copyfile(path, dest)
+        st = self._state()
+        st["icon"] = dest
+        self._save(st)
+
+    def set_name(self, name):
+        if os.environ.get("HEARTH_USER_MOCK_FAIL"):
+            raise Refused(os.environ["HEARTH_USER_MOCK_FAIL"])
+        st = self._state()
+        st["realName"] = name
+        self._save(st)
+
+    face_dir = property(lambda self: MOCK)
+
+
+class Refused(Exception):
+    pass
+
+
+class Accounts:
+    def __init__(self):
+        import dbus
+        self.dbus = dbus
+        try:
+            bus = dbus.SystemBus()
+            mgr = dbus.Interface(bus.get_object("org.freedesktop.Accounts", "/org/freedesktop/Accounts"),
+                                 "org.freedesktop.Accounts")
+            path = mgr.FindUserByName(USER, timeout=5)
+            obj = bus.get_object("org.freedesktop.Accounts", path)
+            self.user = dbus.Interface(obj, "org.freedesktop.Accounts.User")
+            self.props = dbus.Interface(obj, "org.freedesktop.DBus.Properties")
+        except dbus.DBusException as e:
+            self.user = None
+            self.error = explain(e)
+
+    def info(self):
+        if self.user is None:
+            return gecos_name(), first_readable(os.path.join(ICON_DIR, USER),
+                                                os.path.join(HOME, ".face"), os.path.join(HOME, ".face.icon"))
+        name = str(self.props.Get("org.freedesktop.Accounts.User", "RealName"))
+        icon = str(self.props.Get("org.freedesktop.Accounts.User", "IconFile"))
+        # AccountsService reports its icons path even before any picture exists.
+        icon = first_readable(icon, os.path.join(HOME, ".face"), os.path.join(HOME, ".face.icon"))
+        return name or gecos_name(), icon
+
+    def _call(self, fn, *args):
+        if self.user is None:
+            raise Refused(self.error)
+        try:
+            getattr(self.user, fn)(*args, timeout=120)  # polkit may ask for a password
+        except self.dbus.DBusException as e:
+            raise Refused(explain(e))
+
+    def set_icon(self, path):
+        self._call("SetIconFile", path)
+
+    def set_name(self, name):
+        self._call("SetRealName", name)
+
+    face_dir = property(lambda self: HOME)
+
+
+def explain(e):
+    name = e.get_dbus_name() or ""
+    msg = e.get_dbus_message() or ""
+    if name.endswith("ServiceUnknown") or name.endswith("NameHasNoOwner") or name.endswith("SpawnFailed"):
+        return "The accounts service (accounts-daemon) isn't running, so the login screen can't be told."
+    if "PermissionDenied" in name or "AccessDenied" in name or "NotAuthorized" in name or "not authorized" in msg.lower():
+        return "The system didn't allow the change (permission was refused or the password prompt was cancelled)."
+    if name.endswith("NoReply") or name.endswith("Timeout"):
+        return "The accounts service didn't answer in time. Try again."
+    return "The accounts service refused: " + (msg or name)
+
+
+# ------------------------------------------------------------------ actions
+
+def write_face(src, face_dir):
+    """~/.face (and an existing ~/.face.icon) for apps that read those."""
+    face = os.path.join(face_dir, ".face" if face_dir == HOME else "face")
+    fd, tmp = tempfile.mkstemp(dir=face_dir, prefix=".face.")
+    os.close(fd)
+    shutil.copyfile(src, tmp)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, face)
+    if face_dir == HOME:
+        icon = os.path.join(HOME, ".face.icon")
+        if os.path.lexists(icon) and not (os.path.islink(icon) and os.readlink(icon) in (".face", face)):
+            os.remove(icon)
+            os.symlink(".face", icon)
+    return face
+
+
+def main():
+    args = sys.argv[1:]
+    if not args:
+        fail("usage: hearth-user info | set-icon FILE | set-name NAME")
+    backend = Mock() if MOCK else Accounts()
+    cmd = args[0]
+    if cmd == "info":
+        name, icon = backend.info()
+        out(ok=True, user=USER, realName=name, icon=icon, mock=bool(MOCK))
+    elif cmd == "set-icon" and len(args) == 2:
+        src = os.path.abspath(args[1])
+        if not os.path.isfile(src):
+            fail("That picture file doesn't exist any more.")
+        if os.path.getsize(src) > 1024 * 1024:
+            # AccountsService refuses icons over 1 MB.
+            fail("That picture is too large to use (over 1 MB). Crop it smaller first.")
+        face = ""
+        try:
+            face = write_face(src, backend.face_dir)
+        except OSError as e:
+            face_err = f"couldn't write ~/.face ({e.strerror})"
+        else:
+            face_err = ""
+        try:
+            backend.set_icon(src)
+        except Refused as e:
+            if face:
+                # ~/.face still changed: say what did work.
+                fail(str(e) + " Your picture was saved for apps that read ~/.face.")
+            fail(str(e))
+        name, icon = backend.info()
+        out(ok=True, icon=icon or face, warning=face_err)
+    elif cmd == "set-name" and len(args) == 2:
+        name = args[1].strip()
+        if not name:
+            fail("The name can't be empty.")
+        if ":" in name or "\n" in name or "," in name:
+            fail("The name can't contain a colon, comma or line break.")
+        try:
+            backend.set_name(name)
+        except Refused as e:
+            fail(str(e))
+        out(ok=True, realName=backend.info()[0])
+    else:
+        fail("usage: hearth-user info | set-icon FILE | set-name NAME")
+
+
+if __name__ == "__main__":
+    main()

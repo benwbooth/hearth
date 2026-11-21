@@ -1,0 +1,524 @@
+[
+ {
+  "id": "dog",
+  "category": "Animals",
+  "title": "Dog",
+  "file": "dog.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Dog%20face"
+ },
+ {
+  "id": "cat",
+  "category": "Animals",
+  "title": "Cat",
+  "file": "cat.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Cat%20face"
+ },
+ {
+  "id": "fox",
+  "category": "Animals",
+  "title": "Fox",
+  "file": "fox.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Fox"
+ },
+ {
+  "id": "panda",
+  "category": "Animals",
+  "title": "Panda",
+  "file": "panda.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Panda"
+ },
+ {
+  "id": "penguin",
+  "category": "Animals",
+  "title": "Penguin",
+  "file": "penguin.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Penguin"
+ },
+ {
+  "id": "rabbit",
+  "category": "Animals",
+  "title": "Rabbit",
+  "file": "rabbit.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Rabbit%20face"
+ },
+ {
+  "id": "koala",
+  "category": "Animals",
+  "title": "Koala",
+  "file": "koala.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Koala"
+ },
+ {
+  "id": "turtle",
+  "category": "Animals",
+  "title": "Turtle",
+  "file": "turtle.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Turtle"
+ },
+ {
+  "id": "butterfly",
+  "category": "Animals",
+  "title": "Butterfly",
+  "file": "butterfly.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Butterfly"
+ },
+ {
+  "id": "owl",
+  "category": "Animals",
+  "title": "Owl",
+  "file": "owl.png",
+  "author": "no rights reserved",
+  "licence": "CC0 1.0",
+  "source": "https://commons.wikimedia.org/wiki/File:Montane_Forest_Screech-Owl_iNaturalist.jpg"
+ },
+ {
+  "id": "lake",
+  "category": "Nature",
+  "title": "Mountain lake",
+  "file": "lake.png",
+  "author": "Volker Schnäbele volker",
+  "licence": "CC0 1.0",
+  "source": "https://commons.wikimedia.org/wiki/File:Turquoise_mountain_lake_(Unsplash).jpg"
+ },
+ {
+  "id": "boathouse",
+  "category": "Nature",
+  "title": "Lake and boathouse",
+  "file": "boathouse.png",
+  "author": "Luca Bravo lucabravo",
+  "licence": "CC0 1.0",
+  "source": "https://commons.wikimedia.org/wiki/File:Boathouse_on_a_mountain_lake_(Unsplash).jpg"
+ },
+ {
+  "id": "dunes",
+  "category": "Nature",
+  "title": "Sand dunes",
+  "file": "dunes.png",
+  "author": "Lionello DelPiccolo liodp",
+  "licence": "CC0 1.0",
+  "source": "https://commons.wikimedia.org/wiki/File:Great_Sand_Dunes_National_Park_and_Preserve,_United_States_(Unsplash).jpg"
+ },
+ {
+  "id": "waves",
+  "category": "Nature",
+  "title": "Ocean",
+  "file": "waves.png",
+  "author": "Tim Marshall timmarshall",
+  "licence": "CC0 1.0",
+  "source": "https://commons.wikimedia.org/wiki/File:Ocean_waves_rippling_(Unsplash).jpg"
+ },
+ {
+  "id": "waterfall",
+  "category": "Nature",
+  "title": "Waterfall",
+  "file": "waterfall.png",
+  "author": "Jordy Meow",
+  "licence": "CC0 1.0",
+  "source": "https://commons.wikimedia.org/wiki/File:Shosenkyo-Waterfall.jpg"
+ },
+ {
+  "id": "snowpeak",
+  "category": "Nature",
+  "title": "Snowy mountain",
+  "file": "snowpeak.png",
+  "author": "www.Pixel.la Free Stock Photos",
+  "licence": "CC0 1.0",
+  "source": "https://commons.wikimedia.org/wiki/File:Cold-snow-mountains-nature_(23698701434).jpg"
+ },
+ {
+  "id": "maple",
+  "category": "Nature",
+  "title": "Autumn maple",
+  "file": "maple.png",
+  "author": "aimnotboy",
+  "licence": "CC0 1.0",
+  "source": "https://commons.wikimedia.org/wiki/File:Sogi_Park_Autumn_Leaves.jpg"
+ },
+ {
+  "id": "cactus",
+  "category": "Nature",
+  "title": "Cactus",
+  "file": "cactus.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Cactus"
+ },
+ {
+  "id": "daisy",
+  "category": "Flowers",
+  "title": "Daisy",
+  "file": "daisy.png",
+  "author": "Bessi 909086",
+  "licence": "CC0 1.0",
+  "source": "https://commons.wikimedia.org/wiki/File:Marguerite_Daisy_Flower_White_Beautiful_Beauty.jpg"
+ },
+ {
+  "id": "lotus",
+  "category": "Flowers",
+  "title": "Lotus",
+  "file": "lotus.png",
+  "author": "Hong Zhang (jennyzhh2008)",
+  "licence": "CC0 1.0",
+  "source": "https://commons.wikimedia.org/wiki/File:Lotus_flower_(978659).jpg"
+ },
+ {
+  "id": "gerbera",
+  "category": "Flowers",
+  "title": "Gerbera",
+  "file": "gerbera.png",
+  "author": "Делфина",
+  "licence": "CC0 1.0",
+  "source": "https://commons.wikimedia.org/wiki/File:Gerbera_Daisy_flower_from_North_Macedonia.jpg"
+ },
+ {
+  "id": "tulips",
+  "category": "Flowers",
+  "title": "Tulips",
+  "file": "tulips.png",
+  "author": "Jebulon",
+  "licence": "CC0 1.0",
+  "source": "https://commons.wikimedia.org/wiki/File:Bunch_tulip_Paris_2011.jpg"
+ },
+ {
+  "id": "sunflower",
+  "category": "Flowers",
+  "title": "Sunflower",
+  "file": "sunflower.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Sunflower"
+ },
+ {
+  "id": "blossom",
+  "category": "Flowers",
+  "title": "Cherry blossom",
+  "file": "blossom.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Cherry%20blossom"
+ },
+ {
+  "id": "tulip",
+  "category": "Flowers",
+  "title": "Tulip",
+  "file": "tulip.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Tulip"
+ },
+ {
+  "id": "hibiscus",
+  "category": "Flowers",
+  "title": "Hibiscus",
+  "file": "hibiscus.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Hibiscus"
+ },
+ {
+  "id": "coffee",
+  "category": "Food & Drink",
+  "title": "Coffee",
+  "file": "coffee.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Hot%20beverage"
+ },
+ {
+  "id": "cupcake",
+  "category": "Food & Drink",
+  "title": "Cupcake",
+  "file": "cupcake.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Cupcake"
+ },
+ {
+  "id": "avocado",
+  "category": "Food & Drink",
+  "title": "Avocado",
+  "file": "avocado.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Avocado"
+ },
+ {
+  "id": "pizza",
+  "category": "Food & Drink",
+  "title": "Pizza",
+  "file": "pizza.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Pizza"
+ },
+ {
+  "id": "strawberry",
+  "category": "Food & Drink",
+  "title": "Strawberry",
+  "file": "strawberry.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Strawberry"
+ },
+ {
+  "id": "watermelon",
+  "category": "Food & Drink",
+  "title": "Watermelon",
+  "file": "watermelon.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Watermelon"
+ },
+ {
+  "id": "doughnut",
+  "category": "Food & Drink",
+  "title": "Doughnut",
+  "file": "doughnut.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Doughnut"
+ },
+ {
+  "id": "bubbletea",
+  "category": "Food & Drink",
+  "title": "Bubble tea",
+  "file": "bubbletea.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Bubble%20tea"
+ },
+ {
+  "id": "soccer",
+  "category": "Sports & Hobbies",
+  "title": "Football",
+  "file": "soccer.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Soccer%20ball"
+ },
+ {
+  "id": "basketball",
+  "category": "Sports & Hobbies",
+  "title": "Basketball",
+  "file": "basketball.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Basketball"
+ },
+ {
+  "id": "tennis",
+  "category": "Sports & Hobbies",
+  "title": "Tennis",
+  "file": "tennis.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Tennis"
+ },
+ {
+  "id": "guitar",
+  "category": "Sports & Hobbies",
+  "title": "Guitar",
+  "file": "guitar.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Guitar"
+ },
+ {
+  "id": "gaming",
+  "category": "Sports & Hobbies",
+  "title": "Gaming",
+  "file": "gaming.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Video%20game"
+ },
+ {
+  "id": "palette",
+  "category": "Sports & Hobbies",
+  "title": "Painting",
+  "file": "palette.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Artist%20palette"
+ },
+ {
+  "id": "camera",
+  "category": "Sports & Hobbies",
+  "title": "Photography",
+  "file": "camera.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Camera"
+ },
+ {
+  "id": "books",
+  "category": "Sports & Hobbies",
+  "title": "Reading",
+  "file": "books.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Books"
+ },
+ {
+  "id": "earth",
+  "category": "Space",
+  "title": "Earth",
+  "file": "earth.png",
+  "author": "NASA/Apollo 17 crew; taken by either Harrison Schmitt or Ron Evans",
+  "licence": "Public domain",
+  "source": "https://commons.wikimedia.org/wiki/File:The_Earth_seen_from_Apollo_17.jpg"
+ },
+ {
+  "id": "earthrise",
+  "category": "Space",
+  "title": "Earthrise",
+  "file": "earthrise.png",
+  "author": "NASA/Bill Anders",
+  "licence": "Public domain",
+  "source": "https://commons.wikimedia.org/wiki/File:NASA-Apollo8-Dec24-Earthrise.jpg"
+ },
+ {
+  "id": "mars",
+  "category": "Space",
+  "title": "Mars",
+  "file": "mars.png",
+  "author": "NASA / USGS (see PIA04304 catalog page)",
+  "licence": "Public domain",
+  "source": "https://commons.wikimedia.org/wiki/File:Mars_Valles_Marineris.jpeg"
+ },
+ {
+  "id": "saturn",
+  "category": "Space",
+  "title": "Saturn",
+  "file": "saturn.png",
+  "author": "NASA / JPL / Space Science Institute",
+  "licence": "Public domain",
+  "source": "https://commons.wikimedia.org/wiki/File:Saturn_during_Equinox.jpg"
+ },
+ {
+  "id": "neptune",
+  "category": "Space",
+  "title": "Neptune",
+  "file": "neptune.png",
+  "author": "NASA",
+  "licence": "Public domain",
+  "source": "https://commons.wikimedia.org/wiki/File:Neptune_Full.jpg"
+ },
+ {
+  "id": "pluto",
+  "category": "Space",
+  "title": "Pluto",
+  "file": "pluto.png",
+  "author": "NASA/Johns Hopkins University Applied Physics Laboratory/Southwest Research Institute/Alex Parker",
+  "licence": "Public domain",
+  "source": "https://commons.wikimedia.org/wiki/File:Pluto_in_True_Color_-_High-Res.jpg"
+ },
+ {
+  "id": "rocket",
+  "category": "Space",
+  "title": "Rocket",
+  "file": "rocket.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Rocket"
+ },
+ {
+  "id": "planet",
+  "category": "Space",
+  "title": "Planet",
+  "file": "planet.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Ringed%20planet"
+ },
+ {
+  "id": "sunrise",
+  "category": "Abstract",
+  "title": "Sunrise",
+  "file": "sunrise.png",
+  "author": "hearth",
+  "licence": "CC0 1.0",
+  "source": "scripts/avatars/build.py"
+ },
+ {
+  "id": "lagoon",
+  "category": "Abstract",
+  "title": "Lagoon",
+  "file": "lagoon.png",
+  "author": "hearth",
+  "licence": "CC0 1.0",
+  "source": "scripts/avatars/build.py"
+ },
+ {
+  "id": "dusk",
+  "category": "Abstract",
+  "title": "Dusk",
+  "file": "dusk.png",
+  "author": "hearth",
+  "licence": "CC0 1.0",
+  "source": "scripts/avatars/build.py"
+ },
+ {
+  "id": "meadow",
+  "category": "Abstract",
+  "title": "Meadow",
+  "file": "meadow.png",
+  "author": "hearth",
+  "licence": "CC0 1.0",
+  "source": "scripts/avatars/build.py"
+ },
+ {
+  "id": "berry",
+  "category": "Abstract",
+  "title": "Berry",
+  "file": "berry.png",
+  "author": "hearth",
+  "licence": "CC0 1.0",
+  "source": "scripts/avatars/build.py"
+ },
+ {
+  "id": "glacier",
+  "category": "Abstract",
+  "title": "Glacier",
+  "file": "glacier.png",
+  "author": "hearth",
+  "licence": "CC0 1.0",
+  "source": "scripts/avatars/build.py"
+ },
+ {
+  "id": "ember",
+  "category": "Abstract",
+  "title": "Ember",
+  "file": "ember.png",
+  "author": "hearth",
+  "licence": "CC0 1.0",
+  "source": "scripts/avatars/build.py"
+ },
+ {
+  "id": "graphite",
+  "category": "Abstract",
+  "title": "Graphite",
+  "file": "graphite.png",
+  "author": "hearth",
+  "licence": "CC0 1.0",
+  "source": "scripts/avatars/build.py"
+ }
+]

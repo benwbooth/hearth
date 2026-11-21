@@ -20,7 +20,8 @@ Scope {
         keyboard: "settings/KeyboardPane.qml", shortcuts: "settings/ShortcutsPane.qml",
         windowrules: "settings/WindowRulesPane.qml", power: "settings/PowerPane.qml",
         clipboard: "settings/ClipboardPane.qml", screenshots: "settings/ScreenshotsPane.qml",
-        wallpaper: "settings/WallpaperPane.qml", lockscreen: "settings/LockScreenPane.qml"
+        wallpaper: "settings/WallpaperPane.qml", lockscreen: "settings/LockScreenPane.qml",
+        users: "settings/UsersPane.qml"
     })
 
     Connections {
@@ -66,6 +67,7 @@ Scope {
                         spacing: 2
                         Repeater {
                             model: [
+                                { id: "users", label: "Users & Accounts", icon: "system-users" },
                                 { id: "appearance", label: "Appearance", icon: "preferences-desktop-theme-global" },
                                 { id: "menubar", label: "Menu Bar", icon: "preferences-desktop" },
                                 { id: "dock", label: "Desktop & Dock", icon: "preferences-system-windows" },
@@ -135,7 +137,8 @@ Scope {
                             text: ({ appearance: "Appearance", menubar: "Menu Bar", dock: "Desktop & Dock", layout: "Layout",
                                      wallpaper: "Wallpaper", mouse: "Mouse & Touchpad", night: "Night Light", notifications: "Notifications",
                                      hotcorners: "Hot Corners", displays: "Displays", keyboard: "Keyboard", shortcuts: "Keyboard Shortcuts",
-                                     windowrules: "Window Rules", power: "Sleep & Power", lockscreen: "Lock Screen", clipboard: "Clipboard", screenshots: "Screenshots" })[root.pane] || ""
+                                     windowrules: "Window Rules", power: "Sleep & Power", lockscreen: "Lock Screen", clipboard: "Clipboard", screenshots: "Screenshots",
+                                     users: "Users & Accounts" })[root.pane] || ""
                             font.pointSize: Theme.fontSize + 6
                             font.weight: Font.Bold
                         }

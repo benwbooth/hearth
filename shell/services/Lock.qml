@@ -343,7 +343,9 @@ fp=""; if command -v fprintd-list >/dev/null 2>&1 || [ -n "$HEARTH_LOCK_PAM_DIR"
   for s in hearth-lock-fingerprint kde-fingerprint; do [ -e "$d/$s" ] && { fp=$s; break; }; done
 fi
 name=$(getent passwd "$USER" | cut -d: -f5 | cut -d, -f1)
-av=""; for f in "/var/lib/AccountsService/icons/$USER" "$HOME/.face" "$HOME/.face.icon"; do [ -r "$f" ] && [ -s "$f" ] && { av=$f; break; }; done
+# HEARTH_USER_MOCK_DIR: test runs of Settings > Users & Accounts (helpers/hearth-user).
+icons=/var/lib/AccountsService/icons; [ -n "$HEARTH_USER_MOCK_DIR" ] && icons=$HEARTH_USER_MOCK_DIR/icons
+av=""; for f in "$icons/$USER" "$HOME/.face" "$HOME/.face.icon"; do [ -r "$f" ] && [ -s "$f" ] && { av=$f; break; }; done
 printf '%s\\n%s\\n%s\\n%s\\n' "$pw" "$fp" "$name" "$av"`, "sh", root.pamDir]
         stdout: StdioCollector {
             onStreamFinished: {
