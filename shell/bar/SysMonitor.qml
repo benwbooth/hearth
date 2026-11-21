@@ -25,14 +25,18 @@ MouseArea {
     readonly property bool showNetwork: true
     readonly property bool showTemps: true
     readonly property real graphWidth: 0.9
-    // Item height: the panel's thickness less Plasma's panel margins.
-    readonly property real h: Theme.barHeight - 8
+    // Item height: the bar's thickness less a margin (the thin mac menu bar
+    // sets `barHeight` on its window, like BarButton reads).
+    readonly property var hostWindow: root.QsWindow.window
+    readonly property int hostHeight: hostWindow && hostWindow.barHeight ? hostWindow.barHeight : Theme.barHeight
+    readonly property bool onTop: !!hostWindow && hostWindow.edge === "top"
+    readonly property real h: hostHeight - (hostHeight < 36 ? 4 : 8)
 
     // Same palette as the treetop app and its tray bars.
     readonly property var palette: ({ cpu: "#43c96b", mem: "#d6b23e", gpu: "#c06fd8", vram: "#d070a8", disk: "#4fb3d9", net: "#4f8fe0", temp: "#e0894f", warn: "#e05a4f" })
 
     implicitWidth: strip.implicitWidth + 8
-    implicitHeight: Theme.barHeight
+    implicitHeight: hostHeight
     hoverEnabled: true
     acceptedButtons: Qt.LeftButton
     onClicked: toggleTreetop()
@@ -575,10 +579,11 @@ done`]
     PopupWindow {
         id: tip
         anchor.item: root
-        anchor.edges: Edges.Top
-        anchor.gravity: Edges.Top
+        // Away from the bar: below it in the top menu bar.
+        anchor.edges: root.onTop ? Edges.Bottom : Edges.Top
+        anchor.gravity: anchor.edges
         anchor.adjustment: PopupAdjustment.Slide
-        anchor.margins.top: -4
+        anchor.margins.top: root.onTop ? 4 : -4
         color: "transparent"
         visible: false
         implicitWidth: tipFrame.implicitWidth
@@ -595,15 +600,13 @@ done`]
             onTriggered: tip.visible = tip.want
         }
 
-        Rectangle {
+        GlassFrame {
             id: tipFrame
             anchors.fill: parent
-            color: Theme.bgRaised
-            border.color: Theme.border
+            tint: root.onTop ? Theme.glassMenu : Theme.bgRaised
             radius: Theme.radius
             implicitWidth: tipCol.implicitWidth + 20
             implicitHeight: tipCol.implicitHeight + 16
-            transform: Translate { x: 0.001; y: 0.001 }
 
             Column {
                 id: tipCol
@@ -611,7 +614,7 @@ done`]
                 y: 8
                 spacing: 4
                 Label {
-                    text: !root.hoverKind ? "treetop"
+                    text: !root.hoverKind ? "System monitor (treetop)"
                         : root.hoverKind === "temp" ? root.kindTitle.temp
                         : root.kindTitle[root.hoverKind] + " — top programs"
                     font.weight: Font.DemiBold

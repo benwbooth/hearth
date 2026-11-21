@@ -156,6 +156,7 @@ PanelWindow {
             spacing: 0
             transform: Translate { x: 0.001; y: 0.001 }
 
+            SysMonitor { visible: Settings.menubar.showSysMonitor }
             DevApps { iconSize: Theme.menuBarIconSize; implicitWidth: 30 }
             Tray {}
             HelpMenu {}

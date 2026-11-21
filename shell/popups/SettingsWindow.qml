@@ -302,6 +302,8 @@ Scope {
                     enabled: Theme.menuBarStyle === "glass"
                 }
                 Divider {}
+                SwitchRow { label: "Show the system monitor"; note: "treetop's CPU, memory and GPU graphs in the menu bar. Click them to open treetop."; key: "menubar.showSysMonitor" }
+                Divider {}
                 SwitchRow { label: "Automatically hide and show the menu bar"; note: "Hidden until you move the pointer to the top edge."; key: "menubar.autohide" }
                 Divider {}
                 SwitchRow { label: "Show the app name"; note: "The bold name of the app you are using, next to the logo."; key: "menubar.showAppName" }

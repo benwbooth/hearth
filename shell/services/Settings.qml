@@ -28,6 +28,7 @@ Singleton {
             autohide: false,
             style: "glass",             // "glass" | "transparent" | "solid"
             opacity: 0.32,              // glass strip opacity, 0.28 .. 0.95
+            showSysMonitor: true,       // treetop's CPU/memory/GPU graphs
             showAppName: true,
             logo: "nixos",              // "nixos" | "penguin" | "none"   (shell/assets/<name>.svg)
             clock24h: true,
