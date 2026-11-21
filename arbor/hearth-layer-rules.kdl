@@ -1,15 +1,26 @@
-// hearth's glass for arbor (26.04+): blur what's behind the menu bar,
-// menus and popups, and swaync's notifications. Include it from the arbor
-// config:   include "/path/to/hearth/arbor/hearth-layer-rules.kdl"
+// hearth's glass for arbor (26.04+): blur what's behind menus and popups,
+// and swaync's notifications. Include it from the arbor config:
+//   include "/path/to/hearth/arbor/hearth-layer-rules.kdl"
 // (or paste it in).
 //
+// Real glass: with arbor's liquid glass (arbor 2026-11-20+; Settings >
+// Appearance > Real glass) hearth registers its panes (dock slab, menus,
+// popovers, tooltips, the glass menu bar) over IPC and arbor draws the
+// backdrop refracted under exactly those shapes. A surface with glass
+// shapes skips the rectangular blur and shadow below, so these rules are
+// only the fallback for when real glass is off (or for swaync).
+//
 // The dock is left out on purpose: its layer surface spans the whole screen
-// edge (so it never resizes while magnifying) and niri blurs a layer's
-// whole rectangle, not only its opaque pixels like Hyprland's ignore_alpha.
-// hearth draws the dock with a more opaque tint there instead.
+// edge (so it never resizes while magnifying) and the layer-rule blur covers
+// a layer's whole rectangle, not only its opaque pixels like Hyprland's
+// ignore_alpha. Without real glass hearth draws the dock with a more opaque
+// tint instead.
+//
+// The menu bar is left out too: its default style is transparent (macOS 26),
+// which must not be blurred; its Glass style gets real glass.
 
 layer-rule {
-    match namespace="^hearth-(menubar|popup)$"
+    match namespace="^hearth-popup$"
     match namespace="^swaync-(control-center|notification-window)$"
     // hearth's menus have 12 pt (14 px) corners (macOS 26).
     geometry-corner-radius 14
@@ -44,8 +55,17 @@ layer-rule {
     }
 }
 
-// The menu bar is square-cornered.
+// The menu bar is square-cornered and not blurred (see above); its
+// tooltips are.
 layer-rule {
     match namespace="^hearth-menubar$"
     geometry-corner-radius 0
+    popups {
+        geometry-corner-radius 8
+        background-effect {
+            xray false
+            blur true
+            saturation 1.6
+        }
+    }
 }

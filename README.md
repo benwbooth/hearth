@@ -110,9 +110,25 @@ pane):
 - Hairline outline.
 - Drop shadow: 26 px blur, 9 px down, opacity 0.27 dark / 0.17 light. It
   stays under Hyprland's `ignore_alpha` of 0.3 so the blur never spreads into
-  it. On arbor the compositor draws the shadow instead, because its blur
-  covers the whole layer rectangle.
+  it. On arbor without real glass the compositor draws the shadow instead,
+  because its layer-rule blur covers the whole layer rectangle.
 - Reduce transparency makes all glass solid.
+- **Real glass (arbor).** arbor draws macOS 26 Liquid Glass itself: every
+  visible GlassFrame reports its pane (window coordinates after transforms,
+  effective opacity) through `services/RealGlass.qml`, which sends one
+  `SetGlass` per window over arbor's IPC (a persistent socket in
+  `ArborBackend.qml`, probed at connect), at most once per rendered frame
+  (`afterAnimating`, coalesced per window) and only when something moved.
+  Tooltips and previews (xdg pop-ups) go as `popup` shapes of their parent
+  layer. arbor then refracts the backdrop under exactly those shapes:
+  bending along the rim, dispersion, blur, vibrancy and a specular rim
+  (arbor's ARBOR.md, "Liquid glass"). The shell drops its own sheen and
+  edge lensing there, draws 55% of its tint (legibility), a faint rim,
+  the outline and the drop shadow. Panes are regular glass; the Dock gets
+  real glass too (its slab follows magnification and the auto-hide slide).
+  The transparent menu bar stays unglassed (macOS 26); its Glass style gets
+  real glass. Settings > Appearance: "Real glass (arbor)" on/off and "Glass
+  strength". Hyprland is unchanged (compositor blur + shell glass).
 
 **Dock.**
 - Icons: 48 pt (54 px), spaced 17% of an icon.
@@ -155,7 +171,8 @@ pane):
 
 **Not matched.**
 - True refraction (the background bending at the edges) needs the backdrop
-  as a texture, which a layer-shell client doesn't get. The compositor's
-  blur plus the edge lensing highlight stands in for it.
+  as a texture, which a layer-shell client doesn't get. On arbor the
+  compositor draws it (Real glass above); on Hyprland the compositor's blur
+  plus the edge lensing highlight stands in for it.
 - The Genie minimize effect is left to the compositor.
 - SF Pro and Apple's cursors aren't shipped (Apple-licensed).
