@@ -1,0 +1,538 @@
+#!/usr/bin/env python3
+"""Spotlight's search helper (shell/services/Spotlight.qml, README "Spotlight").
+
+Runs next to the shell and answers queries as JSON lines, so the UI thread
+never waits on the index, a subprocess or the network. Files come from
+recoll (hearth-indexer keeps the index current), the calculator and unit
+conversions from libqalculate's `qalc`, web suggestions (off by default)
+from DuckDuckGo's suggestion endpoint.
+
+  stdin  {"id": 7, "q": "tax pdf", "web": false}          search
+         {"id": 8, "cmd": "preview", "path": ..., "mime": ...}
+         {"cmd": "status"}   {"cmd": "configure"}   {"cmd": "reindex"}
+  stdout {"id": 7, "type": "files", "items": [...], "done": false}
+         {"id": 7, "type": "calc", "items": [...]}
+         {"id": 7, "type": "web", "items": [...]}
+         {"id": 8, "type": "preview", "thumb": "/path.png", "text": "..."}
+         {"type": "status", ...}
+
+A newer query makes older ones stop emitting. One-shot use (the voice
+assistant): hearth-search --once '{"q": "taxes", "kind": "pdf", "after": "2026-11-20"}'
+Config: hearth-search --write-config (hearth-indexer runs it at start).
+"""
+
+import datetime as dt
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import threading
+import time
+import urllib.parse
+import urllib.request
+
+HOME = os.path.expanduser("~")
+CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME") or os.path.join(HOME, ".config")
+CACHE_HOME = os.environ.get("XDG_CACHE_HOME") or os.path.join(HOME, ".cache")
+SETTINGS = os.path.join(CONFIG_HOME, "hearth", "settings.json")
+CONFDIR = os.environ.get("RECOLL_CONFDIR") or os.path.join(CONFIG_HOME, "hearth", "recoll")
+DBDIR = os.path.join(CACHE_HOME, "hearth", "recoll", "xapiandb")
+THUMBS = os.path.join(CACHE_HOME, "hearth", "spotlight-previews")
+UNIT = "hearth-indexer.service"
+
+DEFAULT_FOLDERS = ["~/Desktop", "~/Documents", "~/Downloads", "~/Pictures", "~/Music", "~/Videos"]
+DEFAULT_EXCLUDES = ["node_modules", ".git", "target", "__pycache__", ".venv", "result", ".direnv", ".cache"]
+
+out_lock = threading.Lock()
+
+
+def emit(obj):
+    with out_lock:
+        sys.stdout.write(json.dumps(obj, separators=(",", ":")) + "\n")
+        sys.stdout.flush()
+
+
+def log(*a):
+    print("hearth-search:", *a, file=sys.stderr, flush=True)
+
+
+# --- settings and recoll config --------------------------------------------
+
+def spotlight_settings():
+    try:
+        with open(SETTINGS) as f:
+            s = json.load(f).get("spotlight") or {}
+    except (OSError, ValueError):
+        s = {}
+    return {
+        "folders": s.get("folders") or DEFAULT_FOLDERS,
+        "excludeNames": s.get("excludeNames") if s.get("excludeNames") is not None else DEFAULT_EXCLUDES,
+        "excludePaths": s.get("excludePaths") or [],
+        "contents": s.get("contents", True),
+        "hidden": s.get("hidden", False),
+    }
+
+
+def expand(p):
+    return os.path.abspath(os.path.expanduser(p))
+
+
+def conf_quote(p):
+    # recoll.conf lists are space separated; paths with spaces go in quotes.
+    return '"%s"' % p if " " in p else p
+
+
+def write_config():
+    s = spotlight_settings()
+    os.makedirs(CONFDIR, exist_ok=True)
+    os.makedirs(DBDIR, exist_ok=True)
+    folders = [expand(p) for p in s["folders"]]
+    skipped = [expand(p) for p in s["excludePaths"]] + [
+        expand("~/.cache"), expand("~/.local/share/Trash"), expand("~/.local/share/Steam"),
+        DBDIR, "/nix", "/proc", "/sys", "/dev", "/run", "/tmp",
+    ]
+    names = list(s["excludeNames"])
+    if not s["hidden"]:
+        names.append(".*")
+    lines = [
+        "# Written by hearth (Settings > Spotlight). Changes here are replaced.",
+        "topdirs = " + " ".join(conf_quote(p) for p in folders),
+        "skippedPaths = " + " ".join(conf_quote(p) for p in skipped),
+        "skippedNames+ = " + " ".join(conf_quote(n) for n in names),
+        "dbdir = " + DBDIR,
+        # Every file is findable by name, also those recoll can't read.
+        "indexallfilenames = 1",
+        "usesystemfilecommand = 1",
+        # Low idle and peak cost: no spelling dictionary build, small flushes,
+        # big text files capped.
+        "noaspell = 1",
+        "loglevel = 1",
+        "idxflushmb = 20",
+        "textfilemaxmbs = 10",
+        "compressedfilemaxkbs = 50000",
+        "pdfocr = 0",
+        # inotify: wait a little before re-indexing a file that keeps changing.
+        "mondelaypatterns = *.log:20 *.part:60 *.crdownload:60",
+    ]
+    if not s["contents"]:
+        # Names and metadata only.
+        lines.append("indexedmimetypes = inode/directory")
+        lines.append("excludedmimetypes = ")
+    text = "\n".join(lines) + "\n"
+    path = os.path.join(CONFDIR, "recoll.conf")
+    try:
+        with open(path) as f:
+            if f.read() == text:
+                return False
+    except OSError:
+        pass
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        f.write(text)
+    os.replace(tmp, path)
+    return True
+
+
+def systemctl(*args):
+    if os.environ.get("HEARTH_SEARCH_NO_SYSTEMD"):
+        return
+    try:
+        subprocess.run(["systemctl", "--user", *args], timeout=10,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def status():
+    st = {"type": "status", "indexer": "unknown", "phase": "", "files": 0, "total": 0, "current": ""}
+    try:
+        r = subprocess.run(["systemctl", "--user", "is-active", UNIT], capture_output=True, text=True, timeout=5)
+        st["indexer"] = r.stdout.strip() or "inactive"
+    except (OSError, subprocess.SubprocessError):
+        pass
+    # recollindex keeps its progress in idxstatus.txt (key = value).
+    try:
+        with open(os.path.join(CONFDIR, "idxstatus.txt")) as f:
+            kv = dict(l.strip().split(" = ", 1) for l in f if " = " in l)
+        phase = int(kv.get("phase", "0"))
+        st["phase"] = {0: "idle", 1: "indexing", 2: "cleaning up", 3: "cleaning up", 4: "indexing",
+                       5: "saving", 6: "checking", 7: "done"}.get(phase, "indexing")
+        st["files"] = int(kv.get("filesdone", "0") or 0)
+        st["total"] = int(kv.get("totfiles", "0") or 0)
+        st["current"] = kv.get("fn", "")
+    except (OSError, ValueError):
+        pass
+    st["hasIndex"] = os.path.isdir(DBDIR) and bool(os.listdir(DBDIR))
+    st["folders"] = [expand(p) for p in spotlight_settings()["folders"]]
+    return st
+
+
+# --- recoll queries ----------------------------------------------------------
+
+try:
+    from recoll import recoll as _recoll
+except ImportError:  # running from a checkout without the module
+    _recoll = None
+
+
+def recoll_db():
+    if _recoll is None or not os.path.exists(os.path.join(CONFDIR, "recoll.conf")):
+        return None
+    if not os.path.isdir(DBDIR) or not os.listdir(DBDIR):
+        return None
+    return _recoll.connect(confdir=CONFDIR)
+
+
+KINDS = {
+    "pdf": ["mime:application/pdf"],
+    "image": ["mime:image/*"], "images": ["mime:image/*"], "picture": ["mime:image/*"], "photo": ["mime:image/*"],
+    "folder": ["mime:inode/directory"], "folders": ["mime:inode/directory"], "directory": ["mime:inode/directory"],
+    "music": ["mime:audio/*"], "audio": ["mime:audio/*"], "song": ["mime:audio/*"],
+    "video": ["mime:video/*"], "movie": ["mime:video/*"], "movies": ["mime:video/*"],
+    "text": ["rclcat:text"], "document": ["rclcat:text"], "documents": ["rclcat:text"],
+    "spreadsheet": ["rclcat:spreadsheet"], "presentation": ["rclcat:presentation"],
+}
+
+
+def date_range(word, today=None):
+    """'today', 'yesterday', 'week', 'month', 'year', 'YYYY-MM-DD' -> (start, end) dates."""
+    today = today or dt.date.today()
+    w = word.lower()
+    if w == "today":
+        return today, today
+    if w == "yesterday":
+        y = today - dt.timedelta(days=1)
+        return y, y
+    if w in ("week", "thisweek", "this-week"):
+        return today - dt.timedelta(days=today.weekday()), today
+    if w in ("lastweek", "last-week"):
+        return today - dt.timedelta(days=7), today
+    if w in ("month", "thismonth", "this-month"):
+        return today.replace(day=1), today
+    if w in ("year", "thisyear", "this-year"):
+        return today.replace(month=1, day=1), today
+    try:
+        d = dt.date.fromisoformat(w)
+        return d, d
+    except ValueError:
+        return None
+
+
+def build_query(text, kind=None, after=None, before=None):
+    """Spotlight-ish text -> (recoll query string, words for ranking).
+
+    kind:pdf / kind:image / kind:folder ..., date:today / date:yesterday /
+    date:2026-11-20 and modified:... narrow it; the last word is a prefix
+    (typing "tax" finds "taxes"); every word also matches file names."""
+    words, filters = [], []
+    for tok in text.split():
+        m = re.match(r"^(kind|date|modified|created):(.+)$", tok, re.I)
+        if m:
+            key, val = m.group(1).lower(), m.group(2)
+            if key == "kind":
+                filters += KINDS.get(val.lower(), ["ext:" + val.lower()])
+            else:
+                r = date_range(val)
+                if r:
+                    filters.append("date:%s/%s" % (r[0].isoformat(), r[1].isoformat()))
+            continue
+        tok = re.sub(r'[\\"():]', " ", tok).strip()
+        if tok:
+            words += tok.split()
+    if kind:
+        filters += KINDS.get(kind.lower(), ["ext:" + kind.lower()])
+    if after or before:
+        a = after or "1970-01-01"
+        b = before or dt.date.today().isoformat()
+        filters.append("date:%s/%s" % (a, b))
+    parts = []
+    for i, w in enumerate(words):
+        last = i == len(words) - 1
+        star = "*" if last and len(w) >= 2 and not w.endswith("*") else ""
+        parts.append("(%s%s OR filename:%s%s)" % (w, star, w, star) if w.isalnum() or star
+                     else "(%s OR filename:%s)" % (w, w))
+    if not parts and filters:
+        parts = ["mime:*"] if not any(f.startswith("mime:") for f in filters) else []
+    return " ".join(parts + filters), [w.lower().rstrip("*") for w in words]
+
+
+def kind_of(mime, path):
+    if mime == "inode/directory":
+        return "folder"
+    if mime.startswith("image/"):
+        return "image"
+    if mime == "application/pdf":
+        return "pdf"
+    if mime.startswith("audio/"):
+        return "music"
+    if mime.startswith("video/"):
+        return "video"
+    if mime.startswith("text/") or "document" in mime or "office" in mime or "opendocument" in mime:
+        return "document"
+    return "other"
+
+
+def doc_item(q, doc, words, want_snippet):
+    url = doc.url or ""
+    if not url.startswith("file://"):
+        return None
+    path = urllib.parse.unquote(url[7:])
+    ipath = getattr(doc, "ipath", "") or ""
+    if ipath:  # inside an archive or mailbox: show the container
+        return None
+    mime = doc.mtype or ""
+    name = os.path.basename(path.rstrip("/")) or path
+    try:
+        mtime = int(float(doc.mtime or doc.fmtime or 0))
+    except (TypeError, ValueError):
+        mtime = 0
+    try:
+        size = int(doc.fbytes or 0)
+    except (TypeError, ValueError):
+        size = 0
+    rel = 0
+    try:
+        rel = int(str(doc.relevancyrating or "0").rstrip("%"))
+    except ValueError:
+        pass
+    lname = name.lower()
+    # Spotlight ranks names that start with what you typed first.
+    score = rel
+    if words:
+        if all(w in lname for w in words):
+            score += 60
+        if lname.startswith(words[0]):
+            score += 40
+        stem = os.path.splitext(lname)[0]
+        if stem == " ".join(words):
+            score += 80
+    if mtime:
+        age_days = max(0, (time.time() - mtime) / 86400)
+        score += max(0, 20 - age_days / 15)
+    item = {
+        "path": path, "name": name, "dir": os.path.dirname(path), "mime": mime,
+        "kind": kind_of(mime, path), "mtime": mtime, "size": size,
+        "title": doc.title or "", "score": round(score, 1),
+    }
+    if want_snippet and item["kind"] in ("document", "pdf"):
+        try:
+            ab = q.makedocabstract(doc) or ""
+            ab = re.sub(r"\[(?:L|P)\. \d+\]", " ", ab)        # recoll's line/page markers
+            ab = re.sub(r"<[^>]+>", "", ab)
+            ab = ab.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&").replace("&quot;", '"')
+            item["snippet"] = re.sub(r"\s+", " ", ab).strip()[:300]
+        except Exception:  # noqa: BLE001
+            pass
+    return item
+
+
+class Searcher:
+    def __init__(self):
+        self.latest = 0
+        self.db_lock = threading.Lock()
+
+    def stale(self, qid):
+        return qid != 0 and qid < self.latest
+
+    def files(self, qid, text, limit=60, kind=None, after=None, before=None, stream=True):
+        qs, words = build_query(text, kind, after, before)
+        if not qs:
+            return []
+        results = []
+        with self.db_lock:
+            if self.stale(qid):
+                return []
+            try:
+                db = recoll_db()
+            except Exception as e:  # noqa: BLE001
+                emit({"id": qid, "type": "files", "items": [], "done": True, "error": str(e)})
+                return []
+            if db is None:
+                if stream:
+                    emit({"id": qid, "type": "files", "items": [], "done": True, "error": "noindex"})
+                return []
+            try:
+                q = db.query()
+                q.execute(qs, stemming=1, stemlang="english")
+            except Exception as e:  # noqa: BLE001
+                if stream:
+                    emit({"id": qid, "type": "files", "items": [], "done": True, "error": str(e)})
+                return []
+            # Stream: a first small batch for the top of the list, then the
+            # rest in chunks; stop as soon as a newer query arrives.
+            batch = 12
+            seen = set()
+            while len(results) < limit:
+                if self.stale(qid):
+                    return results
+                try:
+                    docs = q.fetchmany(batch)
+                except Exception:  # noqa: BLE001
+                    docs = []
+                if not docs:
+                    break
+                chunk = []
+                for d in docs:
+                    it = doc_item(q, d, words, want_snippet=len(results) + len(chunk) < 20)
+                    if it and it["path"] not in seen:
+                        seen.add(it["path"])
+                        chunk.append(it)
+                results += chunk
+                if stream and chunk and not self.stale(qid):
+                    emit({"id": qid, "type": "files", "items": chunk, "done": False})
+                batch = 24
+        if stream and not self.stale(qid):
+            emit({"id": qid, "type": "files", "items": [], "done": True, "count": len(results)})
+        return results
+
+    def calc(self, qid, text):
+        t = text.strip()
+        if not t or not re.search(r"\d", t) and not re.search(r"\b(pi|e|sqrt|sin|cos|tan|log)\b", t):
+            return
+        if re.fullmatch(r"[\d\s.,-]+", t) and not re.search(r"\d\s*[-]\s*\d", t):
+            return  # a bare number: nothing to compute
+        if not shutil.which("qalc"):
+            return
+        # "100 usd in eur": qalc reads "in" as inches; Spotlight means "to".
+        expr = re.sub(r"\s+(?:in|as|->|→)\s+(?=[A-Za-z°$€£¥][\w°/^ ]*$)", " to ", t)
+        expr = re.sub(r"(\d(?:\.\d+)?)\s*%\s+of\s+", r"\1% * ", expr)
+        if expr != t or " to " in expr:
+            # Temperatures: "72F to C" means degrees, not farads and coulombs.
+            expr = re.sub(r"(\d)\s*°?([FCfc])\b", lambda m: m.group(1) + " °" + m.group(2).upper(), expr)
+            expr = re.sub(r"\bto\s+°?([FCfc])\s*$", lambda m: "to °" + m.group(1).upper(), expr)
+        try:
+            r = subprocess.run(["qalc", "-t", "-defaults", "-s", "autocalc 0", "-s", "max_decimals 4", expr], capture_output=True,
+                               text=True, timeout=3)
+        except (OSError, subprocess.SubprocessError):
+            return
+        res = (r.stdout or "").strip().splitlines()
+        if not res or self.stale(qid):
+            return
+        value = res[-1].strip()
+        norm = lambda s: re.sub(r"\s+", "", s).lower()
+        if not value or norm(value) == norm(t) or "error" in value.lower() or value.startswith("warning"):
+            return
+        conversion = bool(re.search(r"\s(to|in|as|->)\s|→", t))
+        emit({"id": qid, "type": "calc", "items": [{
+            "kind": "conversion" if conversion else "calculator",
+            "expr": t, "result": value,
+        }]})
+
+    def web(self, qid, text):
+        t = text.strip()
+        if len(t) < 2:
+            return
+        url = "https://duckduckgo.com/ac/?type=list&q=" + urllib.parse.quote(t)
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "hearth-spotlight"})
+            with urllib.request.urlopen(req, timeout=2) as r:
+                data = json.loads(r.read().decode())
+        except Exception:  # noqa: BLE001 (offline, blocked: no suggestions)
+            return
+        sugg = data[1] if isinstance(data, list) and len(data) > 1 else []
+        if self.stale(qid):
+            return
+        emit({"id": qid, "type": "web", "items": [{"text": s} for s in sugg[:4]]})
+
+    def preview(self, qid, path, mime):
+        out = {"id": qid, "type": "preview", "path": path}
+        try:
+            st = os.stat(path)
+        except OSError:
+            out["error"] = "missing"
+            emit(out)
+            return
+        key = hashlib.sha1(("%s:%d:%d" % (path, st.st_mtime, st.st_size)).encode()).hexdigest()
+        thumb = os.path.join(THUMBS, key + ".png")
+        os.makedirs(THUMBS, exist_ok=True)
+        try:
+            if mime == "application/pdf":
+                if not os.path.exists(thumb):
+                    subprocess.run(["pdftoppm", "-png", "-singlefile", "-f", "1", "-l", "1", "-scale-to", "640",
+                                    path, thumb[:-4]], timeout=10, capture_output=True)
+                if os.path.exists(thumb):
+                    out["thumb"] = thumb
+            elif mime.startswith("video/"):
+                if not os.path.exists(thumb):
+                    subprocess.run(["ffmpeg", "-v", "quiet", "-ss", "3", "-i", path, "-frames:v", "1",
+                                    "-vf", "scale=640:-2", "-y", thumb], timeout=15, capture_output=True)
+                if os.path.exists(thumb):
+                    out["thumb"] = thumb
+            elif mime.startswith("text/") or mime in ("application/json", "application/x-shellscript"):
+                with open(path, "rb") as f:
+                    out["text"] = f.read(4000).decode("utf-8", "replace")
+            elif mime == "inode/directory":
+                try:
+                    names = sorted(n for n in os.listdir(path) if not n.startswith("."))
+                    out["items"] = len(names)
+                    out["text"] = "\n".join(names[:40])
+                except OSError:
+                    pass
+        except (OSError, subprocess.SubprocessError) as e:
+            out["error"] = str(e)
+        emit(out)
+
+
+def serve():
+    s = Searcher()
+    try:
+        write_config()
+    except OSError as e:
+        log("can't write recoll config:", e)
+    for line in sys.stdin:
+        try:
+            req = json.loads(line)
+        except ValueError:
+            continue
+        cmd = req.get("cmd", "search")
+        qid = int(req.get("id", 0))
+        if cmd == "search":
+            s.latest = max(s.latest, qid)
+            text = req.get("q", "")
+            threading.Thread(target=s.calc, args=(qid, text), daemon=True).start()
+            if req.get("web"):
+                threading.Thread(target=s.web, args=(qid, text), daemon=True).start()
+            threading.Thread(target=s.files, args=(qid, text, int(req.get("limit", 60))), daemon=True).start()
+        elif cmd == "preview":
+            threading.Thread(target=s.preview, args=(qid, req.get("path", ""), req.get("mime", "")),
+                             daemon=True).start()
+        elif cmd == "status":
+            threading.Thread(target=lambda: emit(status()), daemon=True).start()
+        elif cmd == "configure":
+            def configure():
+                if write_config():
+                    systemctl("try-restart", UNIT)
+                emit(status())
+            threading.Thread(target=configure, daemon=True).start()
+        elif cmd == "reindex":
+            def reindex():
+                write_config()
+                systemctl("restart", UNIT)
+                emit(status())
+            threading.Thread(target=reindex, daemon=True).start()
+
+
+def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "--write-config":
+        changed = write_config()
+        print(os.path.join(CONFDIR, "recoll.conf"), "changed" if changed else "unchanged")
+        return
+    if len(sys.argv) > 1 and sys.argv[1] == "--status":
+        print(json.dumps(status()))
+        return
+    if len(sys.argv) > 2 and sys.argv[1] == "--once":
+        req = json.loads(sys.argv[2])
+        s = Searcher()
+        items = s.files(0, req.get("q", ""), int(req.get("limit", 10)), req.get("kind"),
+                        req.get("after"), req.get("before"), stream=False)
+        items.sort(key=lambda i: -i["score"])
+        print(json.dumps(items))
+        return
+    serve()
+
+
+if __name__ == "__main__":
+    main()

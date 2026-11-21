@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Spotlight's indexer (README "Spotlight"), run by the systemd user unit
+# hearth-indexer.service: writes recoll's config from Settings > Spotlight,
+# then recollindex catches up with what changed and keeps watching the
+# folders with inotify (near zero cost while nothing changes). The unit runs
+# it at idle CPU and I/O priority.
+set -euo pipefail
+hearth-search --write-config >/dev/null
+conf=${RECOLL_CONFDIR:-${XDG_CONFIG_HOME:-$HOME/.config}/hearth/recoll}
+# -m: monitor, -D: stay in the foreground, -x: no X11 session needed,
+# -w: wait before the first pass so login stays quick.
+exec recollindex -c "$conf" -m -D -x -w "${HEARTH_INDEX_DELAY:-60}"

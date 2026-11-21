@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# llama.cpp for hearth's AI hub (README "AI"), run by the systemd user unit
+# hearth-llama-server.service (started and stopped from Settings > AI).
+# Router mode: every .gguf under the models folder is listed, loaded on
+# first use or from Settings > AI, and unloaded again after the idle time.
+set -euo pipefail
+settings=${XDG_CONFIG_HOME:-$HOME/.config}/hearth/settings.json
+get() { jq -r "$1 // empty" "$settings" 2>/dev/null || true; }
+url=$(get .ai.providers.llamacpp.url); url=${url:-http://127.0.0.1:8181}
+port=${url##*:}; port=${port%%/*}
+dir=$(get .ai.providers.llamacpp.modelsDir); dir=${dir:-~/models}; dir=${dir/#\~/$HOME}
+max=$(get .ai.providers.llamacpp.modelsMax); max=${max:-1}
+idle=$(get .ai.keepAlive); idle=${idle:-10}
+mkdir -p "$dir"
+exec llama-server --host 127.0.0.1 --port "$port" --models-dir "$dir" --models-max "$max" \
+  --sleep-idle-seconds "$((idle * 60))" --jinja

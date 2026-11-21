@@ -21,7 +21,17 @@
       src = quickshell-src;
     });
 
-    python = pkgs.python3.withPackages (p: [ p.dbus-python p.pygobject3 ]);
+    # Spotlight's indexer (nix/recoll.nix): recoll without its GUI.
+    recoll = pkgs.callPackage ./nix/recoll.nix { };
+    # llama.cpp for the AI hub's managed server (helpers/hearth-llama-server):
+    # the Vulkan build, which is in the binary cache and runs well on RDNA 3.
+    llama-cpp = pkgs.llama-cpp-vulkan;
+
+    python = pkgs.python3.withPackages (p: [
+      p.dbus-python p.pygobject3
+      p.websockets                       # hearth-voice: the WhisperLive server
+      (p.toPythonModule recoll)          # hearth-search: recoll's Python API
+    ]);
 
     # Everything the shell's widgets shell out to.
     runtimeDeps = with pkgs; [
@@ -42,6 +52,14 @@
       # posters, Shadertoy compiles (qsb), API keys in the Secret Service.
       linux-wallpaperengine libheif.bin ffmpeg-headless
       kdePackages.qtshadertools libsecret
+      # Spotlight (helpers/hearth-search, hearth-indexer): the index, the
+      # calculator and unit conversions, PDF previews.
+      recoll libqalculate poppler-utils
+      # Voice assistant (helpers/hearth-voice): spoken replies, the
+      # listening sounds
+      # come from sound-theme-freedesktop (HEARTH_SOUND_DIR below).
+      piper-tts
+      llama-cpp
     ];
 
     # The `kde` platform theme picks the org.kde.desktop Controls style, which
@@ -90,6 +108,7 @@
           --set-default HEARTH_BACKGROUND_DIRS ${backgroundDirs} \
           --set-default HEARTH_AVATAR_DIR $out/share/hearth/avatars \
           --set-default HEARTH_FONT_DIR ${fontDir} \
+          --set-default HEARTH_SOUND_DIR ${pkgs.sound-theme-freedesktop}/share/sounds/freedesktop/stereo \
           --set-default HEARTH_XKB_RULES ${pkgs.xkeyboard_config}/share/X11/xkb/rules/evdev.lst
         # Talk to the running hearth whichever build started it: quickshell
         # matches instances by config path, so after a rebuild (or a bar
@@ -114,6 +133,12 @@
           --set-default QT_QPA_PLATFORM wayland \
           --set-default HEARTH_FONT_DIR ${fontDir} \
           --set-default HEARTH_XKB_RULES ${pkgs.xkeyboard_config}/share/X11/xkb/rules/evdev.lst
+        # Spotlight's indexer and the AI hub's llama.cpp server, for the
+        # systemd user units in nixosModules.ai.
+        for t in hearth-indexer hearth-llama-server; do
+          makeWrapper $out/share/hearth/helpers/$t $out/bin/$t \
+            --prefix PATH : ${lib.makeBinPath runtimeDeps}:$out/share/hearth/helpers
+        done
         # From a text console when the lock screen is stuck (README: Lock screen).
         ln -s $out/share/hearth/helpers/hearth-recover-lock $out/bin/hearth-recover-lock
         # GTK_MODULES=appmenu-gtk-module (arbor/config.kdl) finds it through
@@ -131,13 +156,16 @@
   in {
     packages.${system} = {
       default = hearth;
-      inherit hearth quickshell appmenu-gtk-module;
+      inherit hearth quickshell appmenu-gtk-module recoll;
       inherit (boot) plymouth-theme-hearth grub-theme-hearth grub-theme-hearth-5k;
       boot-screenshots = import ./boot/vm-test.nix { inherit pkgs boot; };
     };
 
     # The login screen (README "Login screen"): greetd + arbor + hearth-greeter.
     nixosModules.greeter = import ./nix/greeter.nix self;
+    # Spotlight's indexer and the AI hub's llama.cpp server as user units
+    # (README "Spotlight", "AI").
+    nixosModules.ai = import ./nix/ai.nix self;
 
     # `nix develop`, then `quickshell -p shell` runs straight from the
     # checkout and hot-reloads on every save.

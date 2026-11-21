@@ -1,0 +1,360 @@
+#!/usr/bin/env python3
+"""hearth's voice input and spoken replies (shell/services/Voice.qml,
+README "Voice assistant").
+
+Listening: the microphone (pw-record, 16 kHz mono float) streams to the
+WhisperLive server whisper-typer already runs (ws://127.0.0.1:9090 by
+default), which transcribes on the GPU. Listening ends by itself after a
+second of quiet once you've spoken (or press the shortcut again); nothing
+is recorded while idle, and there is no wake word.
+
+Replies: Piper (local neural text to speech) when Settings > Voice >
+Speak replies is on and a voice is downloaded.
+
+  stdin  {"cmd": "listen"} {"cmd": "stop"} {"cmd": "cancel"}
+         {"cmd": "speak", "text": "..."} {"cmd": "hush"}
+         {"cmd": "voices"} {"cmd": "download", "voice": "en_US-ryan-high"}
+  stdout {"type": "state", "state": "connecting|listening|transcribing|idle"}
+         {"type": "level", "level": 0.0-1.0}       (about 25 a second)
+         {"type": "partial", "text": "..."}  {"type": "final", "text": "..."}
+         {"type": "error", "message": "..."} {"type": "speaking", "on": true}
+         {"type": "voices", "installed": [...], "available": [...]}
+
+HEARTH_VOICE_INPUT=file.wav replaces the microphone (tests).
+"""
+
+import json
+import math
+import os
+import struct
+import subprocess
+import sys
+import threading
+import time
+import urllib.request
+
+HOME = os.path.expanduser("~")
+CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME") or os.path.join(HOME, ".config")
+DATA_HOME = os.environ.get("XDG_DATA_HOME") or os.path.join(HOME, ".local", "share")
+SETTINGS = os.path.join(CONFIG_HOME, "hearth", "settings.json")
+VOICES = os.path.join(DATA_HOME, "hearth", "piper")
+VOICE_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main/"
+
+DEFAULTS = {
+    "whisperUrl": "ws://127.0.0.1:9090",
+    "whisperModel": "small",
+    "language": "en",
+    "silenceMs": 1000,
+    "maxSeconds": 15,
+    "speak": False,
+    "piperVoice": "en_US-ryan-high",
+}
+
+# A few good Piper voices (rhasspy/piper-voices); any other name works too.
+CATALOG = [
+    ("en_US-ryan-high", "Ryan (US English, man)"),
+    ("en_US-amy-medium", "Amy (US English, woman)"),
+    ("en_US-lessac-high", "Lessac (US English, woman)"),
+    ("en_US-joe-medium", "Joe (US English, man)"),
+    ("en_GB-alba-medium", "Alba (British English, woman)"),
+    ("en_GB-northern_english_male-medium", "Northern English (man)"),
+]
+
+out_lock = threading.Lock()
+
+
+def emit(obj):
+    with out_lock:
+        sys.stdout.write(json.dumps(obj, separators=(",", ":")) + "\n")
+        sys.stdout.flush()
+
+
+def settings():
+    try:
+        with open(SETTINGS) as f:
+            v = json.load(f).get("voice") or {}
+    except (OSError, ValueError):
+        v = {}
+    return dict(DEFAULTS, **v)
+
+
+RATE = 16000
+CHUNK = 1600  # 0.1 s
+
+
+class Listener:
+    def __init__(self):
+        self.thread = None
+        self.stop_flag = threading.Event()
+        self.cancel_flag = threading.Event()
+
+    def busy(self):
+        return self.thread is not None and self.thread.is_alive()
+
+    def start(self):
+        if self.busy():
+            return
+        self.stop_flag.clear()
+        self.cancel_flag.clear()
+        self.thread = threading.Thread(target=self.run, daemon=True)
+        self.thread.start()
+
+    def source(self):
+        test = os.environ.get("HEARTH_VOICE_INPUT")
+        if test:
+            # Real-time paced, like a microphone.
+            return subprocess.Popen(["ffmpeg", "-v", "quiet", "-re", "-i", test, "-f", "f32le", "-ac", "1",
+                                     "-ar", str(RATE), "-"], stdout=subprocess.PIPE)
+        return subprocess.Popen(["pw-record", "--rate", str(RATE), "--channels", "1", "--format", "f32",
+                                 "--media-role", "Communication", "-"], stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL)
+
+    def run(self):
+        cfg = settings()
+        try:
+            from websockets.sync.client import connect
+        except ImportError:
+            emit({"type": "error", "message": "Python's websockets module is missing."})
+            emit({"type": "state", "state": "idle"})
+            return
+        emit({"type": "state", "state": "connecting"})
+        try:
+            ws = connect(cfg["whisperUrl"], open_timeout=3, max_size=None)
+        except Exception:  # noqa: BLE001
+            emit({"type": "error", "message": "Speech recognition isn't running (no Whisper server at %s). "
+                  "It comes with whisper-typer; see Settings > Voice." % cfg["whisperUrl"]})
+            emit({"type": "state", "state": "idle"})
+            return
+        segments = {}
+        partial = {"text": ""}
+        ready = threading.Event()
+        closed = threading.Event()
+
+        def receiver():
+            try:
+                for raw in ws:
+                    if isinstance(raw, bytes):
+                        continue
+                    try:
+                        msg = json.loads(raw)
+                    except ValueError:
+                        continue
+                    if msg.get("message") == "SERVER_READY":
+                        ready.set()
+                    if msg.get("status") == "WAIT":
+                        emit({"type": "error", "message": "The Whisper server is busy; try again in a moment."})
+                    if msg.get("message") == "DISCONNECT":
+                        break
+                    segs = msg.get("segments")
+                    if segs:
+                        for s in segs:
+                            segments[round(float(s.get("start", 0)), 1)] = (s.get("text") or "").strip()
+                        text = " ".join(t for _, t in sorted(segments.items()) if t).strip()
+                        if text and text != partial["text"]:
+                            partial["text"] = text
+                            emit({"type": "partial", "text": text})
+            except Exception:  # noqa: BLE001
+                pass
+            closed.set()
+
+        threading.Thread(target=receiver, daemon=True).start()
+        ws.send(json.dumps({
+            "uid": "hearth-voice-%d" % os.getpid(), "language": cfg["language"], "task": "transcribe",
+            "model": cfg["whisperModel"], "use_vad": True,
+            "vad_parameters": {"onset": 0.5, "offset": 0.35, "min_speech_duration_ms": 0,
+                               "min_silence_duration_ms": 300, "speech_pad_ms": 100},
+        }))
+        ready.wait(5)
+        try:
+            proc = self.source()
+        except OSError as e:
+            emit({"type": "error", "message": "Can't open the microphone: %s" % e})
+            ws.close()
+            emit({"type": "state", "state": "idle"})
+            return
+        emit({"type": "state", "state": "listening"})
+        started = time.time()
+        noise = None
+        spoke_at = None
+        last_loud = None
+        silence = cfg["silenceMs"] / 1000.0
+        try:
+            while not self.stop_flag.is_set() and not self.cancel_flag.is_set():
+                buf = proc.stdout.read(CHUNK * 4)
+                if not buf:
+                    break
+                n = len(buf) // 4
+                samples = struct.unpack("<%df" % n, buf[:n * 4])
+                rms = math.sqrt(sum(x * x for x in samples) / max(1, n))
+                # Noise floor from the first 0.3 s, then speech = well above it.
+                now = time.time()
+                if noise is None or (spoke_at is None and now - started < 0.3):
+                    noise = rms if noise is None else (noise * 0.7 + rms * 0.3)
+                loud = rms > max(0.012, noise * 3)
+                if loud:
+                    last_loud = now
+                    if spoke_at is None:
+                        spoke_at = now
+                level = min(1.0, math.sqrt(rms) * 3)
+                emit({"type": "level", "level": round(level, 3)})
+                try:
+                    ws.send(buf)
+                except Exception:  # noqa: BLE001
+                    break
+                if spoke_at and last_loud and now - last_loud >= silence and now - spoke_at > 0.4:
+                    break
+                if spoke_at is None and now - started > 6:
+                    break
+                if now - started > cfg["maxSeconds"]:
+                    break
+        finally:
+            proc.kill()
+        if self.cancel_flag.is_set():
+            ws.close()
+            emit({"type": "state", "state": "idle"})
+            return
+        emit({"type": "state", "state": "transcribing"})
+        emit({"type": "level", "level": 0})
+        try:
+            ws.send(b"END_OF_AUDIO")
+        except Exception:  # noqa: BLE001
+            pass
+        # Let the server finish the last pass (it repeats segments as they settle).
+        deadline = time.time() + 3.0
+        last = partial["text"]
+        stable_since = time.time()
+        while time.time() < deadline and not closed.is_set():
+            time.sleep(0.1)
+            if partial["text"] != last:
+                last = partial["text"]
+                stable_since = time.time()
+            elif last and time.time() - stable_since > 0.8:
+                break
+        try:
+            ws.close()
+        except Exception:  # noqa: BLE001
+            pass
+        text = partial["text"].strip()
+        if not text:
+            emit({"type": "final", "text": "", "heard": spoke_at is not None})
+        else:
+            emit({"type": "final", "text": text})
+        emit({"type": "state", "state": "idle"})
+
+
+class Speaker:
+    def __init__(self):
+        self.procs = []
+        self.lock = threading.Lock()
+
+    def hush(self):
+        with self.lock:
+            for p in self.procs:
+                try:
+                    p.kill()
+                except OSError:
+                    pass
+            self.procs = []
+
+    def speak(self, text):
+        self.hush()
+        cfg = settings()
+        voice = cfg["piperVoice"]
+        model = os.path.join(VOICES, voice + ".onnx")
+        if not os.path.exists(model):
+            emit({"type": "error", "message": "No voice downloaded yet: Settings > Voice > Download."})
+            return
+        rate = 22050
+        try:
+            with open(model + ".json") as f:
+                rate = int(json.load(f).get("audio", {}).get("sample_rate", rate))
+        except (OSError, ValueError):
+            pass
+
+        def run():
+            emit({"type": "speaking", "on": True})
+            try:
+                tts = subprocess.Popen(["piper", "--model", model, "--output-raw"], stdin=subprocess.PIPE,
+                                       stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                play = subprocess.Popen(["pw-play", "--rate", str(rate), "--channels", "1", "--format", "s16",
+                                         "--media-role", "Assistant", "-"], stdin=tts.stdout,
+                                        stderr=subprocess.DEVNULL)
+                with self.lock:
+                    self.procs = [tts, play]
+                tts.stdin.write(text.encode())
+                tts.stdin.close()
+                play.wait()
+            except OSError as e:
+                emit({"type": "error", "message": "Couldn't speak: %s" % e})
+            emit({"type": "speaking", "on": False})
+
+        threading.Thread(target=run, daemon=True).start()
+
+
+def voices():
+    os.makedirs(VOICES, exist_ok=True)
+    installed = sorted(f[:-5] for f in os.listdir(VOICES) if f.endswith(".onnx"))
+    emit({"type": "voices", "installed": installed,
+          "available": [{"id": v, "label": l} for v, l in CATALOG]})
+
+
+def download(voice):
+    # en_US-ryan-high -> en/en_US/ryan/high/en_US-ryan-high.onnx
+    try:
+        lang, name, quality = voice.split("-", 2)
+    except ValueError:
+        emit({"type": "error", "message": "Unknown voice %s" % voice})
+        return
+    base = "%s%s/%s/%s/%s/%s" % (VOICE_BASE, lang.split("_")[0], lang, name, quality, voice)
+    os.makedirs(VOICES, exist_ok=True)
+    try:
+        for ext in (".onnx.json", ".onnx"):
+            dest = os.path.join(VOICES, voice + ext)
+            tmp = dest + ".part"
+            with urllib.request.urlopen(base + ext, timeout=30) as r, open(tmp, "wb") as f:
+                total = int(r.headers.get("Content-Length") or 0)
+                done = 0
+                while True:
+                    b = r.read(1 << 16)
+                    if not b:
+                        break
+                    f.write(b)
+                    done += len(b)
+                    emit({"type": "download", "voice": voice, "done": done, "total": total, "file": ext})
+            os.replace(tmp, dest)
+        emit({"type": "download", "voice": voice, "finished": True})
+    except Exception as e:  # noqa: BLE001
+        emit({"type": "download", "voice": voice, "finished": True, "error": str(e)})
+    voices()
+
+
+def main():
+    listener = Listener()
+    speaker = Speaker()
+    emit({"type": "state", "state": "idle"})
+    for line in sys.stdin:
+        try:
+            req = json.loads(line)
+        except ValueError:
+            continue
+        cmd = req.get("cmd")
+        if cmd == "listen":
+            speaker.hush()
+            listener.start()
+        elif cmd == "stop":
+            listener.stop_flag.set()
+        elif cmd == "cancel":
+            listener.cancel_flag.set()
+            speaker.hush()
+        elif cmd == "speak":
+            speaker.speak(req.get("text", ""))
+        elif cmd == "hush":
+            speaker.hush()
+        elif cmd == "voices":
+            threading.Thread(target=voices, daemon=True).start()
+        elif cmd == "download":
+            threading.Thread(target=download, args=(req.get("voice", ""),), daemon=True).start()
+
+
+if __name__ == "__main__":
+    main()

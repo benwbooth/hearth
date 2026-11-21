@@ -1,0 +1,819 @@
+#!/usr/bin/env python3
+"""hearth's AI hub (shell/services/Ai.qml, README "AI").
+
+One place for every model the desktop uses: local servers (Ollama,
+llama.cpp's llama-server in router mode) and coding-agent CLIs (Claude
+Code, Codex, Gemini). It lists installed and loaded models, loads and
+unloads them, pulls new ones, reports VRAM per GPU and per process, and
+runs the assistant (voice and Spotlight's "Ask") with tools.
+
+JSON lines on stdin/stdout, so the shell never waits:
+
+  {"cmd": "refresh"}                      -> {"type": "state", ...}
+  {"cmd": "watch", "on": true}            poll every 2 s while a UI shows it
+  {"cmd": "load"|"unload", "provider": "ollama", "model": "qwen3.5:4b"}
+  {"cmd": "unloadAll"}
+  {"cmd": "pull", "provider": "ollama", "model": "..."}   -> {"type": "pull", ...}
+  {"cmd": "delete", "provider": "ollama", "model": "..."}
+  {"cmd": "server", "provider": "llamacpp", "on": true}   (systemd user unit)
+  {"cmd": "ask", "id": 3, "feature": "assistant", "text": "...", "context": {...}}
+      -> {"type": "tool", "id": 3, "call": 1, "name": "launch_app", "args": {...}}
+         (the shell runs it and answers {"cmd": "toolResult", "id": 3, "call": 1, "result": "..."})
+      -> {"type": "reply", "id": 3, "text": "...", "done": true}
+  {"cmd": "cancel", "id": 3}
+
+Settings come from settings.json `ai` (Settings > AI). Cloud CLIs are used
+only when `ai.allowCloud` is on.
+"""
+
+import glob
+import json
+import os
+import queue
+import re
+import shutil
+import subprocess
+import sys
+import threading
+import time
+import urllib.error
+import urllib.request
+
+HOME = os.path.expanduser("~")
+CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME") or os.path.join(HOME, ".config")
+SETTINGS = os.path.join(CONFIG_HOME, "hearth", "settings.json")
+LLAMA_UNIT = "hearth-llama-server.service"
+
+DEFAULTS = {
+    "allowCloud": False,
+    "keepAlive": 10,
+    "providers": {
+        "ollama": {"enabled": True, "url": "http://127.0.0.1:11434"},
+        "llamacpp": {"enabled": True, "url": "http://127.0.0.1:8181", "modelsDir": "~/models"},
+        "claude": {"enabled": False},
+        "codex": {"enabled": False},
+        "gemini": {"enabled": False},
+    },
+    "assistant": {"provider": "ollama", "model": "qwen3.5:4b"},
+}
+
+CLI = {
+    "claude": {"label": "Claude Code", "bin": "claude", "cloud": True},
+    "codex": {"label": "Codex", "bin": "codex", "cloud": True},
+    "gemini": {"label": "Gemini CLI", "bin": "gemini", "cloud": True},
+}
+
+out_lock = threading.Lock()
+
+
+def emit(obj):
+    with out_lock:
+        sys.stdout.write(json.dumps(obj, separators=(",", ":")) + "\n")
+        sys.stdout.flush()
+
+
+def log(*a):
+    print("hearth-ai:", *a, file=sys.stderr, flush=True)
+
+
+def merge(a, b):
+    out = dict(a)
+    for k, v in (b or {}).items():
+        out[k] = merge(a[k], v) if isinstance(v, dict) and isinstance(a.get(k), dict) else v
+    return out
+
+
+def settings():
+    try:
+        with open(SETTINGS) as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        data = {}
+    return merge(DEFAULTS, data.get("ai") or {}), data
+
+
+def http(url, body=None, timeout=5, method=None):
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(url, data=data, method=method or ("POST" if data else "GET"),
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        raw = r.read().decode()
+    return json.loads(raw) if raw.strip() else {}
+
+
+def human_bytes(n):
+    n = float(n or 0)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024 or unit == "TB":
+            return ("%.0f %s" if unit in ("B", "KB") else "%.1f %s") % (n, unit)
+        n /= 1024
+
+
+# --- providers ---------------------------------------------------------------
+
+class Ollama:
+    id = "ollama"
+    label = "Ollama"
+
+    def __init__(self, cfg):
+        self.url = cfg.get("url", "http://127.0.0.1:11434").rstrip("/")
+
+    def state(self):
+        st = {"id": self.id, "label": self.label, "kind": "local", "url": self.url, "running": False,
+              "installed": [], "loaded": [], "error": ""}
+        try:
+            tags = http(self.url + "/api/tags", timeout=2)
+            ps = http(self.url + "/api/ps", timeout=2)
+        except (OSError, ValueError) as e:
+            st["error"] = "Ollama isn't running at %s" % self.url if isinstance(e, (urllib.error.URLError, OSError)) else str(e)
+            return st
+        st["running"] = True
+        for m in tags.get("models", []):
+            d = m.get("details") or {}
+            st["installed"].append({
+                "name": m["name"], "size": m.get("size", 0), "sizeText": human_bytes(m.get("size")),
+                "params": d.get("parameter_size", ""), "quant": d.get("quantization_level", ""),
+                "family": d.get("family", ""), "capabilities": m.get("capabilities") or [],
+                "modified": m.get("modified_at", ""),
+            })
+        for m in ps.get("models", []):
+            st["loaded"].append({
+                "name": m["name"], "vram": m.get("size_vram", 0), "vramText": human_bytes(m.get("size_vram")),
+                "size": m.get("size", 0), "expires": m.get("expires_at", ""),
+                "context": m.get("context_length", 0),
+            })
+        return st
+
+    def load(self, model, keep_minutes):
+        http(self.url + "/api/generate", {"model": model, "prompt": "", "keep_alive": "%dm" % keep_minutes},
+             timeout=300)
+
+    def unload(self, model):
+        http(self.url + "/api/generate", {"model": model, "prompt": "", "keep_alive": 0}, timeout=60)
+
+    def delete(self, model):
+        http(self.url + "/api/delete", {"model": model}, timeout=60, method="DELETE")
+
+    def pull(self, model, progress):
+        req = urllib.request.Request(self.url + "/api/pull", data=json.dumps({"model": model}).encode(),
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=3600) as r:
+            for line in r:
+                try:
+                    ev = json.loads(line)
+                except ValueError:
+                    continue
+                progress(ev.get("status", ""), ev.get("completed", 0), ev.get("total", 0), ev.get("error", ""))
+
+    def chat(self, model, messages, tools, keep_minutes):
+        body = {"model": model, "messages": messages, "stream": False, "think": False,
+                "keep_alive": "%dm" % keep_minutes, "options": {"temperature": 0.2}}
+        if tools:
+            body["tools"] = tools
+        r = http(self.url + "/api/chat", body, timeout=180)
+        msg = r.get("message") or {}
+        calls = []
+        for c in msg.get("tool_calls") or []:
+            fn = c.get("function") or {}
+            args = fn.get("arguments") or {}
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except ValueError:
+                    args = {}
+            calls.append({"name": fn.get("name", ""), "args": args})
+        return msg.get("content") or "", calls, msg
+
+
+class LlamaCpp:
+    """llama-server in router mode (--models-dir): GET /models lists every
+    GGUF with its status, POST /models/load and /models/unload switch them."""
+    id = "llamacpp"
+    label = "llama.cpp"
+
+    def __init__(self, cfg):
+        self.url = cfg.get("url", "http://127.0.0.1:8181").rstrip("/")
+        self.models_dir = os.path.expanduser(cfg.get("modelsDir", "~/models"))
+
+    def state(self):
+        st = {"id": self.id, "label": self.label, "kind": "local", "url": self.url, "running": False,
+              "installed": [], "loaded": [], "error": "", "modelsDir": self.models_dir,
+              "serverAvailable": bool(shutil.which("llama-server")), "managed": True}
+        # GGUFs on disk, even while the server is stopped.
+        on_disk = {}
+        for f in sorted(glob.glob(os.path.join(self.models_dir, "**", "*.gguf"), recursive=True)):
+            if "mmproj" in os.path.basename(f).lower():
+                continue
+            name = os.path.splitext(os.path.basename(f))[0]
+            try:
+                size = os.path.getsize(f)
+            except OSError:
+                size = 0
+            on_disk[name] = {"name": name, "size": size, "sizeText": human_bytes(size), "path": f,
+                             "params": "", "quant": "", "capabilities": []}
+        try:
+            r = http(self.url + "/models", timeout=2)
+            st["running"] = True
+        except (OSError, ValueError):
+            st["installed"] = list(on_disk.values())
+            st["error"] = "llama-server isn't running"
+            return st
+        for m in r.get("data", []):
+            name = m.get("id", "")
+            status = (m.get("status") or {}).get("value", "") if isinstance(m.get("status"), dict) else str(m.get("status", ""))
+            entry = on_disk.pop(name, {"name": name, "size": 0, "sizeText": "", "params": "", "quant": "",
+                                       "capabilities": []})
+            st["installed"].append(entry)
+            if status in ("loaded", "loading"):
+                st["loaded"].append({"name": name, "vram": 0, "vramText": "", "status": status})
+        st["installed"] += list(on_disk.values())
+        return st
+
+    def load(self, model, keep_minutes):
+        http(self.url + "/models/load", {"model": model}, timeout=300)
+
+    def unload(self, model):
+        http(self.url + "/models/unload", {"model": model}, timeout=60)
+
+    def chat(self, model, messages, tools, keep_minutes):
+        body = {"model": model, "messages": messages, "temperature": 0.2, "stream": False}
+        if tools:
+            body["tools"] = tools
+        r = http(self.url + "/v1/chat/completions", body, timeout=180)
+        msg = (r.get("choices") or [{}])[0].get("message") or {}
+        calls = []
+        for c in msg.get("tool_calls") or []:
+            fn = c.get("function") or {}
+            try:
+                args = json.loads(fn.get("arguments") or "{}")
+            except ValueError:
+                args = {}
+            calls.append({"name": fn.get("name", ""), "args": args, "id": c.get("id")})
+        return msg.get("content") or "", calls, msg
+
+
+class AgentCli:
+    """Claude Code / Codex / Gemini CLI, one non-interactive prompt per turn.
+    They get no tools of their own here: hearth describes its tools in the
+    prompt and the CLI answers with a JSON line choosing one."""
+
+    def __init__(self, pid, cfg):
+        self.id = pid
+        self.label = CLI[pid]["label"]
+        self.bin = shutil.which(CLI[pid]["bin"])
+        self.model = cfg.get("model", "")
+
+    def state(self):
+        st = {"id": self.id, "label": self.label, "kind": "cloud", "running": bool(self.bin),
+              "installed": [], "loaded": [], "error": "" if self.bin else "%s isn't installed" % self.label,
+              "path": self.bin or ""}
+        if self.bin:
+            st["installed"] = [{"name": n, "size": 0, "sizeText": "", "params": "", "quant": "", "capabilities": ["tools"]}
+                               for n in self.models()]
+        return st
+
+    def models(self):
+        return {"claude": ["default", "sonnet", "opus", "haiku"],
+                "codex": ["default"],
+                "gemini": ["default", "gemini-2.5-flash", "gemini-2.5-pro"]}[self.id]
+
+    def command(self, model, prompt):
+        m = [] if not model or model == "default" else None
+        if self.id == "claude":
+            return [self.bin, "-p", "--output-format", "text", "--max-turns", "1"] + \
+                   ([] if m is not None else ["--model", model]) + [prompt]
+        if self.id == "codex":
+            return [self.bin, "exec", "--skip-git-repo-check", "--sandbox", "read-only"] + \
+                   ([] if m is not None else ["-m", model]) + [prompt]
+        return [self.bin] + ([] if m is not None else ["-m", model]) + ["-p", prompt]
+
+    def chat(self, model, messages, tools, keep_minutes):
+        if not self.bin:
+            raise RuntimeError("%s isn't installed" % self.label)
+        tool_text = "\n".join("- %s(%s): %s" % (t["function"]["name"],
+                                                ", ".join(t["function"]["parameters"].get("properties", {}).keys()),
+                                                t["function"]["description"]) for t in tools)
+        convo = "\n".join("%s: %s" % (m["role"].upper(), m.get("content") or json.dumps(m.get("tool_calls", "")))
+                          for m in messages)
+        prompt = ("You are answering for a desktop assistant. Do not use any tools of your own and do not edit files.\n"
+                  "Available desktop tools:\n%s\n\n"
+                  "Reply with exactly one JSON object on one line and nothing else: "
+                  '{"tool": "<name>", "args": {...}} to use a tool, or {"answer": "<short spoken reply>"}.\n\n%s'
+                  % (tool_text, convo))
+        r = subprocess.run(self.command(model, prompt), capture_output=True, text=True, timeout=240, cwd=HOME,
+                           stdin=subprocess.DEVNULL)
+        text = (r.stdout or "").strip()
+        m = re.search(r"\{.*\}", text, re.S)
+        if m:
+            try:
+                obj = json.loads(m.group(0))
+                if "tool" in obj:
+                    return "", [{"name": obj["tool"], "args": obj.get("args") or {}}], {"role": "assistant", "content": text}
+                if "answer" in obj:
+                    return obj["answer"], [], {"role": "assistant", "content": obj["answer"]}
+            except ValueError:
+                pass
+        if r.returncode != 0 and not text:
+            raise RuntimeError((r.stderr or "").strip().splitlines()[-1:] or ["%s failed" % self.label])
+        return text, [], {"role": "assistant", "content": text}
+
+
+class LlamaInstance(LlamaCpp):
+    """A llama-server hearth didn't start (found by its process): one model,
+    used through its OpenAI API; "unload" stops the process."""
+
+    def __init__(self, pid, port, alias, model_path):
+        self.id = "llamacpp:%d" % port
+        self.label = "llama.cpp :%d" % port
+        self.url = "http://127.0.0.1:%d" % port
+        self.pid = pid
+        self.alias = alias or os.path.splitext(os.path.basename(model_path))[0]
+        self.model_path = model_path
+        self.models_dir = os.path.dirname(model_path)
+
+    def state(self):
+        size = 0
+        try:
+            size = os.path.getsize(self.model_path)
+        except OSError:
+            pass
+        m = {"name": self.alias, "size": size, "sizeText": human_bytes(size), "path": self.model_path,
+             "params": "", "quant": "", "capabilities": []}
+        return {"id": self.id, "label": self.label, "kind": "local", "url": self.url, "running": True,
+                "external": True, "pid": self.pid, "installed": [m],
+                "loaded": [{"name": self.alias, "vram": 0, "vramText": "", "pid": self.pid}], "error": ""}
+
+    def load(self, model, keep_minutes):
+        pass
+
+    def unload(self, model):
+        os.kill(self.pid, 15)
+
+
+def llama_instances(managed_url):
+    out = []
+    for cmdf in glob.glob("/proc/[0-9]*/cmdline"):
+        try:
+            argv = open(cmdf).read().split("\0")
+        except OSError:
+            continue
+        if not argv or not argv[0].endswith("llama-server"):
+            continue
+        def opt(*names):
+            for n in names:
+                if n in argv and argv.index(n) + 1 < len(argv):
+                    return argv[argv.index(n) + 1]
+            return ""
+        if opt("--models-dir"):
+            continue  # router mode: the managed server
+        port = int(opt("--port") or 8080)
+        if managed_url.endswith(":%d" % port):
+            continue
+        out.append(LlamaInstance(int(cmdf.split("/")[2]), port, opt("--alias", "-a"), opt("--model", "-m")))
+    return out
+
+
+def providers(cfg):
+    out = {}
+    pc = cfg["providers"]
+    if pc["ollama"].get("enabled", True):
+        out["ollama"] = Ollama(pc["ollama"])
+    if pc["llamacpp"].get("enabled", True):
+        out["llamacpp"] = LlamaCpp(pc["llamacpp"])
+    for inst in llama_instances(pc["llamacpp"].get("url", "")):
+        out[inst.id] = inst
+    for pid in CLI:
+        if pc.get(pid, {}).get("enabled"):
+            out[pid] = AgentCli(pid, pc[pid])
+    return out
+
+
+# --- GPUs and VRAM -------------------------------------------------------------
+
+_gpu_names = {}
+
+
+def gpu_name(dev):
+    if dev in _gpu_names:
+        return _gpu_names[dev]
+    name = ""
+    try:
+        with open(os.path.join(dev, "uevent")) as f:
+            slot = next((l.split("=", 1)[1].strip() for l in f if l.startswith("PCI_SLOT_NAME=")), "")
+        if slot and shutil.which("lspci"):
+            r = subprocess.run(["lspci", "-s", slot, "-mm"], capture_output=True, text=True, timeout=3)
+            parts = re.findall(r'"([^"]*)"', r.stdout)
+            if len(parts) >= 3:
+                name = parts[2]
+                br = re.search(r"\[(.+)\]", name)
+                name = br.group(1) if br else name
+    except (OSError, subprocess.SubprocessError, StopIteration):
+        pass
+    _gpu_names[dev] = name or os.path.basename(os.path.dirname(dev))
+    return _gpu_names[dev]
+
+
+def gpus():
+    out = []
+    for card in sorted(glob.glob("/sys/class/drm/card[0-9]*")):
+        if "-" in os.path.basename(card):
+            continue
+        dev = os.path.join(card, "device")
+        try:
+            total = int(open(os.path.join(dev, "mem_info_vram_total")).read())
+            used = int(open(os.path.join(dev, "mem_info_vram_used")).read())
+        except (OSError, ValueError):
+            continue
+        busy = None
+        try:
+            busy = int(open(os.path.join(dev, "gpu_busy_percent")).read())
+        except (OSError, ValueError):
+            pass
+        try:
+            pci = os.path.basename(os.path.realpath(dev))
+        except OSError:
+            pci = ""
+        # A small "VRAM" carve-out is an integrated GPU.
+        out.append({"card": os.path.basename(card), "pci": pci, "name": gpu_name(dev), "total": total,
+                    "used": used, "totalText": human_bytes(total), "usedText": human_bytes(used),
+                    "busy": busy, "integrated": total < 4 << 30})
+    return out
+
+
+KNOWN = [
+    (r"ollama", "Ollama"), (r"llama-server", "llama.cpp"), (r"whisper", "Speech recognition (Whisper)"),
+    (r"piper", "Speech (Piper)"), (r"quickshell", "hearth"), (r"arbor", "arbor (compositor)"),
+    (r"Xwayland|xwayland", "Xwayland"),
+]
+
+
+def vram_processes():
+    """Per process VRAM from amdgpu's fdinfo (drm-memory-vram), each DRM
+    client counted once."""
+    per = {}
+    for fdinfo in glob.glob("/proc/[0-9]*/fdinfo"):
+        pid = fdinfo.split("/")[2]
+        seen = set()
+        try:
+            fds = os.listdir(fdinfo)
+        except OSError:
+            continue
+        for fd in fds:
+            try:
+                with open(os.path.join(fdinfo, fd)) as f:
+                    txt = f.read()
+            except OSError:
+                continue
+            if "drm-client-id" not in txt:
+                continue
+            cid = re.search(r"drm-client-id:\s*(\d+)", txt)
+            pdev = re.search(r"drm-pdev:\s*(\S+)", txt)
+            key = (cid.group(1) if cid else fd, pdev.group(1) if pdev else "")
+            if key in seen:
+                continue
+            seen.add(key)
+            m = re.search(r"drm-memory-vram:\s*(\d+)\s*KiB", txt)
+            if m:
+                e = per.setdefault((pid, key[1]), 0)
+                per[(pid, key[1])] = e + int(m.group(1)) * 1024
+    out = []
+    for (pid, pdev), vram in per.items():
+        if vram < 32 << 20:
+            continue
+        try:
+            comm = open("/proc/%s/comm" % pid).read().strip()
+            cmd = open("/proc/%s/cmdline" % pid).read().replace("\0", " ").strip()
+        except OSError:
+            continue
+        label = comm
+        for pat, name in KNOWN:
+            if re.search(pat, cmd):
+                label = name
+                break
+        out.append({"pid": int(pid), "pci": pdev, "name": label, "comm": comm, "vram": vram,
+                    "vramText": human_bytes(vram)})
+    out.sort(key=lambda p: -p["vram"])
+    return out[:20]
+
+
+# --- state -------------------------------------------------------------------
+
+def unit_active(unit):
+    try:
+        r = subprocess.run(["systemctl", "--user", "is-active", unit], capture_output=True, text=True, timeout=5)
+        return r.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+
+
+def full_state(with_procs):
+    cfg, _ = settings()
+    provs = providers(cfg)
+    st = {"type": "state", "time": int(time.time()), "providers": [], "gpus": gpus(),
+          "allowCloud": bool(cfg.get("allowCloud")),
+          "clis": [{"id": k, "label": v["label"], "installed": bool(shutil.which(v["bin"]))} for k, v in CLI.items()]}
+    for p in provs.values():
+        try:
+            s = p.state()
+        except Exception as e:  # noqa: BLE001
+            s = {"id": p.id, "label": p.label, "installed": [], "loaded": [], "error": str(e)}
+        if p.id == "llamacpp":
+            s["unit"] = unit_active(LLAMA_UNIT)
+        st["providers"].append(s)
+    if with_procs:
+        st["processes"] = vram_processes()
+    return st
+
+
+# --- assistant -----------------------------------------------------------------
+
+def tool(name, desc, props=None, required=None):
+    return {"type": "function", "function": {"name": name, "description": desc, "parameters": {
+        "type": "object", "properties": props or {}, "required": required or []}}}
+
+
+S = {"type": "string"}
+TOOLS = [
+    tool("search_files", "Search the user's files and folders (names and contents). Dates are YYYY-MM-DD.", {
+        "query": dict(S, description="words to look for, e.g. 'taxes'"),
+        "kind": dict(S, description="optional: pdf, image, folder, document, music, video, spreadsheet, presentation"),
+        "modified_after": dict(S, description="optional YYYY-MM-DD"),
+        "modified_before": dict(S, description="optional YYYY-MM-DD"),
+    }, ["query"]),
+    tool("open_file", "Open a file or folder with its default app.", {"path": S}, ["path"]),
+    tool("reveal_file", "Show a file in the file manager.", {"path": S}, ["path"]),
+    tool("launch_app", "Open an application by name, e.g. 'Kog', 'Firefox', 'Terminal'.", {"name": S}, ["name"]),
+    tool("set_volume", "Set the speaker volume in percent (0-150).", {"percent": {"type": "number"}}, ["percent"]),
+    tool("change_volume", "Turn the volume up or down by percent points (negative for down).",
+         {"delta": {"type": "number"}}, ["delta"]),
+    tool("mute", "Mute or unmute the speakers.", {"muted": {"type": "boolean"}}, ["muted"]),
+    tool("desktop_action", "Run a desktop action.", {
+        "action": {"type": "string", "enum": ["lock_screen", "sleep", "dark_mode_on", "dark_mode_off",
+                                              "do_not_disturb_on", "do_not_disturb_off", "screenshot",
+                                              "show_desktop", "show_all_windows", "next_wallpaper",
+                                              "set_brightness", "open_settings"]},
+        "value": dict(S, description="set_brightness: percent; open_settings: a pane such as wallpaper, displays, dock, sound"),
+    }, ["action"]),
+    tool("get_weather", "Current weather and today's forecast for the user's place."),
+    tool("calculate", "Calculate or convert units/currency, e.g. '5 ft to m'.", {"expression": S}, ["expression"]),
+    tool("web_search", "Open a web search in the browser.", {"query": S}, ["query"]),
+    tool("open_url", "Open a web address in the browser.", {"url": S}, ["url"]),
+]
+SHELL_TOOLS = {"launch_app", "desktop_action", "get_weather"}
+
+
+def system_prompt(ctx):
+    now = time.localtime()
+    return (
+        "You are the voice assistant of the user's Linux desktop (hearth). Today is %s, the time is %s. %s"
+        "Do what the user asks by calling tools; you may call several in a row. "
+        "For files the user 'edited yesterday' etc., work out the dates and pass modified_after/modified_before. "
+        "When a search finds what they asked to open, open the best match. If a search finds nothing, search again "
+        "right away with fewer filters (drop the kind, then widen the dates) before telling the user. "
+        "Answer in one or two short, friendly sentences meant to be spoken aloud: no markdown, no lists, no file paths "
+        "unless asked. If you can't do something, say so plainly."
+    ) % (time.strftime("%A, %B %-d, %Y", now), time.strftime("%-I:%M %p", now),
+         ("The user is in %s. " % ctx["place"]) if ctx.get("place") else "")
+
+
+class Assistant:
+    def __init__(self):
+        self.pending = {}     # (id, call) -> Queue
+        self.cancelled = set()
+
+    def run_local_tool(self, name, args):
+        if name == "search_files":
+            q = {"q": args.get("query", ""), "limit": 8}
+            if args.get("kind"):
+                q["kind"] = args["kind"]
+            if args.get("modified_after"):
+                q["after"] = args["modified_after"]
+            if args.get("modified_before"):
+                q["before"] = args["modified_before"]
+            r = subprocess.run(["hearth-search", "--once", json.dumps(q)], capture_output=True, text=True, timeout=20)
+            try:
+                items = json.loads(r.stdout or "[]")
+            except ValueError:
+                items = []
+            if not items:
+                return "No files found."
+            return json.dumps([{"path": i["path"], "kind": i["kind"],
+                                "modified": time.strftime("%Y-%m-%d %H:%M", time.localtime(i["mtime"])) if i["mtime"] else ""}
+                               for i in items[:8]])
+        if name == "open_file":
+            p = os.path.expanduser(args.get("path", ""))
+            if not os.path.exists(p):
+                return "That file doesn't exist."
+            subprocess.Popen(["xdg-open", p], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+            return "Opened %s." % os.path.basename(p)
+        if name == "reveal_file":
+            p = os.path.expanduser(args.get("path", ""))
+            subprocess.Popen(["busctl", "--user", "call", "org.freedesktop.FileManager1", "/org/freedesktop/FileManager1",
+                              "org.freedesktop.FileManager1", "ShowItems", "ass", "1", "file://" + p, ""],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return "Showing it in the file manager."
+        if name in ("set_volume", "change_volume", "mute"):
+            if name == "set_volume":
+                v = max(0, min(150, float(args.get("percent", 50))))
+                cmd = ["wpctl", "set-volume", "-l", "1.5", "@DEFAULT_AUDIO_SINK@", "%.2f" % (v / 100)]
+                done = "Volume set to %d%%." % v
+            elif name == "change_volume":
+                d = float(args.get("delta", 10))
+                cmd = ["wpctl", "set-volume", "-l", "1.5", "@DEFAULT_AUDIO_SINK@", "%.0f%%%s" % (abs(d), "+" if d >= 0 else "-")]
+                done = "Volume turned %s." % ("up" if d >= 0 else "down")
+            else:
+                cmd = ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "1" if args.get("muted", True) else "0"]
+                done = "Muted." if args.get("muted", True) else "Unmuted."
+            if os.environ.get("HEARTH_AI_DRYRUN"):
+                return done + " (dry run)"
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            return done if r.returncode == 0 else "Couldn't change the volume: " + (r.stderr or "").strip()
+        if name == "calculate":
+            r = subprocess.run(["qalc", "-t", "-defaults", "-s", "max_decimals 4", args.get("expression", "")],
+                               capture_output=True, text=True, timeout=5)
+            return (r.stdout or "").strip() or "Couldn't calculate that."
+        if name in ("web_search", "open_url"):
+            import urllib.parse
+            url = args.get("url") if name == "open_url" else \
+                "https://duckduckgo.com/?q=" + urllib.parse.quote(args.get("query", ""))
+            if not re.match(r"^https?://", url or ""):
+                url = "https://" + (url or "")
+            subprocess.Popen(["xdg-open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+            return "Opened the browser."
+        return "Unknown tool."
+
+    def shell_tool(self, rid, call, name, args):
+        qu = queue.Queue()
+        self.pending[(rid, call)] = qu
+        emit({"type": "tool", "id": rid, "call": call, "name": name, "args": args})
+        try:
+            return qu.get(timeout=15)
+        except queue.Empty:
+            return "The desktop didn't answer."
+        finally:
+            self.pending.pop((rid, call), None)
+
+    def tool_result(self, rid, call, result):
+        qu = self.pending.get((rid, call))
+        if qu:
+            qu.put(result)
+
+    def ask(self, req):
+        rid = int(req.get("id", 0))
+        cfg, _ = settings()
+        feature = cfg.get(req.get("feature", "assistant")) or cfg["assistant"]
+        pid = req.get("provider") or feature.get("provider", "ollama")
+        model = req.get("model") or feature.get("model", "")
+        provs = providers(cfg)
+        p = provs.get(pid)
+        if p is None:
+            emit({"type": "reply", "id": rid, "done": True, "error": True,
+                  "text": "The assistant's AI (%s) is turned off. Choose one in Settings > AI." % pid})
+            return
+        if isinstance(p, AgentCli) and not cfg.get("allowCloud"):
+            emit({"type": "reply", "id": rid, "done": True, "error": True,
+                  "text": "%s sends what you say to the cloud. Allow cloud AI in Settings > AI first." % p.label})
+            return
+        messages = [{"role": "system", "content": system_prompt(req.get("context") or {})}]
+        messages += req.get("history") or []
+        messages.append({"role": "user", "content": req.get("text", "")})
+        call = 0
+        try:
+            for _ in range(6):
+                if rid in self.cancelled:
+                    return
+                text, calls, raw = p.chat(model, messages, TOOLS, int(cfg.get("keepAlive", 10)))
+                if not calls:
+                    emit({"type": "reply", "id": rid, "done": True, "text": (text or "").strip() or "Done."})
+                    return
+                if isinstance(p, AgentCli):
+                    messages.append(raw)
+                else:
+                    messages.append({"role": "assistant", "content": raw.get("content") or "",
+                                     "tool_calls": raw.get("tool_calls")})
+                for c in calls:
+                    call += 1
+                    emit({"type": "step", "id": rid, "name": c["name"], "args": c["args"]})
+                    if c["name"] in SHELL_TOOLS:
+                        result = self.shell_tool(rid, call, c["name"], c["args"])
+                    else:
+                        try:
+                            result = self.run_local_tool(c["name"], c["args"])
+                        except Exception as e:  # noqa: BLE001
+                            result = "Error: %s" % e
+                    tm = {"role": "tool", "content": str(result)}
+                    if pid == "llamacpp" and c.get("id"):
+                        tm["tool_call_id"] = c["id"]
+                    if pid == "ollama":
+                        tm["tool_name"] = c["name"]
+                    if isinstance(p, AgentCli):
+                        tm = {"role": "user", "content": "Result of %s: %s" % (c["name"], result)}
+                    messages.append(tm)
+            emit({"type": "reply", "id": rid, "done": True, "text": "That took too many steps; I stopped."})
+        except urllib.error.URLError as e:
+            emit({"type": "reply", "id": rid, "done": True, "error": True,
+                  "text": "I can't reach %s (%s). Is it running? See Settings > AI." % (p.label, e.reason)})
+        except Exception as e:  # noqa: BLE001
+            emit({"type": "reply", "id": rid, "done": True, "error": True, "text": "Something went wrong: %s" % e})
+
+
+# --- main loop -------------------------------------------------------------------
+
+def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "--state":
+        print(json.dumps(full_state(True), indent=1))
+        return
+    asst = Assistant()
+    watching = {"on": False}
+
+    def poller():
+        last = 0
+        while True:
+            time.sleep(0.5)
+            now = time.time()
+            period = 2 if watching["on"] else 30
+            if now - last >= period:
+                last = now
+                try:
+                    emit(full_state(watching["on"]))
+                except Exception as e:  # noqa: BLE001
+                    log("state:", e)
+
+    threading.Thread(target=poller, daemon=True).start()
+
+    def bg(fn, *a):
+        threading.Thread(target=fn, args=a, daemon=True).start()
+
+    def act(req):
+        cfg, _ = settings()
+        provs = providers(cfg)
+        pid, model = req.get("provider", ""), req.get("model", "")
+        cmd = req["cmd"]
+        try:
+            if cmd == "unloadAll":
+                for p in provs.values():
+                    if hasattr(p, "unload"):
+                        try:
+                            for m in p.state()["loaded"]:
+                                p.unload(m["name"])
+                        except Exception as e:  # noqa: BLE001
+                            log("unload", p.id, e)
+            else:
+                p = provs.get(pid)
+                if p is None:
+                    raise RuntimeError("%s is turned off" % pid)
+                if cmd == "load":
+                    emit({"type": "busy", "provider": pid, "model": model, "what": "loading"})
+                    p.load(model, int(cfg.get("keepAlive", 10)))
+                elif cmd == "unload":
+                    p.unload(model)
+                elif cmd == "delete":
+                    p.delete(model)
+                elif cmd == "pull":
+                    def prog(status, done, total, err):
+                        emit({"type": "pull", "provider": pid, "model": model, "status": status,
+                              "completed": done, "total": total, "error": err})
+                    p.pull(model, prog)
+                    emit({"type": "pull", "provider": pid, "model": model, "status": "success", "done": True})
+            emit({"type": "done", "cmd": cmd, "provider": pid, "model": model})
+        except Exception as e:  # noqa: BLE001
+            emit({"type": "done", "cmd": cmd, "provider": pid, "model": model, "error": str(e)})
+        emit(full_state(watching["on"]))
+
+    def server(req):
+        verb = "start" if req.get("on") else "stop"
+        r = subprocess.run(["systemctl", "--user", verb, LLAMA_UNIT], capture_output=True, text=True, timeout=30)
+        emit({"type": "done", "cmd": "server", "provider": "llamacpp",
+              "error": (r.stderr or "").strip() if r.returncode else ""})
+        time.sleep(1.5)
+        emit(full_state(watching["on"]))
+
+    for line in sys.stdin:
+        try:
+            req = json.loads(line)
+        except ValueError:
+            continue
+        cmd = req.get("cmd")
+        if cmd == "refresh":
+            bg(lambda: emit(full_state(watching["on"])))
+        elif cmd == "watch":
+            watching["on"] = bool(req.get("on"))
+            if watching["on"]:
+                bg(lambda: emit(full_state(True)))
+        elif cmd in ("load", "unload", "unloadAll", "delete", "pull"):
+            bg(act, req)
+        elif cmd == "server":
+            bg(server, req)
+        elif cmd == "ask":
+            asst.cancelled.discard(int(req.get("id", 0)))
+            bg(asst.ask, req)
+        elif cmd == "toolResult":
+            asst.tool_result(int(req.get("id", 0)), int(req.get("call", 0)), req.get("result", ""))
+        elif cmd == "cancel":
+            asst.cancelled.add(int(req.get("id", 0)))
+
+
+if __name__ == "__main__":
+    main()
