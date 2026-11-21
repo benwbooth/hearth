@@ -104,8 +104,10 @@ hl.config({
     input = {
         kb_layout = "us",
         follow_mouse = 1,
-        sensitivity = 0,
-        accel_profile = "flat",
+        -- Pointer speed (-1..1) with acceleration like Plasma's default
+        -- ("adaptive"); 0 with "flat" felt slow on the 5K screen.
+        sensitivity = 0.3,
+        accel_profile = "adaptive",
         touchpad = { natural_scroll = true },
     },
 })
