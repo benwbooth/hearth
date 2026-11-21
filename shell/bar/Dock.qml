@@ -61,6 +61,17 @@ PanelWindow {
     color: "transparent"
     WlrLayershell.namespace: "hearth-dock"
     WlrLayershell.layer: WlrLayer.Top
+    // While one of its menus is open the dock takes the keyboard under the
+    // pointer and hands keys to the menu (arrows, Return, Esc, type-ahead),
+    // like the menu bar.
+    WlrLayershell.keyboardFocus: menuOpen ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    Item {
+        focus: true
+        Keys.onPressed: event => {
+            const a = ShellState.activePopup;
+            if (a && a.open && a.barWindow === dockWin) a.handleKey(event);
+        }
+    }
     // Input only on the dock itself; hidden, a 2 px strip along the edge.
     mask: Region { item: dockWin.shown ? frameMask : trigger }
     // The slab's resting geometry out to the screen edge (so the pointer
