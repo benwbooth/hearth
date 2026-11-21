@@ -81,6 +81,21 @@ if command -v arbor >/dev/null 2>&1; then
 fi
 mv -f "$tmp" "$1"'
 
+    // arbor's real config: devloop installs hearth's arbor/config.kdl into
+    // ~/.config/hearth/arbor/ (~/.config/arbor/config.kdl only includes it);
+    // the old place when that copy doesn't exist (no devloop).
+    readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")
+    property bool liveCopy: true
+    readonly property string mainConfig: configHome + (liveCopy ? "/hearth/arbor/config.kdl" : "/arbor/config.kdl")
+    FileView {
+        path: root.configHome + "/hearth/arbor/config.kdl"
+        printErrors: false
+        watchChanges: true
+        onFileChanged: reload()
+        onLoaded: root.liveCopy = true
+        onLoadFailed: root.liveCopy = false
+    }
+
     function write(name, text, cb) {
         const p = writerComp.createObject(root, { name: name, cb: cb || null });
         p.command = ["sh", "-c", root.script, "sh", root.path(name), text.replace(/\n+$/, "")];

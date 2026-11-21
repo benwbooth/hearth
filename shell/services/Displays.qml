@@ -76,7 +76,7 @@ Singleton {
     Timer { interval: 5000; repeat: true; running: Compositor.isArbor && !root.pending; onTriggered: root.refresh() }
 
     // --- arbor's own output blocks (for HDR, colour profile, VRR mode) ---
-    readonly property string arborConfig: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/arbor/config.kdl"
+    readonly property string arborConfig: ArborConfig.mainConfig
     FileView {
         path: Compositor.isArbor ? root.arborConfig : ""
         blockLoading: false

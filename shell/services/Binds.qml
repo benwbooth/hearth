@@ -20,7 +20,7 @@ Singleton {
 
     readonly property var overrides: { void Settings.data; return Settings.data.binds || {}; }
     property var defaults: []          // [{ key, props, action }]
-    readonly property string arborConfig: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/arbor/config.kdl"
+    readonly property string arborConfig: ArborConfig.mainConfig
 
     // --- keys ---
     readonly property var modOrder: ["Mod", "Super", "Ctrl", "Alt", "Shift", "ISO_Level3_Shift"]

@@ -200,7 +200,7 @@ Singleton {
     }
 
     // --- arbor config ---
-    readonly property string arborConfig: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/arbor/config.kdl"
+    readonly property string arborConfig: ArborConfig.mainConfig
 
     function groupFor(action) {
         const a = action.toLowerCase();
