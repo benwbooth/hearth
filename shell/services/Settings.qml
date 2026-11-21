@@ -78,6 +78,18 @@ Singleton {
             lockOnSleep: true,          // ask for the password after sleep
             powerButton: "menu"         // "menu" | "sleep" | "lock" | "poweroff" | "displayoff" | "nothing"
         },
+        // Lock screen (services/Lock.qml, lock/LockScreen.qml).
+        lockScreen: {
+            clock: "auto",              // "auto" (like the menu bar) | "12" | "24"
+            dateFormat: "long",         // "long" (Friday, November 20) | "short" (Fri Nov 20) | "none"
+            showMedia: true,            // now playing controls
+            showNotifications: true,    // how many notifications came in
+            showPower: true,            // Sleep / Restart / Shut Down buttons
+            grace: 0,                   // seconds after an idle lock that need no password
+            fingerprint: true,          // unlock with the fingerprint reader as well as the password
+            animated: true,             // play video/shader wallpapers on the lock screen
+            screenOff: 60               // seconds without input before the locked screens go dark; 0 = never
+        },
         // Clipboard history (services/Clipboard.qml: cliphist + wl-paste).
         clipboard: {
             enabled: true,
@@ -158,6 +170,7 @@ Singleton {
     readonly property var notifications: { void root.data; return Object.assign({}, defaults.notifications, data.notifications || {}); }
     readonly property var hotCorners: { void root.data; return Object.assign({}, defaults.hotCorners, data.hotCorners || {}); }
     readonly property var power: { void root.data; return Object.assign({}, defaults.power, data.power || {}); }
+    readonly property var lockScreen: { void root.data; return Object.assign({}, defaults.lockScreen, data.lockScreen || {}); }
     readonly property var clipboard: { void root.data; return Object.assign({}, defaults.clipboard, data.clipboard || {}); }
     readonly property var wallpaper: { void root.data; return Object.assign({}, defaults.wallpaper, data.wallpaper || {}); }
 

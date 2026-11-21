@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# hearth-session lock|suspend|reboot|poweroff|logout|menu
+# hearth-session lock [manual|idle|sleep] [--wait]|suspend|reboot|poweroff|logout|menu
 #
 # One place for the session actions, used by the launcher footer, the
 # `session` IPC target and the wlogout layout (hypr/wlogout/layout).
@@ -19,9 +19,23 @@ run() {
 
 case ${1:-menu} in
 lock)
-  # hypridle turns lock-session into hyprlock; without it, lock directly.
-  if pgrep -x hypridle >/dev/null; then run loginctl lock-session
-  else run sh -c 'pidof hyprlock || hyprlock'; fi ;;
+  # hearth's own lock screen (services/Lock.qml). why: manual (asks for
+  # the password at once), idle (the "Require password after" grace
+  # period applies) or sleep; --wait returns once the screen is locked
+  # (for swayidle's before-sleep). hyprlock only when hearth can't lock.
+  why=${2:-manual}
+  if [[ ${HEARTH_SESSION_DRYRUN:-} == 1 ]]; then run hearth-ipc call lock lock "$why" ${3:-}; exit 0; fi
+  if hearth-ipc call lock lock "$why" >/dev/null 2>&1; then
+    if [[ ${3:-} == --wait ]]; then
+      for _ in $(seq 30); do
+        [[ $(hearth-ipc call lock isSecure 2>/dev/null) == true ]] && exit 0
+        sleep 0.1
+      done
+    fi
+    exit 0
+  fi
+  echo "hearth-session: hearth didn't answer, locking with hyprlock" >&2
+  pidof hyprlock >/dev/null || exec hyprlock ;;
 suspend)  run systemctl suspend ;;
 reboot)   run systemctl reboot ;;
 poweroff) run systemctl poweroff ;;

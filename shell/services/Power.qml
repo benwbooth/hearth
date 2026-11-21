@@ -20,14 +20,17 @@ Singleton {
 
     readonly property var idleArgs: {
         const a = [];
+        // hearth's lock screen (services/Lock.qml) through hearth-session,
+        // which falls back to hyprlock when hearth doesn't answer.
         const lockCmd = "hearth-session lock >/dev/null 2>&1 &";
-        if (p.lock > 0) a.push("timeout", String(p.lock), lockCmd);
+        if (p.lock > 0) a.push("timeout", String(p.lock), "hearth-session lock idle >/dev/null 2>&1 &");
         if (p.displayOff > 0)
             a.push("timeout", String(p.displayOff), "arbor msg action power-off-monitors",
                    "resume", "arbor msg action power-on-monitors");
         if (p.sleep > 0) a.push("timeout", String(p.sleep), "hearth-session suspend");
-        // Lock first, give the locker a moment to cover the screen, then sleep.
-        if (p.lockOnSleep) a.push("before-sleep", lockCmd + " sleep 1");
+        // Lock first and wait (up to 3 s) until the compositor has the lock
+        // screen up, then sleep (swayidle -w holds sleep for this).
+        if (p.lockOnSleep) a.push("before-sleep", "hearth-session lock sleep --wait >/dev/null 2>&1");
         a.push("after-resume", "arbor msg action power-on-monitors");
         a.push("lock", lockCmd);
         return a;

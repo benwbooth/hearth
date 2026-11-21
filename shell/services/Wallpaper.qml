@@ -690,8 +690,9 @@ Singleton {
         timeout: root.idleTimeout
         respectInhibitors: true
     }
-    // The lock screen (set by a hearth lock screen, or a running hyprlock).
-    property bool locked: false
+    // The lock screen (hearth's own, which plays its own copy, or a
+    // fallback hyprlock): the desktop's animation pauses underneath.
+    readonly property bool locked: Lock.locked
     property bool lockerRunning: false
     Timer {
         interval: 5000

@@ -8,6 +8,7 @@ Item {
     property string source: ""
     property string fit: "fill"
     property bool paused: false
+    property real rate: 1               // playback speed (the lock screen slows it to a stop)
     readonly property bool playing: player.playbackState === MediaPlayer.PlayingState && player.hasVideo
     property bool firstFrame: false
 
@@ -16,6 +17,7 @@ Item {
         source: root.source ? "file://" + root.source : ""
         loops: MediaPlayer.Infinite
         videoOutput: out
+        playbackRate: root.rate
         onSourceChanged: { root.firstFrame = false; root.sync(); }
         onMediaStatusChanged: {
             if (mediaStatus === MediaPlayer.BufferedMedia || mediaStatus === MediaPlayer.LoadedMedia) root.sync();

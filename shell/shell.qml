@@ -8,6 +8,7 @@ import QtQuick
 import Quickshell
 import "bar"
 import "desktop"
+import "lock"
 import "popups"
 import "services"
 
@@ -15,7 +16,7 @@ ShellRoot {
     // Touch the singleton so swaync starts with the shell.
     // Touch singletons that own IPC targets (or start daemons): singletons
     // are created on first use, so e.g. `session` (Super+L) wouldn't exist.
-    Component.onCompleted: { void Swaync; void Session; void AppMenu; void Help; void Mouse; void Power; void Keyboard; void Displays; void WindowRules; void Binds; void Clipboard; }
+    Component.onCompleted: { void Swaync; void Session; void AppMenu; void Help; void Mouse; void Power; void Keyboard; void Lock; void Displays; void WindowRules; void Binds; void Clipboard; }
     // The wallpaper (services/Wallpaper.qml): hearth's own background
     // surface on every screen.
     Variants {
@@ -37,6 +38,8 @@ ShellRoot {
         Bar {}
     }
 
+    // hearth's lock screen (services/Lock.qml): ext-session-lock surfaces.
+    LockScreen {}
     Osd {}
     BtPairDialog {}
     // FanzyZones is Hyprland Lua.

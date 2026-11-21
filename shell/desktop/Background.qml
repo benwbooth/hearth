@@ -34,92 +34,12 @@ PanelWindow {
     visible: !(kind === "we" && we.up)
     mask: Region {}
 
-    Item {
-        id: content
+    WallpaperView {
         anchors.fill: parent
-
-        // Dynamic sets: the earlier frame underneath, the current one
-        // blended over it.
-        StillLayer {
-            id: lower
-            anchors.fill: parent
-            visible: !!(win.view && win.view.fileA)
-            source: win.view && win.view.fileA ? win.view.fileA : ""
-            fit: win.view ? win.view.fit : "fill"
-            pixelSize: win.px
-        }
-        StillLayer {
-            id: still
-            anchors.fill: parent
-            source: win.view ? win.view.file : ""
-            fit: win.view ? win.view.fit : "fill"
-            pixelSize: win.px
-            fadeMs: 1200
-            opacity: win.view && win.view.fileA ? win.view.blend : 1
-            Behavior on opacity { NumberAnimation { duration: 2500 } }
-            onReadyChanged: if (ready) Wallpaper.backgroundReady()
-        }
-
-        Loader {
-            id: video
-            anchors.fill: parent
-            active: win.kind === "video" && !!win.view.video
-            source: "VideoLayer.qml"
-            onLoaded: item.source = Qt.binding(() => win.view ? win.view.video || "" : "")
-            Binding { target: video.item; property: "paused"; value: win.paused; when: video.item !== null }
-            Binding { target: video.item; property: "fit"; value: win.view ? win.view.fit : "fill"; when: video.item !== null }
-        }
-
-        // GLSL shaders, rendered into a smaller texture (wallpaper.shaderScale)
-        // and scaled up: soft shaders look the same at a quarter of the cost.
-        Loader {
-            id: shader
-            anchors.fill: parent
-            active: win.kind === "shader" && !!win.view.shader
-            sourceComponent: Item {
-                id: sh
-                readonly property real q: Math.max(0.25, Math.min(1, Number(Wallpaper.cfg.shaderScale) || 0.5))
-                layer.enabled: q < 1
-                layer.smooth: true
-                layer.textureSize: Qt.size(Math.round(win.px.width * q), Math.round(win.px.height * q))
-                opacity: 0
-                Component.onCompleted: opacity = 1
-                Behavior on opacity { NumberAnimation { duration: 900 } }
-                ShaderEffect {
-                    id: fx
-                    anchors.fill: parent
-                    property real iTime: Wallpaper.st.shaderTime || 0
-                    property size res: Qt.size(win.px.width * sh.q, win.px.height * sh.q)
-                    property real dark: Theme.dark ? 1 : 0
-                    fragmentShader: win.view ? win.view.shader : ""
-                }
-                // Time advances at the frame cap only while not paused, so
-                // a paused shader costs nothing (no new frames).
-                Timer {
-                    interval: Math.round(1000 / Math.max(1, Math.min(144, Number(Wallpaper.cfg.fps) || 30)))
-                    running: !win.paused
-                    repeat: true
-                    property double last: 0
-                    onRunningChanged: last = Date.now()
-                    onTriggered: {
-                        const now = Date.now();
-                        fx.iTime += Math.min(0.25, (now - last) / 1000);
-                        last = now;
-                    }
-                }
-                // A still of it, for the lock screen and the menu bar.
-                Timer {
-                    interval: 1500
-                    running: true
-                    onTriggered: {
-                        const path = Wallpaper.shaderPosterPath(win.view.shaderPath);
-                        const key = win.view.shaderPath;
-                        sh.grabToImage(r => { r.saveToFile(path); Wallpaper.setPoster(key, path); },
-                                       Qt.size(Math.min(1920, win.width), Math.min(1920, win.width) * win.height / win.width));
-                    }
-                }
-            }
-        }
+        view: win.view
+        px: win.px
+        paused: win.paused
+        posters: true
     }
 
     // ---- Wallpaper Engine (linux-wallpaperengine, its own layer surface) ----

@@ -4,13 +4,17 @@ import Quickshell
 import Quickshell.Io
 
 // Session actions (lock, sleep, restart, shut down, log out) and the wlogout
-// logout screen, all through helpers/hearth-session. Hyprland binds reach
+// logout screen, through helpers/hearth-session (lock: services/Lock.qml). Hyprland binds reach
 // them with `hearth-ipc call session <function>`.
 // HEARTH_SESSION_DRYRUN=1 in hearth's environment makes them log instead.
 Singleton {
     id: root
 
-    function run(action) { Quickshell.execDetached(["hearth-session", action]); }
+    // Locking is hearth's own lock screen (services/Lock.qml), in process.
+    function run(action) {
+        if (action === "lock") { Lock.lock("manual"); return; }
+        Quickshell.execDetached(["hearth-session", action]);
+    }
     function menu() { run("menu"); }
 
     IpcHandler {
