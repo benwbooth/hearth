@@ -160,6 +160,9 @@ done`]
     property real diskUsed: 0      // bytes
     property real diskSize: 0
     property var hDisk: []
+    // Every mounted volume ({mount, used, size}), one per device (/home on
+    // the root partition is the same space as /), for the Disk tooltip.
+    property var diskVolumes: []
     property real peakNet: 1
     property int tick: 0
     property var lastCpu: null
@@ -226,15 +229,35 @@ done`]
     }
     Process {
         id: diskProbe
-        command: ["df", "-B1", "--output=used,size", "/"]
+        // Real filesystems only (no tmpfs, overlays, snaps); "/" first.
+        command: ["df", "-B1", "--output=source,used,size,target",
+            "-x", "tmpfs", "-x", "devtmpfs", "-x", "overlay", "-x", "squashfs",
+            "-x", "efivarfs", "-x", "ramfs", "-x", "autofs"]
         stdout: StdioCollector {
             onStreamFinished: {
-                const f = text.trim().split("\n").pop().trim().split(/\s+/).map(Number);
-                if (f.length === 2 && f[1] > 0) {
-                    root.diskUsed = f[0];
-                    root.diskSize = f[1];
-                    root.diskPercent = 100 * f[0] / f[1];
+                const seen = {};
+                const vols = [];
+                for (const line of text.trim().split("\n").slice(1)) {
+                    const f = line.trim().split(/\s+/);
+                    if (f.length < 4) continue;
+                    const used = Number(f[1]), size = Number(f[2]);
+                    const mount = f.slice(3).join(" ");
+                    if (!(size > 0)) continue;
+                    if (mount === "/") {
+                        root.diskUsed = used;
+                        root.diskSize = size;
+                        root.diskPercent = 100 * used / size;
+                    }
+                    // One row per device: its shortest mount point.
+                    const prev = seen[f[0]];
+                    if (prev && prev.mount.length <= mount.length) continue;
+                    if (prev) vols.splice(vols.indexOf(prev), 1);
+                    const v = { mount: mount, used: used, size: size };
+                    seen[f[0]] = v;
+                    vols.push(v);
                 }
+                vols.sort((a, b) => (b.mount === "/") - (a.mount === "/") || a.mount.localeCompare(b.mount));
+                root.diskVolumes = vols;
             }
         }
     }
@@ -558,7 +581,7 @@ done`]
         if (kind === "mem" || kind === "vram") return fmtRate(v);
         return fmtRate(v) + "/s";
     }
-    readonly property var kindTitle: ({ cpu: "CPU", mem: "Memory", gpu: "GPU", vram: "VRAM", disk: "Disk space", net: "Network", temp: "Temperatures & fans" })
+    readonly property var kindTitle: ({ cpu: "CPU", mem: "Memory", gpu: "GPU", vram: "VRAM", disk: "Disk space by volume", net: "Network", temp: "Temperatures & fans" })
     readonly property var kindColor: ({ cpu: palette.cpu, mem: palette.mem, gpu: palette.gpu, vram: palette.vram, disk: palette.disk, net: palette.net })
     function esc(t) { return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
     function c(color, t) { return "<font color='" + color + "'>" + t + "</font>"; }
@@ -610,8 +633,18 @@ done`]
         if (kind === "temp") return sensorsText();
         const head = kindRows(kind) ? "<table cellspacing='1'>" + kindRows(kind) + "</table>" : "";
         // Disk space: which programs fill a disk isn't something to list.
-        if (kind === "disk") return head + "<br>" + c(Theme.fgDim, "Space used on the system drive (/).");
+        if (kind === "disk") return volumesText();
         return head + (head ? "<br>" : "") + topList(kind);
+    }
+    // Disk space per volume: used share, used of size, and what's free.
+    function volumesText() {
+        if (!diskVolumes.length) return c(Theme.fgDim, "No disks found.");
+        let t = "<table cellspacing='1'>";
+        for (const v of diskVolumes)
+            t += "<tr><td>" + c(palette.disk, "<b>" + esc(v.mount) + "</b>") + "</td><td align='right'>&nbsp;&nbsp;<b>"
+                + pct(100 * v.used / v.size) + "</b></td><td>&nbsp;&nbsp;" + c(Theme.fgDim, fmtBytes(v.used) + " of " + fmtBytes(v.size)
+                + " · " + fmtBytes(v.size - v.used) + " free") + "</td></tr>";
+        return t + "</table>";
     }
     function topList(kind) {
         if (!topData || !topData[kind]) return c(Theme.fgDim, "Open treetop to see which programs are using this.");
