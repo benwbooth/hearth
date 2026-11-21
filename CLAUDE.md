@@ -41,7 +41,9 @@ Docs: https://quickshell.org/docs/v0.3.2/types/
 (prints QML warnings), `ipc NAME call indicator-x toggle` to open a popup,
 `shot NAME out.png` for a 3840x1620 screenshot. `HEARTH_LAYOUT=panel` forces
 the classic panel. Test runs share the real session bus: set
-`HEARTH_APPMENU_REGISTRAR=0` and `HEARTH_SESSION_DRYRUN=1`, and give them
+`HEARTH_APPMENU_REGISTRAR=0`, `HEARTH_SESSION_DRYRUN=1` and `HEARTH_POLKIT=0`
+(otherwise a test shell registers as the polkit agent of Ben's login
+session: the agent is per session, not per display), and give them
 their own `XDG_CONFIG_HOME`/`XDG_CACHE_HOME`.
 Use your own NAME so parallel sessions don't collide; `stop NAME` when done.
 The tray shows the real session's apps (same session bus).

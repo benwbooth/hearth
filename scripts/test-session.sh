@@ -105,6 +105,7 @@ run)
   sleep 0.3
   HYPRLAND_INSTANCE_SIGNATURE=$(hypr_sig) WAYLAND_DISPLAY=$(hypr_wayland) QT_QPA_PLATFORM=wayland \
     HEARTH_FONT_DIR="${HEARTH_FONT_DIR:-$(tool inter)/share/fonts/truetype}" \
+    HEARTH_POLKIT=0 \
     PATH="${HEARTH_TEST_PATH:+$HEARTH_TEST_PATH:}$repo/helpers:$(runtime_path):$(tool hyprland)/bin:$PATH" XDG_STATE_HOME="$dir/state" \
     daemon "$dir/qs.pid" "$dir/qs.log" "$(quickshell)/bin/quickshell" -p "$repo/shell"
   sleep 3
