@@ -174,6 +174,11 @@ PanelWindow {
     property real pointer: 0
     onLivePointerChanged: if (!isNaN(livePointer)) pointer = livePointer
     property real magLevel: tracking ? 1 : 0
+    // Slots ease to new places (reorder, drag gap, apps coming and going)
+    // only while magnification is at rest: the magnify easing already moves
+    // them every frame, and a 260 ms slide chasing that moving target made
+    // the icons wobble as the dock grew and shrank.
+    readonly property bool slide: !tracking && (magLevel === 0 || dragKey !== "")
     Behavior on magLevel { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
     readonly property var geo: {
         const z = [], pos = [], lens = [];
@@ -275,19 +280,24 @@ PanelWindow {
         cancel: task => { dockWin.dragKey = ""; dockWin.dragIndex = -1; dockWin.dragOut = false; }
     })
 
+    // The dropped app reorders first, while its slot is still hidden, and
+    // then appears in place: clearing the drag first put it back in its old
+    // slot for a moment and slid it (running dot and all) across its
+    // neighbours to the new one.
+    property string settleKey: ""
+    Timer { id: settleTimer; interval: 50; onTriggered: dockWin.settleKey = "" }
     function drop(p) {
         const key = dragKey, idx = dragIndex, out = dragOut;
+        if (key && !out && idx >= 0) {
+            settleKey = key;
+            if (!dragWasPinned) Pins.pin(key);
+            Pins.move(key, idx);
+        }
         dragKey = "";
         dragIndex = -1;
         dragOut = false;
-        if (!key) return;
-        if (out) {
-            if (dragWasPinned) { Pins.unpin(key); poof.at(p); }
-            return;
-        }
-        if (idx < 0) return;
-        if (!dragWasPinned) Pins.pin(key);
-        Pins.move(key, idx);
+        if (settleKey) settleTimer.restart();
+        if (key && out && dragWasPinned) { Pins.unpin(key); poof.at(p); }
     }
 
     // --- drawing ---
@@ -433,13 +443,14 @@ PanelWindow {
                 y: dockWin.vertical ? p : frame.y
                 width: dockWin.vertical ? dockWin.thickness : l
                 height: dockWin.vertical ? l : dockWin.thickness
-                Behavior on x { enabled: !dockWin.tracking && !dockWin.vertical; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
-                Behavior on y { enabled: !dockWin.tracking && dockWin.vertical; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
-                Behavior on width { enabled: !dockWin.tracking && !dockWin.vertical; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
-                Behavior on height { enabled: !dockWin.tracking && dockWin.vertical; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                readonly property bool settling: slot.modelData.key === dockWin.settleKey
+                Behavior on x { enabled: dockWin.slide && !dockWin.vertical && !slot.settling; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                Behavior on y { enabled: dockWin.slide && dockWin.vertical && !slot.settling; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                Behavior on width { enabled: dockWin.slide && !dockWin.vertical && !slot.settling; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                Behavior on height { enabled: dockWin.slide && dockWin.vertical && !slot.settling; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
                 // New apps fade and grow in; the dragged one is hidden (the
                 // ghost under the pointer stands in for it).
-                opacity: slot.modelData.key === dockWin.dragKey ? 0 : appear
+                opacity: slot.modelData.key === dockWin.dragKey || slot.settling ? 0 : appear
                 // Only apps new to the dock fade in; a delegate recreated for
                 // a reorder starts visible.
                 property real appear: dockWin.seen[slot.modelData.key] ? 1 : 0
