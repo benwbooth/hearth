@@ -15,6 +15,11 @@ Scope {
     id: root
     property bool open: false
     property string pane: "appearance"
+    readonly property var paneFiles: ({
+        hotcorners: "settings/HotCornersPane.qml", displays: "settings/DisplaysPane.qml",
+        keyboard: "settings/KeyboardPane.qml", shortcuts: "settings/ShortcutsPane.qml",
+        windowrules: "settings/WindowRulesPane.qml", power: "settings/PowerPane.qml"
+    })
 
     Connections {
         target: Settings
@@ -46,7 +51,13 @@ Scope {
                     color: Theme.bgAlt
                     Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: Theme.border }
 
+                    Flickable {
+                        anchors.fill: parent
+                        contentHeight: navCol.implicitHeight + 28
+                        clip: true
+                        boundsBehavior: Flickable.StopAtBounds
                     Column {
+                        id: navCol
                         x: 10
                         y: 14
                         width: parent.width - 20
@@ -58,7 +69,13 @@ Scope {
                                 { id: "dock", label: "Desktop & Dock", icon: "preferences-system-windows" },
                                 { id: "layout", label: "Layout", icon: "view-split-top-bottom" },
                                 { id: "wallpaper", label: "Wallpaper", icon: "preferences-desktop-wallpaper" },
+                                { id: "hotcorners", label: "Hot Corners", icon: "preferences-desktop-screensaver" },
+                                { id: "displays", label: "Displays", icon: "preferences-desktop-display" },
+                                { id: "keyboard", label: "Keyboard", icon: "preferences-desktop-keyboard" },
+                                { id: "shortcuts", label: "Keyboard Shortcuts", icon: "preferences-desktop-keyboard-shortcut" },
                                 { id: "mouse", label: "Mouse & Touchpad", icon: "preferences-desktop-mouse" },
+                                { id: "windowrules", label: "Window Rules", icon: "preferences-system-windows-actions" },
+                                { id: "power", label: "Sleep & Power", icon: "preferences-system-power-management" },
                                 { id: "night", label: "Night Light", icon: "redshift-status-on" },
                                 { id: "notifications", label: "Notifications", icon: "preferences-desktop-notification" }
                             ]
@@ -89,6 +106,7 @@ Scope {
                             }
                         }
                     }
+                    }
                 }
 
                 Flickable {
@@ -110,13 +128,24 @@ Scope {
 
                         Label {
                             text: ({ appearance: "Appearance", menubar: "Menu Bar", dock: "Desktop & Dock", layout: "Layout",
-                                     wallpaper: "Wallpaper", mouse: "Mouse & Touchpad", night: "Night Light", notifications: "Notifications" })[root.pane]
+                                     wallpaper: "Wallpaper", mouse: "Mouse & Touchpad", night: "Night Light", notifications: "Notifications",
+                                     hotcorners: "Hot Corners", displays: "Displays", keyboard: "Keyboard", shortcuts: "Keyboard Shortcuts",
+                                     windowrules: "Window Rules", power: "Sleep & Power" })[root.pane] || ""
                             font.pointSize: Theme.fontSize + 6
                             font.weight: Font.Bold
                         }
 
+                        // Larger panes live in popups/settings/.
                         Loader {
                             Layout.fillWidth: true
+                            visible: !!root.paneFiles[root.pane]
+                            active: visible
+                            source: root.paneFiles[root.pane] || ""
+                        }
+                        Loader {
+                            Layout.fillWidth: true
+                            visible: !root.paneFiles[root.pane]
+                            active: visible
                             sourceComponent: ({ appearance: appearancePane, menubar: menubarPane, dock: dockPane, layout: layoutPane,
                                                 wallpaper: wallpaperPane, mouse: mousePane, night: nightPane, notifications: notificationsPane })[root.pane]
                         }
@@ -128,51 +157,9 @@ Scope {
 
     // --- building blocks ---
 
-    // A rounded group of rows, like macOS settings.
-    component Group: Rectangle {
-        default property alias rows: col.data
-        Layout.fillWidth: true
-        implicitHeight: col.implicitHeight + 8
-        radius: Theme.popupRadius
-        color: Theme.bgAlt
-        border.color: Theme.border
-        Column {
-            id: col
-            x: 14
-            y: 4
-            width: parent.width - 28
-        }
-    }
-    component Row_: Item {
-        id: r
-        property string label
-        property string note: ""
-        default property alias control: holder.data
-        width: parent ? parent.width : 400
-        implicitHeight: Math.max(44, texts.implicitHeight + 16)
-        Column {
-            id: texts
-            anchors.verticalCenter: parent.verticalCenter
-            width: parent.width - holder.width - 16
-            Label { text: r.label; width: parent.width }
-            Label {
-                visible: r.note !== ""
-                text: r.note
-                width: parent.width
-                color: Theme.fgDim
-                font.pointSize: Theme.smallFontSize
-                wrapMode: Text.Wrap
-                elide: Text.ElideNone
-            }
-        }
-        Item {
-            id: holder
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            width: childrenRect.width
-            height: childrenRect.height
-        }
-    }
+    // Shared with the panes in popups/settings/ (widgets/Settings*.qml).
+    component Group: SettingsGroup {}
+    component Row_: SettingsRow {}
     component SwitchRow: Row_ {
         id: sr
         property string key
@@ -211,11 +198,7 @@ Scope {
             onPicked: v => Settings.set(cr.key, v)
         }
     }
-    component Divider: Rectangle {
-        width: parent ? parent.width : 100
-        height: 1
-        color: Theme.border
-    }
+    component Divider: SettingsDivider {}
 
     // --- panes ---
 

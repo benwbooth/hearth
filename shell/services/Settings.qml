@@ -59,6 +59,24 @@ Singleton {
         notifications: {
             timeout: 6,
             showOnTop: true             // position follows the bar
+        },
+        // Hot corners (services/HotCorners.qml): "none" | "overview" |
+        // "desktop" | "lock" | "launcher" | "notifications" | "displayoff"
+        hotCorners: {
+            topLeft: "none",
+            topRight: "none",
+            bottomLeft: "none",
+            bottomRight: "none",
+            delay: 250                  // ms the pointer rests in the corner first
+        },
+        // Sleep & power (services/Power.qml runs swayidle under arbor).
+        // Seconds; 0 = never.
+        power: {
+            displayOff: 900,
+            lock: 600,
+            sleep: 0,
+            lockOnSleep: true,          // ask for the password after sleep
+            powerButton: "menu"         // "menu" | "sleep" | "lock" | "poweroff" | "displayoff" | "nothing"
         }
     })
 
@@ -102,6 +120,8 @@ Singleton {
     readonly property var menubar: { void root.data; return Object.assign({}, defaults.menubar, data.menubar || {}); }
     readonly property var dock: { void root.data; return Object.assign({}, defaults.dock, data.dock || {}); }
     readonly property var notifications: { void root.data; return Object.assign({}, defaults.notifications, data.notifications || {}); }
+    readonly property var hotCorners: { void root.data; return Object.assign({}, defaults.hotCorners, data.hotCorners || {}); }
+    readonly property var power: { void root.data; return Object.assign({}, defaults.power, data.power || {}); }
 
     // pane: "" (last used) or a Settings window pane id ("dock", ...).
     signal openRequested(string pane)

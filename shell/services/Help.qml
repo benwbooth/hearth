@@ -72,7 +72,9 @@ Singleton {
         { group: "Windows", title: "Switch back the other way", keys: "Alt+Shift+Tab" },
         { group: "Windows", title: "Switch between windows of the same app", keys: "Alt+`" }
     ]
-    readonly property var shortcuts: Compositor.isArbor && arborShortcuts.length ? arborBuiltins.concat(arborShortcuts) : hyprShortcuts
+    // arbor: the effective binds (config + Settings > Keyboard Shortcuts).
+    readonly property var arborList: Binds.helpList.length ? Binds.helpList : arborShortcuts
+    readonly property var shortcuts: Compositor.isArbor && arborList.length ? arborBuiltins.concat(arborList) : hyprShortcuts
 
     // Settings and actions the search can open or run.
     readonly property var actions: [
@@ -98,6 +100,12 @@ Singleton {
         { title: "Settings: wallpaper", pane: "wallpaper" },
         { title: "Settings: night light", pane: "night" },
         { title: "Settings: notifications, Do Not Disturb", pane: "notifications" },
+        { title: "Settings: displays: resolution, refresh rate, scale, arrangement, rotation, HDR, adaptive sync", pane: "displays" },
+        { title: "Settings: keyboard layouts, key repeat, Num Lock", pane: "keyboard" },
+        { title: "Settings: change keyboard shortcuts, add your own, app shortcuts", pane: "shortcuts" },
+        { title: "Settings: window rules: open an app docked or floating, on a workspace, size, title bar, opacity", pane: "windowrules" },
+        { title: "Settings: hot corners (Mission Control, Show Desktop, Lock Screen… from a screen corner)", pane: "hotcorners" },
+        { title: "Settings: sleep, screen off and lock times, password after sleep, power button", pane: "power" },
         { title: "Keyboard shortcuts", keys: "Super+/", guide: "shortcuts" },
         { title: "Trackpad gestures", guide: "gestures" },
         { title: "How windows work", guide: "windows" },

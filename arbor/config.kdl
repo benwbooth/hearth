@@ -19,6 +19,11 @@ input {
     focus-follows-mouse max-scroll-amount="0%"
 }
 
+// Displays from hearth's Settings window (Settings > Displays). arbor uses
+// the first output block it finds for a screen, so this comes before the
+// defaults below; missing until you apply something there.
+include optional=true "~/.config/hearth/arbor-displays.kdl"
+
 // 4/3 like Hyprland (KWin's 130% isn't a whole-pixel size on 5120x2160).
 // HDR like Plasma/Hyprland: arbor drives the panel in HDR (BT.2020, PQ, 10
 // bpc) and shows normal (SDR) content at sdr-brightness nits; ~670 matched
@@ -95,6 +100,10 @@ include "hearth-layer-rules.kdl"
 // Mouse & touchpad from hearth's Settings window (overrides the input block
 // above; missing until you change something there).
 include optional=true "~/.config/hearth/arbor-input.kdl"
+// Keyboard layouts, key repeat and Num Lock (Settings > Keyboard).
+include optional=true "~/.config/hearth/arbor-keyboard.kdl"
+// Per-app window rules (Settings > Window Rules); later rules win.
+include optional=true "~/.config/hearth/arbor-rules.kdl"
 
 hotkey-overlay {
     skip-at-startup
@@ -111,8 +120,8 @@ spawn-sh-at-startup "swaybg -m fill -i ~/.cache/hearth/wallpaper"
 // X11 apps (Steam, older tools) scale themselves from Xft.dpi: 128 = 96 x
 // 4/3, the screen's scale (Plasma loads this at login).
 spawn-sh-at-startup "printf 'Xft.dpi: 128\\nXcursor.size: 32\\n' | xrdb -merge"
-// Lock after 10 minutes, screen off after 15, lock before sleep.
-spawn-sh-at-startup "swayidle -w timeout 600 'pidof hyprlock || hyprlock &' timeout 900 'arbor msg action power-off-monitors' resume 'arbor msg action power-on-monitors' before-sleep 'pidof hyprlock || hyprlock &' lock 'pidof hyprlock || hyprlock &'"
+// Screen off, lock and sleep when idle are run by hearth (swayidle with
+// the times from Settings > Sleep & Power).
 // KWallet gets SDDM's password (as Plasma's startup does).
 spawn-at-startup "/run/current-system/sw/libexec/pam_kwallet_init"
 spawn-sh-at-startup "systemctl --user start plasma-polkit-agent.service"
@@ -203,7 +212,8 @@ binds {
     // Session.
     Mod+L allow-when-locked=false hotkey-overlay-title="Lock screen" { spawn "hearth-ipc" "call" "session" "lock"; }
     Ctrl+Alt+Delete { spawn "hearth-ipc" "call" "session" "open"; }
-    XF86PowerOff { spawn "hearth-ipc" "call" "session" "open"; }
+    // Does what Settings > Sleep & Power > "When I press the power button" says.
+    XF86PowerOff { spawn "hearth-ipc" "call" "power" "button"; }
 
     // Screenshots: Print = pick a region (Space toggles the pointer,
     // Ctrl+C copies), Ctrl+Print = whole screen, Alt+Print = window.
@@ -240,3 +250,7 @@ binds {
 
     Mod+Shift+E { quit; }
 }
+
+// Shortcuts changed in hearth's Settings window (Settings > Keyboard
+// Shortcuts): a bind there replaces the one with the same keys above.
+include optional=true "~/.config/hearth/arbor-binds.kdl"

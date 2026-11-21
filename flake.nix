@@ -33,6 +33,7 @@
       wlogout hyprpaper swaynotificationcenter grim satty
       pipewire wireplumber
       systemd procps coreutils gnugrep gawk util-linux iproute2
+      swayidle
       python
     ];
 
@@ -67,7 +68,8 @@
           --add-flags "-p $out/share/hearth/shell" \
           --prefix PATH : ${lib.makeBinPath runtimeDeps}:$out/share/hearth/helpers \
           --prefix QML_IMPORT_PATH : ${qmlPath} \
-          --set-default HEARTH_FONT_DIR ${fontDir}
+          --set-default HEARTH_FONT_DIR ${fontDir} \
+          --set-default HEARTH_XKB_RULES ${pkgs.xkeyboard_config}/share/X11/xkb/rules/evdev.lst
         # Talk to the running hearth whichever build started it: quickshell
         # matches instances by config path, so after a rebuild (or a bar
         # started from another build) `-p` finds nothing and every keybind

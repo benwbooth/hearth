@@ -268,6 +268,43 @@ Scope {
         }
     }
 
+    // Any IPC request (a JSON-able value such as "Outputs" or
+    // { Output: {...} }); `cb(reply)` gets the parsed reply ({ Ok: ... } or
+    // { Err: "..." }), or { Err: "not connected" }.
+    Component {
+        id: queryComp
+        Socket {
+            id: q
+            property string payload: ""
+            property var cb: null
+            property bool done: false
+            path: root.socketPath
+            function finish(r) {
+                if (done) return;
+                done = true;
+                if (cb) cb(r);
+                q.connected = false;
+                Qt.callLater(() => q.destroy());
+            }
+            onConnectionStateChanged: {
+                if (connected) { write(payload + "\n"); flush(); }
+                else if (!done) finish({ Err: "arbor closed the connection" });
+            }
+            parser: SplitParser {
+                onRead: line => {
+                    let r;
+                    try { r = JSON.parse(line); } catch (e) { r = { Err: "bad reply: " + line }; }
+                    q.finish(r);
+                }
+            }
+        }
+    }
+    function request(req, cb) {
+        if (!root.socketPath) { if (cb) cb({ Err: "not connected" }); return; }
+        const s = queryComp.createObject(root, { payload: JSON.stringify(req), cb: cb || null });
+        s.connected = true;
+    }
+
     function action(name, args) {
         if (!root.socketPath) return;
         const a = {};

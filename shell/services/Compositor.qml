@@ -95,6 +95,12 @@ Singleton {
     function moveWindowToWorkspace(id, wsId) { if (backend) backend.moveWindowToWorkspace(id, wsId); }
     function focusEmptyWorkspace() { if (backend) backend.focusEmptyWorkspace(); }
     function refresh() { if (backend) backend.refresh(); }
+    // arbor only: any IPC request, cb(reply) with { Ok } / { Err }.
+    function arborRequest(req, cb) {
+        if (root.isArbor && backend) backend.request(req, cb);
+        else if (cb) cb({ Err: "not running under arbor" });
+    }
+    function arborAction(name, args) { if (root.isArbor && backend) backend.action(name, args); }
     function minimize(id) {
         if (backend && backend.minimize) { backend.minimize(id); return; }
         const w = windows.find(x => x.id === id);
