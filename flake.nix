@@ -107,7 +107,9 @@
       installPhase = ''
         runHook preInstall
         mkdir -p $out/share/hearth $out/bin
-        cp -r shell helpers hypr vicinae swaync $out/share/hearth/
+        # arbor/: the arbor config devloop installs live into
+        # ~/.config/hearth/arbor/ with each new hearth (no nixos-rebuild).
+        cp -r shell helpers hypr vicinae swaync arbor $out/share/hearth/
         # Built-in user pictures (avatars/CREDITS.md), for Settings > Users &
         # Accounts and the login screen: $out/share/hearth/avatars.
         cp -r avatars $out/share/hearth/
