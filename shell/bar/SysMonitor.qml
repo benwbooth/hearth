@@ -18,10 +18,11 @@ MouseArea {
     // ---- settings (Ben's Plasma config: hiddenGpus=1,2,3, labels=stacked,
     // showDisk=false; the rest are the plasmoid's defaults) ---------------
     readonly property int updateRate: 1000
-    readonly property int historyLength: 30
+    readonly property int historyLength: 60   // samples (one a second): a minute across the graph
     readonly property var hiddenGpus: ["1", "2", "3"]   // display positions, "0" = GPU1
     readonly property bool hideIdleGpus: true
     readonly property bool showVram: true
+    readonly property bool showDisk: true          // space used on the system drive
     readonly property bool showNetwork: true
     readonly property bool showTemps: true
     readonly property real graphWidth: 0.9
@@ -153,6 +154,12 @@ done`]
     property real netUp: 0
     property var hCpu: []
     property var hMem: []
+    // Disk space of the system drive (/), from df every 10 s (a Process, so
+    // the shell never waits on a slow or sleeping disk).
+    property real diskPercent: 0
+    property real diskUsed: 0      // bytes
+    property real diskSize: 0
+    property var hDisk: []
     property real peakNet: 1
     property int tick: 0
     property var lastCpu: null
@@ -200,6 +207,7 @@ done`]
 
         hCpu = push(hCpu, cpuUsage / 100);
         hMem = push(hMem, memPercent / 100);
+        if (diskSize > 0) hDisk = push(hDisk, diskPercent / 100);
         peakNet = Math.max(131072, netDown + netUp, peakNet * 0.98);
         for (let i = 0; i < gpuFiles.count; i++) {
             const g = gpuFiles.objectAt(i);
@@ -215,6 +223,24 @@ done`]
     Timer {
         interval: root.updateRate; running: true; repeat: true; triggeredOnStart: true
         onTriggered: root.sample()
+    }
+    Process {
+        id: diskProbe
+        command: ["df", "-B1", "--output=used,size", "/"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const f = text.trim().split("\n").pop().trim().split(/\s+/).map(Number);
+                if (f.length === 2 && f[1] > 0) {
+                    root.diskUsed = f[0];
+                    root.diskSize = f[1];
+                    root.diskPercent = 100 * f[0] / f[1];
+                }
+            }
+        }
+    }
+    Timer {
+        interval: 10000; running: root.showDisk; repeat: true; triggeredOnStart: true
+        onTriggered: if (!diskProbe.running) diskProbe.running = true
     }
 
     // Idle for the last ~30 samples and not driving a display: folded away.
@@ -333,7 +359,7 @@ done`]
         }
         Rectangle {
             Layout.alignment: Qt.AlignVCenter
-            Layout.preferredWidth: root.blend ? Math.round(stat.h * 1.1) : Math.max(valueProbe.implicitWidth + 4, Math.round(stat.h * 1.56 * root.graphWidth))
+            Layout.preferredWidth: root.blend ? Math.round(stat.h * 2.2) : Math.max(valueProbe.implicitWidth + 4, Math.round(stat.h * 1.56 * root.graphWidth))
             Layout.preferredHeight: root.blend ? Math.round(stat.h * 0.62) : Math.round(stat.h * 0.8)
             color: root.blend ? Qt.rgba(stat.color.r, stat.color.g, stat.color.b, 0.10) : "transparent"
             border.color: root.blend ? "transparent" : Qt.rgba(stat.color.r, stat.color.g, stat.color.b, 0.55)
@@ -409,6 +435,12 @@ done`]
             h: root.h; label: "MEM"; kind: "mem"; color: root.palette.mem
             value: root.pct(root.memPercent)
             history: root.hMem
+        }
+        KStat {
+            visible: root.showDisk && root.diskSize > 0
+            h: root.h; label: "DISK"; kind: "disk"; color: root.palette.disk
+            value: root.pct(root.diskPercent)
+            history: root.hDisk
         }
         Repeater {
             model: root.gpuIndexes
@@ -525,7 +557,7 @@ done`]
         if (kind === "mem" || kind === "vram") return fmtRate(v);
         return fmtRate(v) + "/s";
     }
-    readonly property var kindTitle: ({ cpu: "CPU", mem: "Memory", gpu: "GPU", vram: "VRAM", disk: "Disk I/O", net: "Network", temp: "Temperatures & fans" })
+    readonly property var kindTitle: ({ cpu: "CPU", mem: "Memory", gpu: "GPU", vram: "VRAM", disk: "Disk space", net: "Network", temp: "Temperatures & fans" })
     readonly property var kindColor: ({ cpu: palette.cpu, mem: palette.mem, gpu: palette.gpu, vram: palette.vram, disk: palette.disk, net: palette.net })
     function esc(t) { return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
     function c(color, t) { return "<font color='" + color + "'>" + t + "</font>"; }
@@ -573,7 +605,14 @@ done`]
         return t;
     }
     function topText(kind) {
+        void tick;
         if (kind === "temp") return sensorsText();
+        const head = kindRows(kind) ? "<table cellspacing='1'>" + kindRows(kind) + "</table>" : "";
+        // Disk space: which programs fill a disk isn't something to list.
+        if (kind === "disk") return head + "<br>" + c(Theme.fgDim, "Space used on the system drive (/).");
+        return head + (head ? "<br>" : "") + topList(kind);
+    }
+    function topList(kind) {
         if (!topData || !topData[kind]) return c(Theme.fgDim, "Open treetop to see which programs are using this.");
         const list = topData[kind];
         const extra = kind === "gpu" ? gpuUnattributedText() : "";
@@ -600,20 +639,36 @@ done`]
         if (br) return br[1].split("/")[0].trim();
         return n.length > 28 ? n.slice(0, 27) + "…" : n;
     }
+    // The rows for one kind of item ("cpu", "mem", "gpu", "vram", "disk",
+    // "net"), with its percentage: the overall tooltip lists them all, an
+    // item's own tooltip starts with its row.
+    function kindRows(kind) {
+        let t = "";
+        if (kind === "cpu") t += row("CPU", palette.cpu, pct(cpuUsage), cpuTempC > 0 ? cpuTempC.toFixed(0) + "°C" : "");
+        if (kind === "mem") t += row("Memory", palette.mem, pct(memPercent), fmtBytes(memUsed) + " of " + fmtBytes(memTotal));
+        if (kind === "gpu" || kind === "vram") {
+            for (const k of gpuIndexes) {
+                const g = gpuFiles.objectAt(k);
+                if (!g) continue;
+                const n = gpuIndexes.length > 1 ? "GPU" + (k + 1) : "GPU";
+                const name = shortGpuName(g.modelData.name);
+                if (kind === "gpu") t += row(n, palette.gpu, pct(g.usage), esc(name) + (g.tempC > 0 ? (name ? " · " : "") + g.tempC.toFixed(0) + "°C" : ""));
+                else t += row("VRAM", palette.vram, pct(100 * g.vramUsed / Math.max(1, g.modelData.vramTotal)), fmtBytes(g.vramUsed) + " of " + fmtBytes(g.modelData.vramTotal));
+            }
+        }
+        if (kind === "disk" && diskSize > 0)
+            t += row("Disk", palette.disk, pct(diskPercent), fmtBytes(diskUsed) + " of " + fmtBytes(diskSize) + " · " + fmtBytes(diskSize - diskUsed) + " free");
+        if (kind === "net") t += row("Network", palette.net, "↓" + fmtRate(netDown), "↑" + fmtRate(netUp) + "/s");
+        return t;
+    }
     readonly property string summaryText: {
         tick;
         let t = "<table cellspacing='1'>";
-        t += row("CPU", palette.cpu, pct(cpuUsage), cpuTempC > 0 ? cpuTempC.toFixed(0) + "°C" : "");
-        t += row("Memory", palette.mem, pct(memPercent), fmtBytes(memUsed) + " of " + fmtBytes(memTotal));
-        for (const k of gpuIndexes) {
-            const g = gpuFiles.objectAt(k);
-            if (!g) continue;
-            const n = gpuIndexes.length > 1 ? "GPU" + (k + 1) : "GPU";
-            const name = shortGpuName(g.modelData.name);
-            t += row(n, palette.gpu, pct(g.usage), esc(name) + (g.tempC > 0 ? (name ? " · " : "") + g.tempC.toFixed(0) + "°C" : ""));
-            t += row("VRAM", palette.vram, pct(100 * g.vramUsed / Math.max(1, g.modelData.vramTotal)), fmtBytes(g.vramUsed));
+        for (const k of ["cpu", "mem", "gpu", "vram", "disk", "net"]) {
+            if (k === "vram" && !showVram) continue;
+            if (k === "disk" && !showDisk) continue;
+            t += kindRows(k);
         }
-        t += row("Network", palette.net, "↓" + fmtRate(netDown), "↑" + fmtRate(netUp) + "/s");
         return t + "</table><br>" + c(Theme.fgDim, "Click to open treetop · hover an item for its top users");
     }
 
@@ -663,6 +718,7 @@ done`]
                 Label {
                     text: !root.hoverKind ? "System monitor (treetop)"
                         : root.hoverKind === "temp" ? root.kindTitle.temp
+                        : root.hoverKind === "disk" ? root.kindTitle.disk
                         : root.kindTitle[root.hoverKind] + " — top programs"
                     font.weight: Font.DemiBold
                     font.pointSize: Theme.fontSize + 1
