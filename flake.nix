@@ -94,6 +94,8 @@
         exec ${quickshell}/bin/quickshell ipc -p $out/share/hearth/shell "\$@"
         EOF
         chmod +x $out/bin/hearth-ipc
+        # From a text console when the lock screen is stuck (README: Lock screen).
+        ln -s $out/share/hearth/helpers/hearth-recover-lock $out/bin/hearth-recover-lock
         runHook postInstall
       '';
       meta.mainProgram = "hearth";

@@ -20,7 +20,7 @@ Scope {
         keyboard: "settings/KeyboardPane.qml", shortcuts: "settings/ShortcutsPane.qml",
         windowrules: "settings/WindowRulesPane.qml", power: "settings/PowerPane.qml",
         clipboard: "settings/ClipboardPane.qml", screenshots: "settings/ScreenshotsPane.qml",
-        wallpaper: "settings/WallpaperPane.qml"
+        wallpaper: "settings/WallpaperPane.qml", lockscreen: "settings/LockScreenPane.qml"
     })
 
     Connections {
@@ -71,6 +71,7 @@ Scope {
                                 { id: "dock", label: "Desktop & Dock", icon: "preferences-system-windows" },
                                 { id: "layout", label: "Layout", icon: "view-split-top-bottom" },
                                 { id: "wallpaper", label: "Wallpaper", icon: "preferences-desktop-wallpaper" },
+                                { id: "lockscreen", label: "Lock Screen", icon: "system-lock-screen" },
                                 { id: "hotcorners", label: "Hot Corners", icon: "preferences-desktop-screensaver" },
                                 { id: "displays", label: "Displays", icon: "preferences-desktop-display" },
                                 { id: "keyboard", label: "Keyboard", icon: "preferences-desktop-keyboard" },
@@ -134,7 +135,7 @@ Scope {
                             text: ({ appearance: "Appearance", menubar: "Menu Bar", dock: "Desktop & Dock", layout: "Layout",
                                      wallpaper: "Wallpaper", mouse: "Mouse & Touchpad", night: "Night Light", notifications: "Notifications",
                                      hotcorners: "Hot Corners", displays: "Displays", keyboard: "Keyboard", shortcuts: "Keyboard Shortcuts",
-                                     windowrules: "Window Rules", power: "Sleep & Power", clipboard: "Clipboard", screenshots: "Screenshots" })[root.pane] || ""
+                                     windowrules: "Window Rules", power: "Sleep & Power", lockscreen: "Lock Screen", clipboard: "Clipboard", screenshots: "Screenshots" })[root.pane] || ""
                             font.pointSize: Theme.fontSize + 6
                             font.weight: Font.Bold
                         }

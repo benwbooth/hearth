@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# hearth-recover-lock: run from a text console (Ctrl+Alt+F2, log in) when
+# the lock screen is stuck or hearth died while the screen was locked.
+#
+# arbor keeps the session locked when its lock client dies
+# (ext-session-lock), so the desktop stays safe but you can't unlock it.
+# This restarts hearth inside the arbor session; hearth finds its lock
+# marker and shows the lock screen again. Then switch back to the
+# graphical console (Ctrl+Alt+F1, or whichever VT arbor runs on) and unlock.
+# `--hyprlock` takes over the lock with hyprlock instead.
+set -euo pipefail
+
+rt=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+sock=$(ls -t "$rt"/arbor.wayland-*.sock 2>/dev/null | head -1 || true)
+if [[ -z $sock ]]; then echo "hearth-recover-lock: no arbor session found in $rt" >&2; exit 1; fi
+wd=$(basename "$sock" | sed -E 's/^arbor\.(wayland-[0-9]+)\..*/\1/')
+export XDG_RUNTIME_DIR=$rt WAYLAND_DISPLAY=$wd ARBOR_SOCKET=$sock
+echo "arbor session: WAYLAND_DISPLAY=$wd"
+
+if [[ ${1:-} == --hyprlock ]]; then
+  setsid hyprlock >/dev/null 2>&1 </dev/null &
+  echo "hyprlock started; switch back to the graphical console and unlock."
+  exit 0
+fi
+
+here=$(dirname "$(readlink -f "$0")")
+hearth=$here/../../../bin/hearth
+[[ -x $hearth ]] || hearth=$(command -v hearth)
+# Stop the old hearth (if it hangs rather than died) and mark the session
+# locked so the new one locks again straight away.
+pkill -u "$(id -u)" -f 'quickshell -p /nix/store/[^ ]*-hearth-[^ ]*/share/hearth/shell' 2>/dev/null || true
+sleep 1
+(umask 077; : > "$rt/hearth-locked-$wd")
+setsid "$hearth" >/dev/null 2>&1 </dev/null &
+echo "hearth restarted; switch back to the graphical console (Ctrl+Alt+F1 or arbor's VT) and unlock."
