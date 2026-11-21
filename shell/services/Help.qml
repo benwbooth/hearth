@@ -48,7 +48,12 @@ Singleton {
         { group: "Screenshots", title: "Copy a region to the clipboard", keys: "Ctrl+Print" },
         { group: "System", title: "Lock screen", keys: "Super+L" },
         { group: "System", title: "Log out, restart or shut down", keys: "Ctrl+Alt+Delete" },
-        { group: "System", title: "Keyboard shortcuts (this list)", keys: "Super+/" }
+        { group: "System", title: "Keyboard shortcuts (this list)", keys: "Super+/" },
+        { group: "Menus", title: "Move through an open menu; Left/Right go to the next menu or into a submenu", keys: "Arrow keys" },
+        { group: "Menus", title: "Choose the selected menu item", keys: "Return, Space" },
+        { group: "Menus", title: "Close the menu (or the submenu)", keys: "Esc" },
+        { group: "Menus", title: "Jump to the menu item starting with a letter", keys: "Type the letter" },
+        { group: "Menus", title: "Choose from a menu in one go", keys: "Press a menu title, drag to the item, release" }
     ]
 
     readonly property var gestures: [
@@ -73,6 +78,12 @@ Singleton {
         { title: "Take a screenshot", keys: "Print", run: () => Quickshell.execDetached(["hearth-ipc", "call", "screenshot", "open"]) },
         { title: "Search apps", keys: "Alt+Space", run: () => Quickshell.execDetached(["vicinae", "toggle"]) },
         { title: "Show all windows (overview)", keys: "Super+W", run: () => ShellState.overviewRequested() },
+        { title: "Control Center: Wi-Fi, Bluetooth, Focus, Dark Mode, brightness, sound, now playing", run: () => ShellState.openIndicator("controlcenter") },
+        { title: "Use menus with the keyboard: arrows, Return, Esc, type a letter", keys: "↑ ↓ ← → ↩ ⎋", guide: "shortcuts" },
+        { title: "Choose from a menu in one go: press a title, drag, release", guide: "shortcuts" },
+        { title: "Settings: pointer (macOS-style or Breeze)", pane: "appearance" },
+        { title: "Settings: monochrome menu bar icons, menu bar style", pane: "menubar" },
+        { title: "Settings: Dock show delay, hide delay, slide animation", pane: "dock" },
         { title: "Settings: appearance, light/dark mode, accent colour", pane: "appearance" },
         { title: "Settings: transparency and blur", pane: "appearance" },
         { title: "Settings: menu bar, clock, logo", pane: "menubar" },

@@ -38,9 +38,26 @@ hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" 
 ---- ENVIRONMENT ------
 -----------------------
 
-hl.env("XCURSOR_THEME", "breeze_cursors")
-hl.env("XCURSOR_SIZE", "24")
-hl.env("HYPRCURSOR_SIZE", "24")
+-- Pointer: the open macOS-style cursors (nixpkgs apple-cursor, theme
+-- "macOS": black arrow with a white outline) when installed, at 28, the
+-- physical size of macOS's arrow on a 5K Mac at Ben's 4/3; otherwise
+-- Breeze at 24. hearth re-applies Settings > Appearance > Pointer live.
+local function has_cursor_theme(name)
+    local home = os.getenv("HOME") or ""
+    local user = os.getenv("USER") or ""
+    for _, dir in ipairs({ home .. "/.icons", home .. "/.local/share/icons",
+                           "/etc/profiles/per-user/" .. user .. "/share/icons",
+                           "/run/current-system/sw/share/icons" }) do
+        local f = io.open(dir .. "/" .. name .. "/index.theme", "r")
+        if f then f:close(); return true end
+    end
+    return false
+end
+local cursor_theme = has_cursor_theme("macOS") and "macOS" or "breeze_cursors"
+local cursor_size = cursor_theme == "macOS" and 28 or 24
+hl.env("XCURSOR_THEME", cursor_theme)
+hl.env("XCURSOR_SIZE", tostring(cursor_size))
+hl.env("HYPRCURSOR_SIZE", tostring(cursor_size))
 -- Keep Qt apps on Breeze + KDE dialogs (plasma-integration works outside Plasma).
 hl.env("QT_QPA_PLATFORMTHEME", "kde")
 hl.env("QT_QPA_PLATFORM", "wayland;xcb")
@@ -124,7 +141,7 @@ hl.on("hyprland.start", function()
     -- 4/3 for X11 apps: with force_zero_scaling they draw at native pixels
     -- and scale themselves from Xft.dpi (Plasma loads this at login; nothing
     -- does under Hyprland). 128 = 96 x 4/3; the X cursor is scaled to match.
-    hl.exec_cmd("printf 'Xft.dpi: 128\\nXcursor.size: 32\\nXcursor.theme: breeze_cursors\\n' | xrdb -merge")
+    hl.exec_cmd("printf 'Xft.dpi: 128\\nXcursor.size: " .. math.floor(cursor_size * 4 / 3 + 0.5) .. "\\nXcursor.theme: " .. cursor_theme .. "\\n' | xrdb -merge")
     hl.exec_cmd("uwsm app -- hearth")
     -- Launcher daemon (also keeps the clipboard history).
     hl.exec_cmd("uwsm app -- vicinae server")

@@ -278,6 +278,14 @@ Scope {
                     options: [{ value: "auto", label: "Automatic" }, { value: "sf", label: "SF Pro" },
                               { value: "inter", label: "Inter" }, { value: "noto", label: "Noto Sans" }]
                 }
+                Divider {}
+                ChoiceRow {
+                    label: "Pointer"
+                    note: Mouse.macInstalled ? "macOS-style: a black arrow with a white outline, sized like a Mac's. Breeze: KDE's pointer."
+                                             : "macOS-style needs the apple-cursor package installed (system packages); until then the pointer stays Breeze."
+                    key: "appearance.cursor"
+                    options: [{ value: "macos", label: "macOS-style" }, { value: "breeze", label: "Breeze" }]
+                }
             }
         }
     }
@@ -289,21 +297,23 @@ Scope {
             Group {
                 ChoiceRow {
                     label: "Menu bar style"
-                    note: "Glass: a frosted strip. Transparent: items float on the wallpaper, like macOS 26. Solid: no see-through."
+                    note: "Transparent: items float on the wallpaper, like macOS 26. Glass: a frosted strip (macOS's \"Show menu bar background\"). Solid: no see-through."
                     key: "menubar.style"
                     enabled: !Settings.appearance.reduceTransparency
-                    options: [{ value: "glass", label: "Glass" }, { value: "transparent", label: "Transparent" }, { value: "solid", label: "Solid" }]
+                    options: [{ value: "transparent", label: "Transparent" }, { value: "glass", label: "Glass" }, { value: "solid", label: "Solid" }]
                 }
                 Divider {}
                 SliderRow {
                     label: "Glass opacity"
                     note: "How strongly the glass menu bar is tinted. Lower shows more of the blurred wallpaper."
                     key: "menubar.opacity"
-                    from: 28; to: 95; step: 1; scale: 100; suffix: "%"
+                    from: 32; to: 95; step: 1; scale: 100; suffix: "%"
                     enabled: Theme.menuBarStyle === "glass"
                 }
                 Divider {}
                 SwitchRow { label: "Show the system monitor"; note: "treetop's CPU, memory and GPU graphs in the menu bar. Click them to open treetop."; key: "menubar.showSysMonitor" }
+                Divider {}
+                SwitchRow { label: "Monochrome icons"; note: "Menu bar icons in the text colour, like macOS's symbols. Apps' full-colour tray pictures keep their colours."; key: "menubar.monochromeIcons" }
                 Divider {}
                 SwitchRow { label: "Automatically hide and show the menu bar"; note: "Hidden until you move the pointer to the top edge."; key: "menubar.autohide" }
                 Divider {}
@@ -380,11 +390,17 @@ Scope {
             Group {
                 SwitchRow { label: "Automatically hide and show the Dock"; note: "Hidden until you move the pointer to the screen edge under it."; key: "dock.autohide" }
                 SliderRow {
-                    label: "Hide delay"; key: "dock.autohideDelay"; from: 0; to: 2000; step: 50; suffix: " ms"
+                    label: "Show delay"; note: "How long the pointer rests at the screen edge before the Dock comes out (macOS: 500 ms)."
+                    key: "dock.showDelay"; from: 0; to: 2000; step: 50; suffix: " ms"
                     enabled: Settings.dock.autohide
                 }
                 SliderRow {
-                    label: "Animation"; note: "How long the Dock takes to slide in and out."
+                    label: "Hide delay"; note: "How long the Dock stays after the pointer leaves it."
+                    key: "dock.autohideDelay"; from: 0; to: 2000; step: 50; suffix: " ms"
+                    enabled: Settings.dock.autohide
+                }
+                SliderRow {
+                    label: "Animation"; note: "How long the Dock takes to slide in and out (macOS: about 300 ms)."
                     key: "dock.animationMs"; from: 0; to: 800; step: 20; suffix: " ms"
                 }
             }

@@ -198,7 +198,7 @@ Scope {
                     id: list
                     width: parent.width
                     spacing: 2
-                    readonly property var groups: ["Apps & Launcher", "Windows", "Workspaces & Overview", "Screenshots", "System"]
+                    readonly property var groups: ["Apps & Launcher", "Windows", "Workspaces & Overview", "Menus", "Screenshots", "System"]
                     readonly property var shown: {
                         const q = root.query.trim().toLowerCase();
                         return Help.shortcuts.filter(s => !q || (s.title + " " + s.keys + " " + s.group).toLowerCase().includes(q));

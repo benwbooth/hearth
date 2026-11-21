@@ -22,7 +22,8 @@ Singleton {
             accent: "#3daee9",
             glass: 0.55,                // 0 = opaque .. 1 = most transparent
             reduceTransparency: false,
-            font: "auto"                // "auto" (SF Pro if installed, else Inter) | "sf" | "inter" | "noto"
+            font: "auto",               // "auto" (SF Pro if installed, else Inter) | "sf" | "inter" | "noto"
+            cursor: "macos"             // "macos" (apple-cursor's macOS theme, if installed) | "breeze"
         },
         menubar: {
             autohide: false,

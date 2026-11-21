@@ -3,7 +3,8 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Mouse & touchpad settings from hearth's Settings window, applied live:
+// Mouse & touchpad settings and the pointer theme from hearth's Settings
+// window, applied live:
 // Hyprland through `hyprctl eval` (also at every login, over the config's
 // defaults); arbor/niri through ~/.config/hearth/arbor-input.kdl, which the
 // arbor config includes (optional) and reloads on change.
@@ -45,11 +46,43 @@ input {
         natural-scroll ${root.naturalScroll}
     }
 }
+cursor {
+    xcursor-theme "${root.cursorTheme}"
+    xcursor-size ${root.cursorSize}
+}
 `);
         }
     }
 
     Process { id: hypr }
+
+    // --- pointer (Settings > Appearance > Pointer) ---
+    // "macos": the open macOS-style cursors (nixpkgs apple-cursor, theme
+    // "macOS": black arrow, white outline) at 28, which on Ben's 4/3
+    // display is the size of macOS's arrow on a 5K Mac; "breeze": KDE's.
+    // Applied live (hyprctl setcursor / arbor's cursor block) when the
+    // theme is installed; otherwise the compositor keeps its own.
+    readonly property string cursorChoice: Settings.appearance.cursor || "macos"
+    readonly property string cursorTheme: cursorChoice === "macos" && macInstalled ? "macOS" : "breeze_cursors"
+    readonly property int cursorSize: cursorTheme === "macOS" ? 28 : 24
+    property bool macInstalled: false
+    Process {
+        id: findTheme
+        running: true
+        command: ["sh", "-c", "for d in \"$HOME/.icons\" \"$HOME/.local/share/icons\" $(echo \"${XDG_DATA_DIRS:-/run/current-system/sw/share}\" | tr : ' ' | sed 's|$|/icons|g') /run/current-system/sw/share/icons; do [ -d \"$d/macOS/cursors\" ] && exit 0; done; exit 1"]
+        onExited: code => { root.macInstalled = code === 0; root.applyCursor(); }
+    }
+    onCursorThemeChanged: applyCursor()
+    function applyCursor() {
+        if (findTheme.running) return;
+        if (Compositor.isHyprland) {
+            cursorProc.command = ["hyprctl", "setcursor", cursorTheme, String(cursorSize)];
+            cursorProc.running = true;
+        } else if (Compositor.isArbor) {
+            apply();
+        }
+    }
+    Process { id: cursorProc }
     FileView {
         id: arborFile
         path: (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/hearth/arbor-input.kdl"
