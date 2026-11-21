@@ -44,6 +44,7 @@ Item {
         MultiEffect {
             anchors.fill: parent
             source: patch
+            autoPaddingEnabled: false
             blurEnabled: true
             blur: root.blur
             blurMax: 48

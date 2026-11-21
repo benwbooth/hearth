@@ -41,13 +41,16 @@ Item {
     property real zoom: settled ? 1.035 : 1
     Behavior on zoom { NumberAnimation { duration: Lock.unlocking ? 380 : 700; easing.type: Easing.OutCubic } }
 
+    // The zoom sits inside `backdrop`, so the blur and the glass patches
+    // (which read backdrop) see it.
     Item {
         id: backdrop
         anchors.fill: parent
-        scale: root.zoom
+        clip: true
         WallpaperView {
             id: wall
             anchors.fill: parent
+            scale: root.zoom
             view: root.view
             px: Qt.size(Math.round(root.width * (root.screen ? root.screen.devicePixelRatio || 1 : 1)),
                         Math.round(root.height * (root.screen ? root.screen.devicePixelRatio || 1 : 1)))
@@ -67,6 +70,7 @@ Item {
         anchors.fill: parent
         visible: root.blurAmt > 0.001
         source: backdropTex
+        autoPaddingEnabled: false     // clamp at the screen edges instead of fading to clear
         blurEnabled: true
         blur: root.blurAmt
         blurMax: 64
