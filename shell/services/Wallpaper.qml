@@ -157,7 +157,7 @@ Singleton {
         }
     }
 
-    // ---- hyprpaper ----
+    // ---- show it (hyprpaper on Hyprland, swaybg on arbor) ----
     onFileChanged: applyTimer.restart()
     property int applyTries: 0
     Timer {
@@ -167,6 +167,16 @@ Singleton {
     }
     function apply() {
         if (!root.file) return;
+        if (Compositor.isArbor) {
+            // arbor: swaybg shows the stable link; restart it on the new
+            // image (swaybg doesn't watch its file). setsid: it outlives a
+            // hearth restart, like the one arbor's config starts.
+            Quickshell.execDetached(["sh", "-c",
+                'mkdir -p "$(dirname "$2")" && ln -sfn "$1" "$2"; '
+                + 'pkill -x swaybg; setsid -f swaybg -m fill -i "$2" >/dev/null 2>&1',
+                "sh", root.file, root.stableLink]);
+            return;
+        }
         apply_.command = ["sh", "-c",
             'mkdir -p "$(dirname "$2")" && ln -sfn "$1" "$2"; '
             + 'out=$(hyprctl hyprpaper wallpaper ",$1,cover" 2>&1); echo "$out"; '

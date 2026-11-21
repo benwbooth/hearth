@@ -115,6 +115,10 @@ screenshot-path "~/Pictures/Screenshots/Screenshot_%Y%m%d_%H%M%S.png"
 spawn-at-startup "hearth"
 spawn-at-startup "vicinae" "server"
 spawn-sh-at-startup "swaybg -m fill -i ~/.cache/hearth/wallpaper"
+// "Set as wallpaper" from apps goes to hearth's wallpaper.
+portal {
+    wallpaper-command "hearth-ipc" "call" "wallpaper" "setImage"
+}
 // Night light (4500 K from 19:00 to 07:00) is run by hearth: Settings >
 // Night Light, or the brightness menu.
 // X11 apps (Steam, older tools) scale themselves from Xft.dpi: 128 = 96 x
