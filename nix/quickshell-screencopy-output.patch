@@ -1,0 +1,151 @@
+--- a/src/wayland/screencopy/wlr_screencopy/wlr_screencopy_p.hpp	2026-11-21 10:37:22.575103318 -0800
++++ b/src/wayland/screencopy/wlr_screencopy/wlr_screencopy_p.hpp	2026-11-21 10:37:22.593183322 -0800
+@@ -6,6 +6,7 @@
+ #include <qtclasshelpermacros.h>
+ #include <qtypes.h>
+ #include <qwayland-wlr-screencopy-unstable-v1.h>
++#include <wayland-client-protocol.h>
+ 
+ #include "../manager.hpp"
+ 
+@@ -45,28 +46,37 @@
+ private:
+ 	void submitFrame();
+ 
+-	class OutputTransformQuery: public QtWayland::wl_output {
++	// Reads the screen's wl_output transform from a second wl_output binding. hearth patch:
++	// a raw wl_output listener, not a QtWayland::wl_output subclass. Compositors send
++	// wl_surface.enter to every wl_output the client bound, and Qt's
++	// QWaylandScreen::fromWlOutput() took this binding (same listener) for one of its
++	// screens: the next screen change dereferenced it (crash in oldestEnteredScreen).
++	class OutputTransformQuery {
+ 	public:
+ 		OutputTransformQuery(WlrScreencopyContext* context);
+-		~OutputTransformQuery() override;
++		~OutputTransformQuery();
+ 		Q_DISABLE_COPY_MOVE(OutputTransformQuery);
+ 
+ 		qint32 transform = -1;
+ 		void setScreen(QtWaylandClient::QWaylandScreen* screen);
+ 
+-	protected:
+-		void output_geometry(
+-		    qint32 x,
+-		    qint32 y,
+-		    qint32 width,
+-		    qint32 height,
+-		    qint32 subpixel,
+-		    const QString& make,
+-		    const QString& model,
+-		    qint32 transform
+-		) override;
+-
+ 	private:
++		void release();
++		static void onGeometry(
++		    void* data,
++		    ::wl_output* output,
++		    int32_t x,
++		    int32_t y,
++		    int32_t width,
++		    int32_t height,
++		    int32_t subpixel,
++		    const char* make,
++		    const char* model,
++		    int32_t transform
++		);
++		static const ::wl_output_listener LISTENER;
++
++		::wl_output* output = nullptr;
+ 		WlrScreencopyContext* context;
+ 	};
+ 
+--- a/src/wayland/screencopy/wlr_screencopy/wlr_screencopy.cpp	2026-11-21 10:37:22.575103318 -0800
++++ b/src/wayland/screencopy/wlr_screencopy/wlr_screencopy.cpp	2026-11-21 10:37:22.593486318 -0800
+@@ -161,10 +161,35 @@
+ WlrScreencopyContext::OutputTransformQuery::OutputTransformQuery(WlrScreencopyContext* context)
+     : context(context) {}
+ 
+-WlrScreencopyContext::OutputTransformQuery::~OutputTransformQuery() {
+-	if (this->isInitialized()) this->release();
++WlrScreencopyContext::OutputTransformQuery::~OutputTransformQuery() { this->release(); }
++
++void WlrScreencopyContext::OutputTransformQuery::release() {
++	if (this->output == nullptr) return;
++	if (wl_output_get_version(this->output) >= WL_OUTPUT_RELEASE_SINCE_VERSION) {
++		wl_output_release(this->output);
++	} else {
++		wl_output_destroy(this->output);
++	}
++	this->output = nullptr;
+ }
+ 
++namespace {
++void outputMode(void*, wl_output*, uint32_t, int32_t, int32_t, int32_t) {}
++void outputDone(void*, wl_output*) {}
++void outputScale(void*, wl_output*, int32_t) {}
++void outputName(void*, wl_output*, const char*) {}
++void outputDescription(void*, wl_output*, const char*) {}
++} // namespace
++
++const ::wl_output_listener WlrScreencopyContext::OutputTransformQuery::LISTENER = {
++    .geometry = &WlrScreencopyContext::OutputTransformQuery::onGeometry,
++    .mode = &outputMode,
++    .done = &outputDone,
++    .scale = &outputScale,
++    .name = &outputName,
++    .description = &outputDescription,
++};
++
+ void WlrScreencopyContext::OutputTransformQuery::setScreen(
+     QtWaylandClient::QWaylandScreen* screen
+ ) {
+@@ -174,28 +199,33 @@
+ 		[[nodiscard]] int globalId() const { return this->m_outputId; }
+ 	};
+ 
+-	if (this->isInitialized()) this->release();
++	this->release();
+ 
+-	this->init(
++	this->output = static_cast<::wl_output*>(wl_registry_bind(
+ 	    screen->display()->wl_registry(),
+ 	    static_cast<QWaylandScreenReflector*>(screen)->globalId(), // NOLINT
++	    &wl_output_interface,
+ 	    3
+-	);
++	));
++	wl_output_add_listener(this->output, &LISTENER, this);
+ }
+ 
+-void WlrScreencopyContext::OutputTransformQuery::output_geometry(
+-    qint32 /*x*/,
+-    qint32 /*y*/,
+-    qint32 /*width*/,
+-    qint32 /*height*/,
+-    qint32 /*subpixel*/,
+-    const QString& /*make*/,
+-    const QString& /*model*/,
+-    qint32 transform
++void WlrScreencopyContext::OutputTransformQuery::onGeometry(
++    void* data,
++    ::wl_output* /*output*/,
++    int32_t /*x*/,
++    int32_t /*y*/,
++    int32_t /*width*/,
++    int32_t /*height*/,
++    int32_t /*subpixel*/,
++    const char* /*make*/,
++    const char* /*model*/,
++    int32_t transform
+ ) {
+-	auto newTransform = this->transform == -1;
+-	this->transform = transform;
+-	this->context->updateTransform(newTransform);
++	auto* self = static_cast<OutputTransformQuery*>(data);
++	auto newTransform = self->transform == -1;
++	self->transform = transform;
++	self->context->updateTransform(newTransform);
+ }
+ 
+ } // namespace qs::wayland::screencopy::wlr

@@ -16,9 +16,19 @@
     lib = pkgs.lib;
 
     # 26.05 ships 0.3.0; 0.3.2 adds the NativeTextRendering pragma.
-    quickshell = pkgs.quickshell.overrideAttrs (_: {
+    quickshell = pkgs.quickshell.overrideAttrs (old: {
       version = "0.3.2";
       src = quickshell-src;
+      # The shell never goes through Qt's Wayland reconnect (Quickshell's own
+      # protocol objects don't survive it: it crashed in handleScreenRemoved);
+      # apps it launches still get QT_WAYLAND_RECONNECT. See bin/hearth below.
+      # Screencopy (screenshot editor, previews) bound a second wl_output with
+      # Qt's own wrapper class; a wl_surface.enter for it crashed Qt
+      # (QWaylandSurface::oldestEnteredScreen).
+      patches = (old.patches or [ ]) ++ [
+        ./nix/quickshell-child-reconnect.patch
+        ./nix/quickshell-screencopy-output.patch
+      ];
     });
 
     # Spotlight's indexer (nix/recoll.nix): recoll without its GUI.
@@ -113,6 +123,7 @@
         mkdir -p $out/libexec
         makeWrapper ${quickshell}/bin/quickshell $out/libexec/hearth-shell \
           --run 'cd "$HOME"' \
+          --run 'if [ -n "''${QT_WAYLAND_RECONNECT+x}" ]; then export QS_CHILD_QT_WAYLAND_RECONNECT="$QT_WAYLAND_RECONNECT"; unset QT_WAYLAND_RECONNECT; fi' \
           --add-flags "-p $out/share/hearth/shell" \
           --prefix PATH : ${lib.makeBinPath runtimeDeps}:$out/share/hearth/helpers \
           --prefix QML_IMPORT_PATH : ${qmlPath} \
@@ -123,20 +134,27 @@
           --set-default HEARTH_VERSION "${hearthVersion}" \
           --set-default HEARTH_SOUND_DIR ${pkgs.sound-theme-freedesktop}/share/sounds/freedesktop/stereo \
           --set-default HEARTH_XKB_RULES ${pkgs.xkeyboard_config}/share/X11/xkb/rules/evdev.lst
-        # hearth runs the shell and starts it again when it quits with 75:
-        # arbor restarted in place (`arbor msg action reload-binary`, or after
-        # a crash), which ends the shell's Wayland connection (ArborBackend.qml).
+        # hearth runs the shell and starts it again when arbor restarts in
+        # place (`arbor msg action reload-binary`, or after a crash): the shell
+        # quits with 75 when arbor's event stream drops (ArborBackend.qml), or
+        # Qt ends it with 255 when the Wayland connection breaks (it never
+        # reconnects: the patch above). At most 5 restarts a minute.
         cat > $out/bin/hearth <<EOF
         #!${pkgs.bash}/bin/bash
         export HEARTH_RESTARTER=1
         child=
+        recent=()
         trap '[ -n "\$child" ] && kill -TERM "\$child" 2>/dev/null; wait "\$child"; exit 143' TERM INT HUP
         while :; do
           $out/libexec/hearth-shell "\$@" &
           child=\$!
           wait "\$child"; rc=\$?
-          [ "\$rc" = 75 ] || exit "\$rc"
-          echo "hearth: arbor restarted; starting the shell again" >&2
+          case \$rc in 75|255) ;; *) exit "\$rc" ;; esac
+          now=\$(date +%s); keep=()
+          for t in "\''${recent[@]}"; do (( now - t < 60 )) && keep+=("\$t"); done
+          recent=("\''${keep[@]}" "\$now")
+          (( \''${#recent[@]} > 5 )) && { echo "hearth: the shell keeps ending; giving up" >&2; exit "\$rc"; }
+          echo "hearth: arbor restarted (exit \$rc); starting the shell again" >&2
           sleep 0.3
         done
         EOF
