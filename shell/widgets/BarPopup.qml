@@ -113,7 +113,7 @@ PanelWindow {
         onCleared: popup.close()
     }
 
-    // Elsewhere (niri/arbor have no focus grab): a transparent surface over
+    // Elsewhere (arbor have no focus grab): a transparent surface over
     // everything but the bars, under the popup, closes it on a click.
     PanelWindow {
         visible: popup.visible && !Compositor.isHyprland

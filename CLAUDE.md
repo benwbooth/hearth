@@ -1,6 +1,6 @@
 # hearth conventions
 
-Quickshell 0.3.2 shell for Hyprland 0.55 (Lua config) and niri/arbor. Read
+Quickshell 0.3.2 shell for Hyprland 0.55 (Lua config) and arbor. Read
 README.md first.
 
 ## QML rules
@@ -14,7 +14,7 @@ README.md first.
 - Colours/sizes from `Theme` (`import ".."` or `"../.."`), Breeze Dark.
 - Icons: `widgets/Icon.qml` with freedesktop/Breeze icon names.
 - Window/workspace state and actions go through `services/Compositor.qml`
-  (Hyprland and niri backends); Hyprland-only features check
+  (Hyprland and arbor backends); Hyprland-only features check
   `Compositor.isHyprland` and must not touch `Quickshell.Hyprland` otherwise.
 - User options live in `services/Settings.qml` (settings.json) and get a row
   in `popups/SettingsWindow.qml` with a one-line explanation; new actions and

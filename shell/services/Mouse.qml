@@ -32,8 +32,8 @@ Singleton {
             hypr.command = ["hyprctl", "eval",
                 `hl.config({ input = { sensitivity = ${s}, accel_profile = "${profile}", touchpad = { natural_scroll = ${root.naturalScroll} } } })`];
             hypr.running = true;
-        } else if (Compositor.isNiri) {
-            niriFile.setText(`// Written by hearth (Settings > Mouse & Touchpad). Edits here are replaced.
+        } else if (Compositor.isArbor) {
+            arborFile.setText(`// Written by hearth (Settings > Mouse & Touchpad). Edits here are replaced.
 input {
     mouse {
         accel-speed ${s}
@@ -51,7 +51,7 @@ input {
 
     Process { id: hypr }
     FileView {
-        id: niriFile
+        id: arborFile
         path: (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/hearth/arbor-input.kdl"
         printErrors: false
         blockLoading: false

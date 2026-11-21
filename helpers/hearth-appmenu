@@ -2,7 +2,7 @@
 """Global menu relay: speaks com.canonical.dbusmenu for hearth's menu bar.
 
 The compositor tells hearth where the focused window's menu lives (arbor:
-niri IPC `Window.app_menu = {service_name, object_path}`, set through the
+arbor IPC `Window.app_menu = {service_name, object_path}`, set through the
 KDE appmenu Wayland protocol). Quickshell can't call arbitrary DBus, so
 hearth runs this and talks JSON lines:
 

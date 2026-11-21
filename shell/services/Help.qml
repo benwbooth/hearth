@@ -6,8 +6,8 @@ import Quickshell.Io
 // Everything the Help menu can find: keyboard shortcuts, trackpad
 // gestures, settings and actions, each with a plain-language title.
 //
-// Shortcuts: on arbor/niri they are read from the user's niri config
-// (~/.config/niri/config.kdl `binds { ... }`: a bind's hotkey-overlay-title
+// Shortcuts: on arbor they are read from the user's arbor config
+// (~/.config/arbor/config.kdl `binds { ... }`: a bind's hotkey-overlay-title
 // or, failing that, its action); on Hyprland they are hearth's own binds
 // (hypr/hyprland.lua), listed here.
 //
@@ -59,9 +59,9 @@ Singleton {
         { title: "Right-click", keys: "Tap with two fingers" }
     ]
 
-    // niri / arbor binds parsed from the config.
-    property var niriShortcuts: []
-    readonly property var shortcuts: Compositor.isNiri && niriShortcuts.length ? niriShortcuts : hyprShortcuts
+    // arbor binds parsed from the config.
+    property var arborShortcuts: []
+    readonly property var shortcuts: Compositor.isArbor && arborShortcuts.length ? arborShortcuts : hyprShortcuts
 
     // Settings and actions the search can open or run.
     readonly property var actions: [
@@ -129,8 +129,8 @@ Singleton {
         function search(text: string): string { return JSON.stringify(root.search(text).map(r => [r.title, r.keys])); }
     }
 
-    // --- niri config ---
-    readonly property string niriConfig: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/niri/config.kdl"
+    // --- arbor config ---
+    readonly property string arborConfig: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/arbor/config.kdl"
 
     function groupFor(action) {
         const a = action.toLowerCase();
@@ -147,7 +147,7 @@ Singleton {
         const s = action.split(/\s+/)[0].replace(/-/g, " ");
         return s.charAt(0).toUpperCase() + s.slice(1);
     }
-    function parseNiri(text) {
+    function parseArbor(text) {
         const out = [];
         const start = text.search(/^\s*binds\s*\{/m);
         if (start < 0) return out;
@@ -174,10 +174,10 @@ Singleton {
     }
 
     FileView {
-        path: Compositor.isNiri ? root.niriConfig : ""
+        path: Compositor.isArbor ? root.arborConfig : ""
         watchChanges: true
         printErrors: false
         onFileChanged: reload()
-        onLoaded: root.niriShortcuts = root.parseNiri(text())
+        onLoaded: root.arborShortcuts = root.parseArbor(text())
     }
 }

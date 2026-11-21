@@ -7,7 +7,7 @@ import "services"
 // (appearance.mode: dark, light, or auto by time of day), with the accent
 // from settings. The `glass*` colours are the translucent macOS-style
 // surfaces (menu bar, dock, menus): the compositor blurs what's behind them
-// (hypr/hyprland.lua layer rules, niri/hearth-layer-rules.kdl); without blur
+// (hypr/hyprland.lua layer rules, arbor/hearth-layer-rules.kdl); without blur
 // they are still opaque enough to read.
 Singleton {
     id: root

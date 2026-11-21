@@ -76,7 +76,7 @@ Scope {
         // workspace". niri: this output's workspaces; its trailing empty one
         // already is the new workspace.
         readonly property var workspaces: {
-            if (Compositor.isNiri) {
+            if (Compositor.isArbor) {
                 const ws = Compositor.workspacesOn(Compositor.focusedOutput);
                 const used = new Set(Compositor.windows.map(w => w.workspaceId));
                 return ws.map((w, i) => ({ id: w.id, name: w.name, ws: w,

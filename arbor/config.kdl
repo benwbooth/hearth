@@ -1,5 +1,5 @@
-// Ben's arbor config (arbor = niri fork with a docking layout; niri's KDL
-// config language). Installed as ~/.config/niri/config.kdl by /etc/nixos.
+// Ben's arbor config (KDL). Installed as ~/.config/arbor/config.kdl by
+// /etc/nixos.
 // Keys follow the Hyprland/Plasma ones wherever arbor has an equivalent.
 // Super+Shift+/ shows every shortcut.
 
@@ -93,14 +93,14 @@ hotkey-overlay {
 
 screenshot-path "~/Pictures/Screenshots/Screenshot_%Y%m%d_%H%M%S.png"
 
-// Startup. niri also starts xwayland-satellite on demand for X11 apps.
+// Startup. arbor also starts xwayland-satellite on demand for X11 apps.
 spawn-at-startup "hearth"
 spawn-at-startup "vicinae" "server"
 spawn-sh-at-startup "swaybg -m fill -i ~/.cache/hearth/wallpaper"
 // Night light like KDE Night Color: 4500 K from 19:00 to 07:00.
 spawn-at-startup "wlsunset" "-t" "4500" "-T" "6500" "-S" "07:00" "-s" "19:00"
 // Lock after 10 minutes, screen off after 15, lock before sleep.
-spawn-sh-at-startup "swayidle -w timeout 600 'pidof hyprlock || hyprlock &' timeout 900 'niri msg action power-off-monitors' resume 'niri msg action power-on-monitors' before-sleep 'pidof hyprlock || hyprlock &' lock 'pidof hyprlock || hyprlock &'"
+spawn-sh-at-startup "swayidle -w timeout 600 'pidof hyprlock || hyprlock &' timeout 900 'arbor msg action power-off-monitors' resume 'arbor msg action power-on-monitors' before-sleep 'pidof hyprlock || hyprlock &' lock 'pidof hyprlock || hyprlock &'"
 // KWallet gets SDDM's password (as Plasma's startup does).
 spawn-at-startup "/run/current-system/sw/libexec/pam_kwallet_init"
 spawn-sh-at-startup "systemctl --user start plasma-polkit-agent.service"

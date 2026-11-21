@@ -10,7 +10,7 @@ import ".."
 // name and menus on the left; tray, indicators and clock on the right.
 // Liquid glass, transparent or solid (Settings > Menu Bar > Style); the
 // compositor blurs behind it (namespace hearth-menubar, layer rule
-// hearth-glass in hypr/hyprland.lua, niri/hearth-layer-rules.kdl).
+// hearth-glass in hypr/hyprland.lua, arbor/hearth-layer-rules.kdl).
 // With "automatically hide the menu bar" it slides up and comes back when
 // the pointer touches the top edge.
 PanelWindow {

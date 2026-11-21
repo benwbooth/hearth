@@ -3,15 +3,15 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 
-// Compositor backend for niri (and arbor, its docking fork), over niri's
-// JSON IPC socket ($NIRI_SOCKET): one long-lived connection subscribed to
+// Compositor backend for arbor (Ben's niri fork), over its JSON IPC
+// socket ($ARBOR_SOCKET; $NIRI_SOCKET from older builds): one long-lived connection subscribed to
 // the event stream keeps the state, and each action opens a short-lived
-// connection (what `niri msg action ...` does, without a process per call).
+// connection (what `arbor msg action ...` does, without a process per call).
 // Field names follow niri-ipc's Window / Workspace / Event types.
 Scope {
     id: root
 
-    readonly property string socketPath: Quickshell.env("NIRI_SOCKET") || ""
+    readonly property string socketPath: Quickshell.env("ARBOR_SOCKET") || Quickshell.env("NIRI_SOCKET") || ""
     property var winMap: ({})      // id -> niri Window JSON
     property var wsList: []        // [niri Workspace JSON]
     property bool streaming: false
@@ -103,7 +103,7 @@ Scope {
         let ev;
         try { ev = JSON.parse(line); } catch (e) { return; }
         if (ev.Ok !== undefined || ev.Err !== undefined) {
-            if (ev.Err !== undefined) console.warn("niri event stream:", ev.Err);
+            if (ev.Err !== undefined) console.warn("arbor event stream:", ev.Err);
             return;
         }
         const name = Object.keys(ev)[0];
@@ -211,7 +211,7 @@ Scope {
                 onRead: line => {
                     try {
                         const r = JSON.parse(line);
-                        if (r.Err !== undefined) console.warn("niri action failed:", req.payload, r.Err);
+                        if (r.Err !== undefined) console.warn("arbor action failed:", req.payload, r.Err);
                     } catch (e) {}
                     req.connected = false;
                     Qt.callLater(() => req.destroy());

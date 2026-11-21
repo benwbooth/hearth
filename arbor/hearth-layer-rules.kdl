@@ -1,6 +1,6 @@
-// hearth's glass for niri / arbor (26.04+): blur what's behind the menu bar,
+// hearth's glass for arbor (26.04+): blur what's behind the menu bar,
 // menus and popups, and swaync's notifications. Include it from the arbor
-// config:   include "/path/to/hearth/niri/hearth-layer-rules.kdl"
+// config:   include "/path/to/hearth/arbor/hearth-layer-rules.kdl"
 // (or paste it in).
 //
 // The dock is left out on purpose: its layer surface spans the whole screen

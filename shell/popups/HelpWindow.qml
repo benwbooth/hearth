@@ -180,7 +180,7 @@ Scope {
         ColumnLayout {
             spacing: 12
             Title { text: "Keyboard Shortcuts" }
-            Para { text: Compositor.isNiri ? "Read from your niri configuration. Super is the Windows (⊞) key." : "Super is the Windows (⊞) key. Press Super+/ any time to open this list." }
+            Para { text: Compositor.isArbor ? "Read from your arbor configuration. Super is the Windows (⊞) key." : "Super is the Windows (⊞) key. Press Super+/ any time to open this list." }
             SearchField {
                 id: search
                 Layout.fillWidth: true
@@ -290,7 +290,7 @@ Scope {
             spacing: 14
             Title { text: "How windows work" }
             Para {
-                text: Compositor.isNiri
+                text: Compositor.isArbor
                     ? "Windows open floating, like sheets of paper on a desk: drag them anywhere by the title bar. To dock a window, drag it to the edge of another window (or of the screen): it snaps in beside it and the two share the space. Docked windows never overlap. Drag the gap between two docked windows to resize both."
                     : "Windows can float freely or be tiled. Drag a window by its title bar to move it; hold Shift while dragging to snap it into a zone. Super+T switches a window between floating and tiled."
             }
@@ -332,7 +332,7 @@ Scope {
                 { title: "The menu bar", text: "Along the top. On the left: the system menu (the logo: settings, sleep, restart, shut down), then the app you are using and its menus. On the right: status icons (sound, network, battery…) and the clock — click any of them for more.", icon: "preferences-desktop" },
                 { title: "The Dock", text: "Along the bottom; it slides in when you move the pointer to the bottom edge. Click an app to open it. A dot under an icon means it is running. Right-click an app for its options (Keep in Dock, Quit…); drag icons to rearrange them, or drag one off the Dock to remove it.", icon: "preferences-system-windows" },
                 { title: "Opening apps", text: "Press Alt+Space (or tap the Super key) and type the app's name, then press Enter. It also finds files, does sums and converts units.", icon: "search" },
-                { title: "Moving and docking windows", text: Compositor.isNiri ? "Drag a window by its title bar. Drop it on the edge of another window to dock it beside that window; drop it anywhere else to let it float." : "Drag a window by its title bar; hold Shift while dragging to snap it into place. Super+Arrow keys move it.", icon: "transform-move" },
+                { title: "Moving and docking windows", text: Compositor.isArbor ? "Drag a window by its title bar. Drop it on the edge of another window to dock it beside that window; drop it anywhere else to let it float." : "Drag a window by its title bar; hold Shift while dragging to snap it into place. Super+Arrow keys move it.", icon: "transform-move" },
                 { title: "Settings and Help", text: "Everything can be changed in Settings (system menu → hearth Settings…): dark or light look, the Dock, the clock and more. Lost? Click the ? in the menu bar and type what you want to do.", icon: "configure" }
             ]
             readonly property var s: steps[Math.min(root.welcomeStep, steps.length - 1)]

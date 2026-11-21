@@ -4,18 +4,18 @@ import Quickshell
 import Quickshell.Wayland
 import "compositor"
 
-// What the shell needs from the compositor, for Hyprland and niri/arbor.
+// What the shell needs from the compositor, for Hyprland and arbor.
 //
 // windows: [{ id (string), appId, title, workspaceId, output, focused, minimized,
 //             floating, urgent, at: [x, y] | null (logical, relative to the
 //             output), size: [w, h] | null, focusOrder (lower = more recent),
 //             special (Hyprland special workspace), appMenu: { service_name,
-//             object_path } | null (niri/arbor only), toplevel (wlr
+//             object_path } | null (arbor only), toplevel (wlr
 //             foreign-toplevel handle or null), hypr (HyprlandToplevel or null) }]
 // workspaces: [{ id, idx, name, output, active, focused, urgent, special }]
 //
-// Backend: HEARTH_COMPOSITOR=hyprland|niri, else whichever IPC socket the
-// environment points at (a niri session sets XDG_CURRENT_DESKTOP=niri when
+// Backend: HEARTH_COMPOSITOR=hyprland|arbor, else whichever IPC socket the
+// environment points at (an arbor session sets XDG_CURRENT_DESKTOP=arbor when
 // both are inherited). Only the active backend is instantiated, so nothing
 // touches Quickshell.Hyprland outside Hyprland.
 Singleton {
@@ -23,21 +23,22 @@ Singleton {
 
     readonly property string type: {
         const forced = (Quickshell.env("HEARTH_COMPOSITOR") || "").toLowerCase();
-        if (forced === "hyprland" || forced === "niri") return forced;
+        if (forced === "hyprland") return forced;
+        if (forced === "arbor" || forced === "niri") return "arbor";
         const hypr = !!Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE");
-        const niri = !!Quickshell.env("NIRI_SOCKET");
-        if (hypr && niri) {
+        const arbor = !!(Quickshell.env("ARBOR_SOCKET") || Quickshell.env("NIRI_SOCKET"));
+        if (hypr && arbor) {
             const d = (Quickshell.env("XDG_CURRENT_DESKTOP") || "").toLowerCase();
-            return d.includes("niri") || d.includes("arbor") ? "niri" : "hyprland";
+            return d.includes("arbor") || d.includes("niri") ? "arbor" : "hyprland";
         }
-        return niri ? "niri" : hypr ? "hyprland" : "none";
+        return arbor ? "arbor" : hypr ? "hyprland" : "none";
     }
     readonly property bool isHyprland: type === "hyprland"
-    readonly property bool isNiri: type === "niri"
+    readonly property bool isArbor: type === "arbor"
 
     LazyLoader { id: hyprLoader; active: root.isHyprland; HyprBackend {} }
-    LazyLoader { id: niriLoader; active: root.isNiri; NiriBackend {} }
-    readonly property var backend: root.isHyprland ? hyprLoader.item : root.isNiri ? niriLoader.item : null
+    LazyLoader { id: arborLoader; active: root.isArbor; ArborBackend {} }
+    readonly property var backend: root.isHyprland ? hyprLoader.item : root.isArbor ? arborLoader.item : null
 
     readonly property var windows: backend ? backend.windows : []
     readonly property var workspaces: backend ? backend.workspaces : []

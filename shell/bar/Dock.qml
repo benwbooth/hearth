@@ -144,7 +144,7 @@ PanelWindow {
         if (!cfg.minimizeIntoApp) {
             // Minimized: arbor reports it per window; elsewhere the
             // foreign-toplevel state.
-            const mins = Compositor.isNiri
+            const mins = Compositor.isArbor
                 ? Compositor.windows.filter(w => w.minimized && w.toplevel).map(w => w.toplevel)
                 : ToplevelManager.toplevels.values.filter(t => t.minimized);
             if (mins.length) {
@@ -411,7 +411,7 @@ PanelWindow {
                 anchors.fill: parent
                 radius: Math.min(22, dockWin.thickness * 0.32)
                 // Hyprland blurs behind the dock; niri can't for this wide
-                // surface (see niri/hearth-layer-rules.kdl), so more tint.
+                // surface (see arbor/hearth-layer-rules.kdl), so more tint.
                 color: Compositor.isHyprland ? Theme.glassDock : Theme.glassDockSolid
                 border.color: Theme.glassEdge
                 border.width: 1
