@@ -638,42 +638,59 @@ done`]
         }
         return t;
     }
-    function topText(kind) {
+    // A hovered item's tooltip: a head (its overall row, or a message),
+    // rows drawn over translucent bars, and a foot (notes). Each row is
+    // {cells: [{t, color, bold, right}], frac (0..1, or -1 for no bar), bar}.
+    function tipModel(kind) {
         void tick;
-        if (kind === "temp") return sensorsText();
+        if (kind === "temp") return { head: sensorsText(), rows: [], foot: "" };
+        // Disk space: which programs fill a disk isn't something to list,
+        // so one row per volume instead.
+        if (kind === "disk") return volumesModel();
         const head = kindRows(kind) ? "<table cellspacing='1'>" + kindRows(kind) + "</table>" : "";
-        // Disk space: which programs fill a disk isn't something to list.
-        if (kind === "disk") return volumesText();
-        return head + (head ? "<br>" : "") + topList(kind);
+        const m = topModel(kind);
+        return { head: head + (m.head ? (head ? "<br>" : "") + m.head : ""), rows: m.rows, foot: m.foot };
     }
-    // A text bar for a share (0..1): whole blocks, an eighth block for the
-    // remainder, and a dim track (the tooltip's font is monospace).
-    function bar(frac, color) {
-        const w = 10;
-        const f = Math.max(0, Math.min(1, frac || 0)) * w;
-        let full = Math.floor(f);
-        const part = Math.round((f - full) * 8);
-        let s = "█".repeat(full);
-        if (part === 8) { s += "█"; full++; }
-        else if (part > 0 && full < w) s += "▏▎▍▌▋▊▉"[part - 1];
-        const used = full + (part > 0 && part < 8 && full < w ? 1 : 0);
-        return c(color, s) + c(Theme.fgDim, "░".repeat(Math.max(0, w - used)));
+    // Cells padded to their column's width (the font is monospace), so the
+    // rows line up although each is its own item.
+    function padRows(rows) {
+        const w = [];
+        for (const r of rows)
+            r.cells.forEach((cell, i) => { w[i] = Math.max(w[i] || 0, String(cell.t).length); });
+        return rows.map(r => ({
+            frac: r.frac,
+            bar: r.bar,
+            html: r.cells.map((cell, i) => {
+                const pad = "&nbsp;".repeat(w[i] - String(cell.t).length);
+                let t = esc(cell.t);
+                if (cell.bold) t = "<b>" + t + "</b>";
+                if (cell.color) t = c(cell.color, t);
+                return cell.right ? pad + t : t + pad;
+            }).join("&nbsp;&nbsp;")
+        }));
     }
-    // Disk space per volume: used share, used of size, and what's free.
-    function volumesText() {
-        if (!diskVolumes.length) return c(Theme.fgDim, "No disks found.");
-        let t = "<table cellspacing='1'>";
-        for (const v of diskVolumes)
-            t += "<tr><td>" + c(tipPalette.disk, "<b>" + esc(v.mount) + "</b>") + "</td><td>&nbsp;&nbsp;" + bar(v.used / v.size, tipPalette.disk) + "</td><td align='right'>&nbsp;<b>"
-                + pct(100 * v.used / v.size) + "</b></td><td>&nbsp;&nbsp;" + c(Theme.fgDim, fmtBytes(v.used) + " of " + fmtBytes(v.size)
-                + " · " + fmtBytes(v.size - v.used) + " free") + "</td></tr>";
-        return t + "</table>";
+    // Disk space per volume: its bar is the used share.
+    function volumesModel() {
+        if (!diskVolumes.length) return { head: c(Theme.fgDim, "No disks found."), rows: [], foot: "" };
+        return {
+            head: "",
+            rows: padRows(diskVolumes.map(v => ({
+                frac: v.used / v.size,
+                bar: treetopPalette.disk,
+                cells: [
+                    { t: v.mount, color: tipPalette.disk, bold: true },
+                    { t: pct(100 * v.used / v.size), bold: true, right: true },
+                    { t: fmtBytes(v.used) + " of " + fmtBytes(v.size) + " · " + fmtBytes(v.size - v.used) + " free", color: Theme.fgDim }
+                ]
+            }))),
+            foot: ""
+        };
     }
-    function topList(kind) {
-        if (!topData || !topData[kind]) return c(Theme.fgDim, "Open treetop to see which programs are using this.");
+    function topModel(kind) {
+        if (!topData || !topData[kind]) return { head: c(Theme.fgDim, "Open treetop to see which programs are using this."), rows: [], foot: "" };
         const list = topData[kind];
         const extra = kind === "gpu" ? gpuUnattributedText() : "";
-        if (!list.length) return extra || c(Theme.fgDim, "Nothing is using it right now.");
+        if (!list.length) return { head: extra || c(Theme.fgDim, "Nothing is using it right now."), rows: [], foot: "" };
         // Memory and VRAM: each program's share of the total next to the
         // amount (CPU and GPU are percentages already).
         const total = kind === "mem" ? memTotal
@@ -683,17 +700,18 @@ done`]
         const share = x => total > 0 ? x.v / total
             : kind === "cpu" ? x.v / (100 * Math.max(1, cpuCount))
             : kind === "gpu" ? x.v / 100 : -1;
-        let t = "<table cellspacing='1'>";
-        for (const x of list)
-            t += "<tr>" + (share(x) >= 0 ? "<td>" + bar(share(x), kindColor[kind]) + "&nbsp;</td>" : "")
-                + "<td align='right'>" + c(kindColor[kind], "<b>" + fmtTop(kind, x.v) + "</b>") + "</td>"
-                + (total > 0 ? "<td align='right'>&nbsp;" + c(kindColor[kind], (x.v / total * 100).toFixed(x.v / total < 0.1 ? 1 : 0) + "%") + "</td>" : "")
-                + "<td>&nbsp;&nbsp;" + esc(x.name)
-                + "</td><td>&nbsp;" + c(Theme.fgDim, x.n > 1 ? "×" + x.n : "") + "</td></tr>";
-        t += "</table>";
+        const rows = padRows(list.map(x => {
+            const cells = [{ t: fmtTop(kind, x.v), color: kindColor[kind], bold: true, right: true }];
+            if (total > 0) cells.push({ t: (x.v / total * 100).toFixed(x.v / total < 0.1 ? 1 : 0) + "%", color: kindColor[kind], right: true });
+            cells.push({ t: x.name });
+            cells.push({ t: x.n > 1 ? "×" + x.n : "", color: Theme.fgDim });
+            return { frac: share(x), bar: treetopPalette[kind], cells: cells };
+        }));
+        let foot = "";
         if (kind === "net" || kind === "disk")
-            t += c(Theme.fgDim, "<br>Other users' processes need root access in treetop.");
-        return t + (extra ? "<br>" + extra : "");
+            foot = c(Theme.fgDim, "Other users' processes need root access in treetop.");
+        if (extra) foot += (foot ? "<br>" : "") + extra;
+        return { head: "", rows: rows, foot: foot };
     }
     // Short GPU name: "Navi 31 [Radeon RX 7900 XT/...] (TUF Gaming Radeon RX
     // 7900 XTX OC)" -> "Radeon RX 7900 XTX"; "Raphael [Radeon 610M]" -> "Radeon 610M".
@@ -762,6 +780,10 @@ done`]
         implicitHeight: tipFrame.implicitHeight + 2 * pad
         mask: Region {}
 
+        // What it shows: the hovered item's model, or the overall summary.
+        readonly property var model: !visible ? ({ head: "", rows: [], foot: "" })
+            : root.hoverKind ? root.tipModel(root.hoverKind)
+            : ({ head: root.summaryText, rows: [], foot: "" })
         readonly property bool want: root.containsMouse && !root.pressed
         onWantChanged: {
             if (want) tipTimer.restart();
@@ -798,9 +820,56 @@ done`]
                     font.pointSize: Theme.fontSize + 1
                 }
                 Label {
+                    visible: text !== ""
                     textFormat: Text.RichText
                     elide: Text.ElideNone
-                    text: tip.visible ? (root.hoverKind ? root.topText(root.hoverKind) : root.summaryText) : ""
+                    text: tip.model.head
+                    font.family: "monospace"
+                    font.pointSize: Theme.fontSize * 0.95
+                }
+                // One item per row: a faint track, the share as a
+                // translucent rounded bar behind the text, then the text.
+                Column {
+                    visible: tip.model.rows.length > 0
+                    spacing: 2
+                    Repeater {
+                        model: tip.model.rows
+                        Item {
+                            id: tipRow
+                            required property var modelData
+                            readonly property bool hasBar: modelData.frac >= 0
+                            width: rowText.implicitWidth + 12
+                            height: rowText.implicitHeight + 4
+                            Rectangle {
+                                visible: tipRow.hasBar
+                                anchors.fill: parent
+                                radius: 4
+                                color: Qt.alpha(tipRow.modelData.bar, 0.08)
+                            }
+                            Rectangle {
+                                visible: tipRow.hasBar && tipRow.modelData.frac > 0
+                                width: Math.max(height * 0.5, parent.width * Math.min(1, tipRow.modelData.frac))
+                                height: parent.height
+                                radius: 4
+                                color: Qt.alpha(tipRow.modelData.bar, 0.32)
+                            }
+                            Label {
+                                id: rowText
+                                x: 6
+                                anchors.verticalCenter: parent.verticalCenter
+                                textFormat: Text.RichText
+                                text: tipRow.modelData.html
+                                font.family: "monospace"
+                                font.pointSize: Theme.fontSize * 0.95
+                            }
+                        }
+                    }
+                }
+                Label {
+                    visible: text !== ""
+                    textFormat: Text.RichText
+                    elide: Text.ElideNone
+                    text: tip.model.foot
                     font.family: "monospace"
                     font.pointSize: Theme.fontSize * 0.95
                 }
