@@ -147,7 +147,12 @@
         # through hearth-ipc silently fails. Pick the newest hearth by pid.
         cat > $out/bin/hearth-ipc <<EOF
         #!${pkgs.runtimeShell}
-        pid=\$(${pkgs.procps}/bin/pgrep -nf 'quickshell -p /nix/store/[^ ]*-hearth-[^ ]*/share/hearth/shell')
+        # The newest running instance of an installed hearth, as Quickshell
+        # lists them: only real shell instances (not Quickshell's own helper
+        # process, which has the same command line and is always newer) and
+        # only this login's runtime dir (not smoke tests or nested test
+        # sessions, which run with their own).
+        pid=\$(${quickshell}/bin/quickshell list --all --json 2>/dev/null | ${pkgs.jq}/bin/jq -r '[.[] | select(.config_path | test("^/nix/store/[^/]*-hearth-[^/]*/share/hearth/shell/shell.qml\$"))] | sort_by(.launch_time) | last | .pid // empty')
         if [ -n "\$pid" ]; then exec ${quickshell}/bin/quickshell ipc --pid "\$pid" "\$@"; fi
         exec ${quickshell}/bin/quickshell ipc -p $out/share/hearth/shell "\$@"
         EOF
