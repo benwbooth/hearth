@@ -58,6 +58,7 @@ Scope {
                 minimized: !!w.is_minimized,   // arbor
                 floating: !!w.is_floating,
                 urgent: !!w.is_urgent,
+                pid: w.pid || 0,
                 at: l.tile_pos_in_workspace_view ? [l.tile_pos_in_workspace_view[0], l.tile_pos_in_workspace_view[1]] : null,
                 size: l.tile_size ? [l.tile_size[0], l.tile_size[1]] : null,
                 focusOrder: -ts,

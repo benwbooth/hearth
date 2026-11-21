@@ -26,8 +26,9 @@ PanelWindow {
     property var extraWindows: []
     // OnDemand: the popup takes the keyboard when clicked into (search
     // fields, passwords). Exclusive sends all typing straight to it.
-    // Exclusive by default, like a macOS menu: Escape closes it.
-    property int keyboardFocus: WlrKeyboardFocus.Exclusive
+    // Not Exclusive: Hyprland ends the focus grab when an exclusive layer
+    // takes the keyboard, which closed menus the moment they opened.
+    property int keyboardFocus: WlrKeyboardFocus.OnDemand
 
     // A layer-shell panel rather than an xdg popup: popups only get the
     // keyboard through an input grab, which a key bind or `hearth-ipc` can't
@@ -90,7 +91,12 @@ PanelWindow {
     implicitWidth: Math.max(8, frame.implicitWidth)
     implicitHeight: Math.max(8, frame.implicitHeight)
 
-    onOpenChanged: if (open) ShellState.activePopup = popup
+    // Cleared again on close: the dock stays out while its menu is the
+    // active popup, so a stale one kept it from ever hiding.
+    onOpenChanged: {
+        if (open) ShellState.activePopup = popup;
+        else if (ShellState.activePopup === popup) ShellState.activePopup = null;
+    }
     // One popup at a time.
     Connections {
         target: ShellState

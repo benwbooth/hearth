@@ -35,7 +35,8 @@ PanelWindow {
     readonly property real extra: iconSize * (maxZoom - 1)
     // Room above the icons for the app-name label (drawn inside this
     // surface, so hovering never maps or unmaps popup windows).
-    readonly property real labelSpace: 36
+    // Side docks put it beside the icons, so they need the label's width.
+    readonly property real labelSpace: vertical ? 300 : 54
     readonly property real winThickness: margin + thickness + extra + 14 + labelSpace
     readonly property bool autohide: cfg.autohide
 
@@ -70,7 +71,7 @@ PanelWindow {
 
     // --- show / hide ---
     property int previews: 0
-    readonly property bool menuOpen: !!ShellState.activePopup && ShellState.activePopup.barWindow === dockWin
+    readonly property bool menuOpen: !!ShellState.activePopup && ShellState.activePopup.open && ShellState.activePopup.barWindow === dockWin
     property bool held: false
     // `held` goes up when the pointer touches the edge strip or the dock and
     // drops `autohideDelay` ms after it leaves.
@@ -323,12 +324,17 @@ PanelWindow {
             readonly property bool want: idx >= 0 && hover.hovered && !dockWin.menuOpen
                                          && dockWin.previews === 0 && dockWin.dragKey === ""
             property string text: ""
+            // Apps that aren't open also say what they are and what a click
+            // does (beginner friendly, like the old per-icon tooltips).
+            property string sub: ""
             property real cx: 0
             property real ext: 0
             onIdxChanged: if (idx >= 0) {
                 const sl = dockWin.slots[idx];
                 const g = sl && sl.group;
                 text = g && g.entry ? g.entry.name : (sl ? sl.key : "");
+                const open = g && g.windows && g.windows.length > 0;
+                sub = !g || open ? "" : (g.entry && g.entry.comment ? g.entry.comment : "Click to open · right-click for options");
             }
             // Follow the hot icon's centre and its magnified size.
             readonly property real tcx: idx >= 0 ? (dockWin.geo.pos[idx] ?? 0) + (dockWin.geo.len[idx] ?? 0) / 2 : cx
@@ -336,20 +342,39 @@ PanelWindow {
             onTcxChanged: cx = tcx
             onText_extChanged: ext = text_ext
             Behavior on cx { enabled: nameLabel.opacity > 0.01; NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
-            visible: !dockWin.vertical && opacity > 0
+            visible: opacity > 0
             opacity: want ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 140 } }
-            width: nameText.implicitWidth + 20
-            height: nameText.implicitHeight + 8
-            radius: height / 2
-            x: Math.round(Math.max(4, Math.min(dockWin.width - width - 4, cx - width / 2)))
-            y: Math.round(dockWin.height - dockWin.margin - dockWin.thickness - ext - height - 8)
+            readonly property real maxText: dockWin.vertical ? dockWin.labelSpace - 44 : 420
+            width: labelCol.implicitWidth + 20
+            height: labelCol.implicitHeight + 8
+            radius: Math.min(height / 2, 12)
+            readonly property real inner: dockWin.margin + dockWin.thickness + ext + 8
+            x: Math.round(!dockWin.vertical ? Math.max(4, Math.min(dockWin.width - width - 4, cx - width / 2))
+                          : dockWin.edge === "left" ? inner : dockWin.width - inner - width)
+            y: Math.round(dockWin.vertical ? Math.max(4, Math.min(dockWin.height - height - 4, cx - height / 2))
+                          : dockWin.height - inner - height)
             color: Qt.rgba(Theme.bgRaised.r, Theme.bgRaised.g, Theme.bgRaised.b, 0.92)
             border.color: Theme.border
-            Label {
-                id: nameText
+            Column {
+                id: labelCol
                 anchors.centerIn: parent
-                text: nameLabel.text
+                Label {
+                    id: nameText
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: Math.min(implicitWidth, nameLabel.maxText)
+                    elide: Text.ElideRight
+                    text: nameLabel.text
+                }
+                Label {
+                    visible: nameLabel.sub !== ""
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: Math.min(implicitWidth, nameLabel.maxText)
+                    elide: Text.ElideRight
+                    text: nameLabel.sub
+                    color: Theme.fgDim
+                    font.pointSize: Theme.smallFontSize
+                }
             }
         }
 

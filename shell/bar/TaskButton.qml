@@ -44,6 +44,9 @@ MouseArea {
     readonly property var badge: Badges.forApp(modelData.key)
     readonly property string edge: { const w = task.QsWindow.window; return w && w.edge ? w.edge : "bottom"; }
     property int cycle: 0
+    // Right-click menu: the workspace list under "Move to Workspace" is open.
+    property bool wsOpen: false
+    Connections { target: menu; function onOpenChanged() { if (!menu.open) task.wsOpen = false; } }
     property bool dragging: false
     property point pressPos
 
@@ -380,6 +383,7 @@ MouseArea {
                 }
             }
             MenuSeparator { visible: task.windows.length > 1 }
+            // Jump list (the app's desktop actions), as in KDE and macOS.
             Repeater {
                 model: task.entry ? task.entry.actions : []
                 MenuItem {
@@ -395,18 +399,95 @@ MouseArea {
                 icon: "list-add"
                 onTriggered: { task.launch(); menu.close(); }
             }
+
+            // Window actions.
+            MenuSeparator { visible: task.running }
+            MenuItem {
+                visible: task.running
+                readonly property bool allMin: task.windows.every(w => w.minimized)
+                text: allMin ? "Show" : (task.dock ? "Hide" : "Minimize")
+                icon: allMin ? "window-restore" : "window-minimize"
+                onTriggered: {
+                    menu.close();
+                    if (allMin) { for (const w of task.windows) w.activate(); }
+                    else { for (const w of task.windows) Compositor.minimizeToplevel(w); }
+                }
+            }
+            MenuItem {
+                visible: task.windows.length === 1
+                text: "Maximize"
+                checkable: true
+                checked: visible && task.windows[0].maximized
+                onTriggered: { menu.close(); const w = task.windows[0]; w.maximized = !w.maximized; }
+            }
+            MenuItem {
+                visible: task.windows.length === 1
+                text: "Full Screen"
+                checkable: true
+                checked: visible && task.windows[0].fullscreen
+                onTriggered: { menu.close(); const w = task.windows[0]; w.fullscreen = !w.fullscreen; }
+            }
+            MenuItem {
+                id: wsItem
+                readonly property var spaces: Compositor.workspaces.filter(ws => !ws.special
+                                               && (!task.QsWindow.window || !task.QsWindow.window.screen
+                                                   || ws.output === "" || ws.output === task.QsWindow.window.screen.name))
+                visible: task.running && spaces.length > 1
+                text: (task.wsOpen ? "▾  " : "▸  ") + (task.windows.length > 1 ? "Move All to Workspace" : "Move to Workspace")
+                icon: "virtual-desktops"
+                onTriggered: task.wsOpen = !task.wsOpen
+            }
+            Repeater {
+                model: task.wsOpen && wsItem.visible ? wsItem.spaces : []
+                MenuItem {
+                    required property var modelData
+                    readonly property var cws: task.windows.map(w => Compositor.windowForToplevel(w)).filter(c => !!c)
+                    text: "      " + (modelData.name && modelData.name !== String(modelData.idx) ? modelData.name : "Workspace " + modelData.idx)
+                    checkable: true
+                    checked: cws.length > 0 && cws.every(c => c.workspaceId === modelData.id)
+                    onTriggered: {
+                        menu.close();
+                        for (const c of cws) Compositor.moveWindowToWorkspace(c.id, modelData.id);
+                    }
+                }
+            }
+
+            // Options (macOS's Options submenu, KDE's pin / edit entries).
+            MenuSeparator {}
+            Label {
+                x: 8
+                height: 22
+                text: "Options"
+                color: Theme.fgDim
+                font.pointSize: Theme.smallFontSize
+            }
             MenuItem {
                 visible: !!task.entry
                 readonly property bool pinned: Pins.isPinned(task.modelData.key)
-                text: task.dock ? (pinned ? "Remove from Dock" : "Keep in Dock")
-                                : (pinned ? "Unpin from taskbar" : "Pin to taskbar")
-                icon: pinned ? "window-unpin" : "window-pin"
+                text: task.dock ? "Keep in Dock" : "Pin to Taskbar"
+                checkable: true
+                checked: pinned
                 onTriggered: {
                     if (pinned) Pins.unpin(task.modelData.key);
                     else Pins.pin(task.modelData.key);
                     menu.close();
                 }
             }
+            MenuItem {
+                visible: !!task.entry
+                text: "Open at Login"
+                checkable: true
+                checked: Autostart.isOn(task.modelData.key)
+                onTriggered: { Autostart.set(task.modelData.key, !checked); menu.close(); }
+            }
+            MenuItem {
+                visible: !!task.entry
+                text: "Edit Application…"
+                icon: "document-edit"
+                onTriggered: { menu.close(); Quickshell.execDetached(["kmenuedit", task.modelData.key + ".desktop"]); }
+            }
+
+            MenuSeparator { visible: task.running }
             MenuItem {
                 visible: task.running && task.dock
                 text: "Show All Windows"
@@ -418,6 +499,16 @@ MouseArea {
                 text: task.dock ? "Quit" : task.windows.length > 1 ? `Close all ${task.windows.length} windows` : "Close"
                 icon: task.dock ? "application-exit" : "window-close"
                 onTriggered: { for (const w of task.windows) w.close(); menu.close(); }
+            }
+            MenuItem {
+                // For an app that stopped responding: ends its processes
+                // right away (unsaved work is lost).
+                readonly property var pids: [...new Set(task.windows.map(w => Compositor.windowForToplevel(w))
+                                                        .filter(c => c && c.pid > 0).map(c => String(c.pid)))]
+                visible: pids.length > 0
+                text: "Force Quit"
+                icon: "process-stop"
+                onTriggered: { menu.close(); Quickshell.execDetached(["kill", "-KILL"].concat(pids)); }
             }
         }
     }

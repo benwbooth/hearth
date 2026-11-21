@@ -25,6 +25,7 @@ Scope {
             minimized: !!(t.wayland && t.wayland.minimized),
             floating: !!o.floating,
             urgent: t.urgent,
+            pid: o.pid || 0,
             at: o.at ? [o.at[0] - mx, o.at[1] - my] : null,
             size: o.size ? [o.size[0], o.size[1]] : null,
             focusOrder: o.focusHistoryID !== undefined ? o.focusHistoryID : 1e6,
