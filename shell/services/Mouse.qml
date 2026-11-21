@@ -92,8 +92,21 @@ cursor {
         } else if (Compositor.isArbor) {
             apply();
         }
+        // Apps draw their own pointer from these: GTK 4 / libadwaita and the
+        // settings portal (dconf), GTK 3 (settings.ini), X11 apps (xrdb), and
+        // anything that only reads ~/.icons/default.
+        appCursorProc.command = ["sh", "-c",
+            'dconf write /org/gnome/desktop/interface/cursor-theme "\'$1\'"; ' +
+            'dconf write /org/gnome/desktop/interface/cursor-size "$2"; ' +
+            'for f in "${XDG_CONFIG_HOME:-$HOME/.config}"/gtk-3.0/settings.ini "${XDG_CONFIG_HOME:-$HOME/.config}"/gtk-4.0/settings.ini; do ' +
+            '  [ -f "$f" ] && sed -i -e "s/^gtk-cursor-theme-name=.*/gtk-cursor-theme-name=$1/" -e "s/^gtk-cursor-theme-size=.*/gtk-cursor-theme-size=$2/" "$f"; done; ' +
+            'mkdir -p "$HOME/.icons/default" && printf "[Icon Theme]\\nInherits=%s\\n" "$1" > "$HOME/.icons/default/index.theme"; ' +
+            '[ -n "$DISPLAY" ] && printf "Xcursor.theme: %s\\nXcursor.size: %s\\n" "$1" "$2" | xrdb -merge; true',
+            "sh", cursorTheme, String(cursorSize)];
+        appCursorProc.running = true;
     }
     Process { id: cursorProc }
+    Process { id: appCursorProc }
     FileView {
         id: file
         path: (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/hearth/mouse.json"
