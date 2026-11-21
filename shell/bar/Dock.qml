@@ -92,6 +92,11 @@ PanelWindow {
     // `held` goes up when the pointer touches the edge strip or the dock and
     // drops `autohideDelay` ms after it leaves.
     readonly property bool shown: !autohide || held || menuOpen || previews > 0 || dragKey !== ""
+    // True once the slide-in has finished (the name label waits for it).
+    property bool settled: false
+    Component.onCompleted: settled = shown
+    onShownChanged: { if (shown) slideInTimer.restart(); else { slideInTimer.stop(); settled = false; } }
+    Timer { id: slideInTimer; interval: Math.max(0, Number(dockWin.cfg.animationMs) || 0) + 20; onTriggered: dockWin.settled = true }
     Timer {
         id: hideTimer
         interval: Math.max(0, dockWin.cfg.autohideDelay)
@@ -370,7 +375,10 @@ PanelWindow {
         Item {
             id: nameLabel
             readonly property int idx: dockWin.hotIndex
-            readonly property bool want: idx >= 0 && hover.hovered && !dockWin.menuOpen
+            // Only once the dock is all the way out, like macOS: the pointer at
+            // the edge is already over an icon while it slides in, and the
+            // label showed up first, over an empty edge.
+            readonly property bool want: idx >= 0 && hover.hovered && dockWin.settled && !dockWin.menuOpen
                                          && dockWin.previews === 0 && dockWin.dragKey === ""
             property string text: ""
             // Apps that aren't open also say what they are and what a click
