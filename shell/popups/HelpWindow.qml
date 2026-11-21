@@ -327,60 +327,264 @@ Scope {
 
     Component {
         id: welcomePage
-        ColumnLayout {
-            spacing: 14
-            readonly property var steps: [
-                { title: "Welcome to hearth", text: "This short tour shows where things are. It takes a minute. You can open it again any time from Help (the ? at the top right) → Getting Started.", icon: "help-about" },
-                { title: "The menu bar", text: "Along the top. On the left: the logo menu (About This Computer, System Settings, sleep, restart, shut down), then the app you are using and its menus. On the right: status icons (sound, network, AI models…), Spotlight's magnifier, Control Center, the microphone and the clock: click any of them for more.", icon: "preferences-desktop" },
-                { title: "The Dock", text: "Along the bottom; it slides in when you push the pointer against the bottom edge. Click an app to open it. A dot under an icon means it is running. Right-click an app for its options (Keep in Dock, Quit…); drag icons to rearrange them, or drag one off the Dock to remove it.", icon: "preferences-system-windows" },
-                { title: "Opening apps and finding things", text: "Press Super+Space (or click the magnifier) for Spotlight: type an app's name and press Return. It also finds documents, folders and pictures, opens settings, does sums and converts units.", icon: "search" },
-                { title: "Asking by voice", text: "Press Super+Alt+Space (or click the microphone) and just say it: “open Kog”, “set the volume to 50”, “find the PDF I edited yesterday”. It stops listening when you stop talking. Everything runs on this computer.", icon: "audio-input-microphone" },
-                { title: "Windows: floating and docked", text: Compositor.isArbor
-                    ? "Drag a window by its title bar. Drop it on the edge of another window to dock it beside that one (they share the space and never overlap); drop it anywhere else to let it float. Super+D docks or undocks the window you're in; Super+Q closes it; Super+F makes it full screen."
-                    : "Drag a window by its title bar; hold Shift while dragging to snap it into place. Super+Arrow keys move it.", icon: "transform-move" },
-                { title: "Seeing all your windows", text: Compositor.isArbor
-                    ? "Super+W shows every window and workspace (the overview); click one to go there. Super+Z zooms out to see how your docked windows fit together, Super+X zooms back in and Super+A shows them all. Super+Tab or Alt+Tab switches between apps."
-                    : "Super+W shows every window at once; Alt+Tab switches between apps.", icon: "view-grid" },
-                { title: "Settings and Help", text: "Everything can be changed in System Settings (logo menu): dark or light, the Dock, Spotlight, AI models, the voice assistant and more. Super+/ lists every keyboard shortcut. Lost? Click the ? in the menu bar and type what you want to do.", icon: "configure" }
+        // The tour: one centred card (picture, title, text, key chips, then
+        // Back/Next right under them), so the buttons stay with the page
+        // however large the window is. Left/Right arrow keys turn pages.
+        Item {
+            id: tour
+            focus: true
+            readonly property var steps: Compositor.isArbor ? arborSteps : hyprSteps
+            readonly property int last: steps.length - 1
+            readonly property var s: steps[Math.max(0, Math.min(root.welcomeStep, last))]
+            Keys.onRightPressed: if (root.welcomeStep < last) root.welcomeStep++
+            Keys.onLeftPressed: if (root.welcomeStep > 0) root.welcomeStep--
+            Keys.onReturnPressed: next()
+            function next() {
+                if (root.welcomeStep < last) root.welcomeStep++;
+                else root.open = false;
+            }
+
+            readonly property var arborSteps: [
+                { art: "hello", title: "Welcome to arbor",
+                  text: "arbor is your window manager: windows dock beside each other like a tree of panes, a camera zooms out to show them all, and zones snap windows into a layout you choose. hearth is the menu bar, the Dock and Spotlight on top of it. This tour takes a minute; open it again from the ? in the menu bar → Getting Started.",
+                  keys: [] },
+                { art: "menubar", title: "The menu bar",
+                  text: "Left: the logo menu (settings, sleep, restart, shut down), then the app you're in and its menus. Right: status icons, Spotlight, Control Center, the microphone and the clock. Click any of them.",
+                  keys: [] },
+                { art: "dock", title: "The Dock",
+                  text: "Push the pointer against the bottom edge and it slides in. Click an app to open it; a dot means it's running. Right-click for Keep in Dock or Quit; drag icons to reorder, or off the Dock to remove them.",
+                  keys: [] },
+                { art: "search", title: "Open anything",
+                  text: "Spotlight opens apps, documents, folders and settings, and does sums and unit conversions. Or press the voice key and just say it: “open Kog”, “volume to 50”. Everything runs on this computer.",
+                  keys: [["Super", "Space"], ["Super", "Alt", "Space"]] },
+                { art: "docking", title: "Docking windows",
+                  text: "Drag a window by its title bar and drop it on the edge of another one: it docks beside it and they share the space without overlapping. Drop it anywhere else and it floats. Super+D docks or undocks the window you're in.",
+                  keys: [["Super", "D"], ["Super", "Q"], ["Super", "F"]] },
+                { art: "zones", title: "Zones",
+                  text: "Pick a zone layout from the zones icon in the menu bar. Hold Shift while dragging a window and drop it into a zone, or press Super+Ctrl+1…9 to send the window you're in to that zone. Super+Ctrl+Page Down switches to the next layout.",
+                  keys: [["Shift", "drag"], ["Super", "Ctrl", "1…9"], ["Super", "Ctrl", "PgDn"]] },
+                { art: "camera", title: "Zoom out, see everything",
+                  text: "Super+Z zooms the camera out so you can see how your docked windows fit together, Super+X zooms back in, Super+A frames them all. Super+W opens the overview of every window and workspace; click one to go there.",
+                  keys: [["Super", "Z"], ["Super", "X"], ["Super", "A"], ["Super", "W"]] },
+                { art: "settings", title: "Settings and help",
+                  text: "System Settings (logo menu) changes the look, the Dock, zones, Spotlight, the voice assistant and more. Super+/ lists every shortcut, and the ? in the menu bar searches for what you want to do.",
+                  keys: [["Super", "/"]] }
             ]
-            readonly property var s: steps[Math.min(root.welcomeStep, steps.length - 1)]
-            Icon { implicitSize: 64; name: parent.s.icon }
-            Title { text: parent.s.title }
-            Para { text: parent.s.text; color: Theme.fg; font.pointSize: Theme.fontSize + 1 }
-            Item { Layout.fillHeight: true }
-            RowLayout {
-                Layout.fillWidth: true
+            readonly property var hyprSteps: [
+                { art: "hello", title: "Welcome to hearth", text: "This short tour shows where things are. Open it again any time from the ? in the menu bar → Getting Started.", keys: [] },
+                arborSteps[1], arborSteps[2], arborSteps[3],
+                { art: "docking", title: "Moving windows", text: "Drag a window by its title bar; hold Shift while dragging to snap it into place. Super+Arrow keys move it.", keys: [["Super", "←→↑↓"]] },
+                { art: "camera", title: "Seeing all your windows", text: "Super+W shows every window at once; Alt+Tab switches between apps.", keys: [["Super", "W"], ["Alt", "Tab"]] },
+                arborSteps[7]
+            ]
+
+            ColumnLayout {
+                anchors.centerIn: parent
+                width: Math.min(parent.width, 600)
+                spacing: 16
+
+                TourArt {
+                    Layout.alignment: Qt.AlignHCenter
+                    kind: tour.s.art
+                }
+                Title {
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
+                    text: tour.s.title
+                }
+                Para {
+                    horizontalAlignment: Text.AlignHCenter
+                    text: tour.s.text
+                    color: Theme.fg
+                    font.pointSize: Theme.fontSize + 1
+                }
                 Row {
-                    spacing: 6
+                    Layout.alignment: Qt.AlignHCenter
+                    visible: tour.s.keys.length > 0
+                    spacing: 14
                     Repeater {
-                        model: parent.parent.parent.steps.length
-                        Rectangle {
-                            required property int index
-                            width: 8
-                            height: 8
-                            radius: 4
-                            color: index === root.welcomeStep ? Theme.accent : Theme.border
+                        model: tour.s.keys
+                        Row {
+                            required property var modelData
+                            spacing: 3
+                            Repeater {
+                                model: parent.modelData
+                                Rectangle {
+                                    required property string modelData
+                                    width: kc.implicitWidth + 14
+                                    height: 24
+                                    radius: 5
+                                    color: Theme.bgRaised
+                                    border.color: Theme.border
+                                    Label { id: kc; anchors.centerIn: parent; text: parent.modelData }
+                                }
+                            }
                         }
                     }
                 }
-                Item { Layout.fillWidth: true }
-                BarButton {
-                    implicitHeight: 34
-                    text: "Back"
-                    visible: root.welcomeStep > 0
-                    tooltip: "Previous page"
-                    onClicked: root.welcomeStep--
-                }
-                BarButton {
-                    implicitHeight: 34
-                    text: root.welcomeStep < 5 ? "Next" : "Done"
-                    tooltip: root.welcomeStep < 5 ? "Next page" : "Close the tour"
-                    onClicked: {
-                        if (root.welcomeStep < 5) root.welcomeStep++;
-                        else root.open = false;
+                Item { implicitHeight: 6 }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Row {
+                        spacing: 6
+                        Repeater {
+                            model: tour.steps.length
+                            MouseArea {
+                                required property int index
+                                width: 14
+                                height: 14
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.welcomeStep = index
+                                Rectangle {
+                                    anchors.centerIn: parent
+                                    width: 8
+                                    height: 8
+                                    radius: 4
+                                    color: parent.index === root.welcomeStep ? Theme.accent : Theme.border
+                                }
+                            }
+                        }
+                    }
+                    Item { Layout.fillWidth: true }
+                    PushButton {
+                        text: "Back"
+                        visible: root.welcomeStep > 0
+                        tooltip: "Previous page (←)"
+                        onClicked: root.welcomeStep--
+                    }
+                    PushButton {
+                        primary: true
+                        text: root.welcomeStep < tour.last ? "Next" : "Done"
+                        tooltip: root.welcomeStep < tour.last ? "Next page (→)" : "Close the tour"
+                        onClicked: tour.next()
                     }
                 }
             }
+        }
+    }
+
+    // A small drawing of the screen for each tour page: the part the page
+    // talks about in the accent colour.
+    component TourArt: Rectangle {
+        id: art
+        property string kind
+        readonly property color dim: Theme.dark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.08)
+        readonly property color win: Theme.dark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.14)
+        implicitWidth: 360
+        implicitHeight: 200
+        radius: 10
+        color: Theme.bgAlt
+        border.color: Theme.border
+        clip: true
+
+        // Menu bar and Dock, on every page.
+        Rectangle {
+            x: 1; y: 1; width: parent.width - 2; height: 12
+            radius: 9
+            color: art.kind === "menubar" ? Theme.accent : art.dim
+        }
+        Rectangle {
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: parent.height - 22
+            width: 150; height: 16; radius: 6
+            color: art.kind === "dock" ? Theme.accent : art.dim
+            Row {
+                anchors.centerIn: parent
+                spacing: 5
+                Repeater {
+                    model: 8
+                    Rectangle { width: 11; height: 11; radius: 3; color: art.kind === "dock" ? Qt.rgba(1, 1, 1, 0.7) : art.win }
+                }
+            }
+        }
+
+        // Docked panes (hello, docking, settings).
+        Item {
+            visible: ["hello", "docking", "menubar", "dock", "settings"].indexOf(art.kind) >= 0
+            x: 14; y: 22; width: parent.width - 28; height: parent.height - 52
+            Rectangle { x: 0; y: 0; width: parent.width * 0.5 - 3; height: parent.height; radius: 5; color: art.win }
+            Rectangle { x: parent.width * 0.5 + 3; y: 0; width: parent.width * 0.5 - 3; height: parent.height * 0.5 - 3; radius: 5; color: art.win }
+            Rectangle {
+                x: parent.width * 0.5 + 3; y: parent.height * 0.5 + 3; width: parent.width * 0.5 - 3; height: parent.height * 0.5 - 3; radius: 5
+                color: art.kind === "docking" ? Theme.accentDim : art.win
+                border.color: art.kind === "docking" ? Theme.accent : "transparent"
+                border.width: 2
+            }
+        }
+        // The window being dragged onto the dock spot.
+        Rectangle {
+            visible: art.kind === "docking"
+            x: 70; y: 95; width: 120; height: 60; radius: 5
+            color: Theme.bgRaised
+            border.color: Theme.accent
+            opacity: 0.95
+            Rectangle { width: parent.width; height: 10; radius: 5; color: Theme.accent }
+            Label { anchors.centerIn: parent; text: "→"; font.pointSize: Theme.fontSize + 8; color: Theme.accent }
+        }
+
+        // Spotlight field + microphone.
+        Rectangle {
+            visible: art.kind === "search"
+            anchors.centerIn: parent
+            width: 240; height: 36; radius: 9
+            color: Theme.bgRaised
+            border.color: Theme.accent
+            border.width: 2
+            Icon { x: 10; anchors.verticalCenter: parent.verticalCenter; implicitSize: 18; name: "search" }
+            Label { x: 36; anchors.verticalCenter: parent.verticalCenter; text: "open Kog"; color: Theme.fgDim }
+            Icon { anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; implicitSize: 18; name: "audio-input-microphone" }
+        }
+
+        // Zones: three columns, the middle one taking a window.
+        Row {
+            visible: art.kind === "zones"
+            x: 14; y: 22; spacing: 6
+            Repeater {
+                model: [0.28, 0.44, 0.28]
+                Rectangle {
+                    required property real modelData
+                    required property int index
+                    width: (art.width - 28 - 12) * modelData
+                    height: art.height - 52
+                    radius: 5
+                    color: index === 1 ? Theme.accentDim : "transparent"
+                    border.color: index === 1 ? Theme.accent : art.win
+                    border.width: 2
+                    Label { anchors.centerIn: parent; text: String(parent.index + 1); font.pointSize: Theme.fontSize + 8; color: parent.index === 1 ? Theme.accent : Theme.fgDim }
+                }
+            }
+        }
+
+        // Camera: groups of panes, zoomed out, with the view frame.
+        Item {
+            visible: art.kind === "camera"
+            anchors.fill: parent
+            Repeater {
+                model: [[30, 30], [140, 40], [250, 26], [80, 110], [200, 112]]
+                Item {
+                    required property var modelData
+                    x: modelData[0]; y: modelData[1]; width: 80; height: 50
+                    Rectangle { width: 38; height: 50; radius: 3; color: art.win }
+                    Rectangle { x: 42; width: 38; height: 23; radius: 3; color: art.win }
+                    Rectangle { x: 42; y: 27; width: 38; height: 23; radius: 3; color: art.win }
+                }
+            }
+            Rectangle {
+                x: 130; y: 32; width: 104; height: 66; radius: 6
+                color: "transparent"
+                border.color: Theme.accent
+                border.width: 2
+            }
+        }
+
+        // Big icon over the panes for the first and last pages.
+        Rectangle {
+            visible: art.kind === "hello" || art.kind === "settings"
+            anchors.centerIn: parent
+            width: 76; height: 76; radius: 18
+            color: Theme.bgRaised
+            border.color: Theme.border
+            Icon { anchors.centerIn: parent; implicitSize: 52; name: art.kind === "hello" ? "preferences-system-windows" : "configure" }
         }
     }
 }
