@@ -15,6 +15,7 @@ Singleton {
     property real speed: -0.1         // -1 .. 1 (libinput accel-speed)
     property bool acceleration: true  // adaptive, as Plasma; off = flat
     property bool naturalScroll: true // touchpad: content follows fingers
+    property bool tapToClick: true    // touchpad: a light tap clicks (two fingers: right-click)
     property bool loaded: false
 
     function set(key, value) {
@@ -24,14 +25,14 @@ Singleton {
     }
     function save() {
         file.setText(JSON.stringify({ speed: root.speed, acceleration: root.acceleration,
-                                      naturalScroll: root.naturalScroll }, null, 2));
+                                      naturalScroll: root.naturalScroll, tapToClick: root.tapToClick }, null, 2));
     }
     function apply() {
         const s = Math.round(root.speed * 100) / 100;
         const profile = root.acceleration ? "adaptive" : "flat";
         if (Compositor.isHyprland) {
             hypr.command = ["hyprctl", "eval",
-                `hl.config({ input = { sensitivity = ${s}, accel_profile = "${profile}", touchpad = { natural_scroll = ${root.naturalScroll} } } })`];
+                `hl.config({ input = { sensitivity = ${s}, accel_profile = "${profile}", touchpad = { natural_scroll = ${root.naturalScroll}, tap_to_click = ${root.tapToClick} } } })`];
             hypr.running = true;
         } else if (Compositor.isArbor) {
             // Through ArborConfig.write: checked with `arbor validate` before it
@@ -46,7 +47,7 @@ input {
     touchpad {
         accel-speed ${s}
         accel-profile "${profile}"
-${root.naturalScroll ? "        natural-scroll\n" : ""}    }
+${root.tapToClick ? "        tap\n" : ""}${root.naturalScroll ? "        natural-scroll\n" : ""}    }
 }
 cursor {
     xcursor-theme "${root.cursorTheme}"
@@ -118,6 +119,7 @@ cursor {
                 if (typeof d.speed === "number") root.speed = d.speed;
                 if (typeof d.acceleration === "boolean") root.acceleration = d.acceleration;
                 if (typeof d.naturalScroll === "boolean") root.naturalScroll = d.naturalScroll;
+                if (typeof d.tapToClick === "boolean") root.tapToClick = d.tapToClick;
                 root.loaded = true;
                 root.apply();
             } catch (e) {}

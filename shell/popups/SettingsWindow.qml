@@ -494,6 +494,15 @@ Scope {
                         onToggled: c => Mouse.set("naturalScroll", c)
                     }
                 }
+                Divider {}
+                Row_ {
+                    label: "Tap to click (touchpad)"
+                    note: "On: a light tap clicks, a two-finger tap right-clicks, like macOS's Tap to click. Off: press the touchpad down to click."
+                    Toggle {
+                        checked: Mouse.tapToClick
+                        onToggled: c => Mouse.set("tapToClick", c)
+                    }
+                }
             }
         }
     }
