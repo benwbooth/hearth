@@ -300,7 +300,7 @@ Indicator {
             icon: "preferences-system-network"
             text: "Edit connections…"
             onTriggered: {
-                Quickshell.execDetached(["kcmshell6", "kcm_networkmanagement"]);
+                Quickshell.execDetached(["tessera", "--new-window", "--run", "nmtui"]);
                 root.popup.close();
             }
         }

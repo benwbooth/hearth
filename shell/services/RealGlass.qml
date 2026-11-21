@@ -23,6 +23,63 @@ Singleton {
     readonly property bool active: supported && enabled
     readonly property real strength: Math.max(0, Math.min(1, Number(Settings.appearance.realGlassStrength ?? 1)))
 
+    // Without real glass, arbor blurs hearth's menus and tooltips with layer
+    // rules instead (and draws their shadow). Those rules live in
+    // ~/.config/hearth/arbor-glass-fallback.kdl, written only while real
+    // glass is off: with them always present, a menu's first and last frame
+    // (before its shapes reach arbor, after they're gone) got a blurred
+    // rectangle, which flickered on every open and close.
+    readonly property bool knownSupport: !!backend && backend.glassSupported !== undefined
+    readonly property bool wantFallback: Compositor.isArbor && knownSupport && !active
+    readonly property string fallbackKdl: `// Written by hearth (real glass is off: Settings > Appearance). Removed while it's on.
+layer-rule {
+    match namespace="^hearth-popup$"
+    geometry-corner-radius 14
+    background-effect {
+        xray false
+        blur true
+        noise 0.02
+        saturation 1.6
+    }
+    popups {
+        geometry-corner-radius 8
+        background-effect {
+            xray false
+            blur true
+            saturation 1.6
+        }
+    }
+    shadow {
+        on
+        softness 26
+        spread 0
+        offset x=0 y=9
+        color "#00000045"
+    }
+}
+layer-rule {
+    match namespace="^hearth-menubar$"
+    popups {
+        geometry-corner-radius 8
+        background-effect {
+            xray false
+            blur true
+            saturation 1.6
+        }
+    }
+}`
+    onWantFallbackChanged: fallbackSoon.restart()
+    onKnownSupportChanged: fallbackSoon.restart()
+    Timer {
+        id: fallbackSoon
+        interval: 500
+        onTriggered: {
+            if (!Compositor.isArbor || !root.knownSupport || Quickshell.env("HEARTH_GREETER")) return;
+            if (root.wantFallback) ArborConfig.write("arbor-glass-fallback.kdl", root.fallbackKdl, (ok, err) => { if (!ok) console.warn("hearth: glass fallback:", err); });
+            else ArborConfig.remove("arbor-glass-fallback.kdl");
+        }
+    }
+
     // [{ win, key, frames: [{ frame, shape }], sent: "" }]
     property var wins: []
     property int nextKey: 1

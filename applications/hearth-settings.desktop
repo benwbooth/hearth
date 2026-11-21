@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=hearth Settings
+GenericName=System Settings
+Comment=Appearance, Dock, displays, keyboard, Spotlight, AI and everything else about your desktop
+Icon=preferences-system
+Exec=hearth-ipc call settings open
+Categories=Settings;System;
+Keywords=settings;preferences;system;control;

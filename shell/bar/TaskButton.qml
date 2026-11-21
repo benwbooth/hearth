@@ -500,7 +500,9 @@ MouseArea {
                 visible: !!task.entry
                 text: "Edit Application…"
                 icon: "document-edit"
-                onTriggered: { menu.close(); Quickshell.execDetached(["kmenuedit", task.modelData.key + ".desktop"]); }
+                onTriggered: { menu.close(); Quickshell.execDetached(["sh", "-c", 'id="$1"; d="${XDG_DATA_HOME:-$HOME/.local/share}/applications"; mkdir -p "$d"; '
+                    + '[ -f "$d/$id.desktop" ] || for p in $(echo "${XDG_DATA_DIRS:-/run/current-system/sw/share}" | tr : " "); do [ -f "$p/applications/$id.desktop" ] && cp "$p/applications/$id.desktop" "$d/" && chmod u+w "$d/$id.desktop" && break; done; '
+                    + 'exec tessera --new-window --run "${EDITOR:-nano} \"$d/$id.desktop\""', "sh", task.modelData.key]); }
             }
 
             MenuSeparator { visible: task.running }

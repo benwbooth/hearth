@@ -219,7 +219,7 @@ Indicator {
             Layout.fillWidth: true
             text: "Printer settings…"
             icon: "configure"
-            onTriggered: { Quickshell.execDetached(["kcmshell6", "kcm_printer_manager"]); root.popup.close(); }
+            onTriggered: { Quickshell.execDetached(["xdg-open", "http://localhost:631/printers/"]); root.popup.close(); }
         }
     }
 }

@@ -1,0 +1,322 @@
+#!/usr/bin/env python3
+"""About This Computer's data (shell/services/About.qml): one JSON object
+on stdout, built from /proc, /sys and standard tools (lspci, lsusb, ip,
+nmcli, wpctl, vulkaninfo, df). Nothing from KDE (it replaces KDE's Info
+Center). Each probe has a short timeout; a missing tool just leaves its
+section out.
+
+  hearth-sysinfo            the summary (About window)
+  hearth-sysinfo --full     the summary plus every detail section (More Info…)
+"""
+
+import json
+import os
+import platform
+import re
+import shutil
+import socket
+import subprocess
+import sys
+import time
+
+
+def run(cmd, timeout=4):
+    if not shutil.which(cmd[0]):
+        return ""
+    env = dict(os.environ)
+    # NixOS keeps the Vulkan drivers here; some environments miss it.
+    if cmd[0] == "vulkaninfo" and "/run/opengl-driver/share" not in env.get("XDG_DATA_DIRS", ""):
+        env["XDG_DATA_DIRS"] = "/run/opengl-driver/share:" + env.get("XDG_DATA_DIRS", "/run/current-system/sw/share")
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
+        return r.stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def read(path, default=""):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except OSError:
+        return default
+
+
+def human(n, unit="B", step=1024):
+    n = float(n or 0)
+    for u in ("", "K", "M", "G", "T", "P"):
+        if n < step or u == "P":
+            return ("%.0f %s%s" if u in ("", "K") or n >= 100 else "%.1f %s%s") % (n, u, unit)
+        n /= step
+
+
+# --- summary -----------------------------------------------------------------
+
+def machine():
+    dmi = "/sys/class/dmi/id/"
+    vendor = read(dmi + "sys_vendor")
+    product = read(dmi + "product_name")
+    board = read(dmi + "board_vendor") + " " + read(dmi + "board_name")
+    junk = re.compile(r"to be filled|default string|system product name|not specified|^o\.e\.m", re.I)
+    name = " ".join(x for x in (vendor, product) if x and not junk.search(x))
+    if not name:
+        name = board.strip()
+    return {"hostname": socket.gethostname(), "model": name or "PC", "board": board.strip(),
+            "chassis": read(dmi + "chassis_type")}
+
+
+def cpu():
+    info = read("/proc/cpuinfo")
+    model = next((l.split(":", 1)[1].strip() for l in info.splitlines() if l.startswith("model name")), platform.processor())
+    model = re.sub(r"\s+", " ", re.sub(r"\(R\)|\(TM\)|CPU @.*| \d+-Core Processor|Processor", "", model)).strip()
+    threads = os.cpu_count() or 0
+    cores = len({l for l in info.splitlines() if l.startswith("core id")}) * max(1, len({l for l in info.splitlines() if l.startswith("physical id")})) or threads
+    mhz = read("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq")
+    ghz = round(int(mhz) / 1e6, 1) if mhz.isdigit() else None
+    return {"model": model, "cores": cores, "threads": threads, "maxGHz": ghz, "arch": platform.machine()}
+
+
+def gpus():
+    out = []
+    for line in run(["lspci", "-mm", "-nn"]).splitlines():
+        parts = re.findall(r'"([^"]*)"', line)
+        if len(parts) < 3 or not re.search(r"VGA|3D|Display", parts[0]):
+            continue
+        slot = line.split()[0]
+        vendor = re.sub(r"\s*\[[0-9a-f]{4}\]$", "", parts[1])
+        dev = re.sub(r"\s*\[[0-9a-f]{4}\]$", "", parts[2])
+        m = re.search(r"\[(.+)\]", dev)
+        name = m.group(1) if m else dev
+        vendor = vendor.replace("Advanced Micro Devices, Inc. [AMD/ATI]", "AMD").replace("NVIDIA Corporation", "NVIDIA").replace("Intel Corporation", "Intel")
+        vram = 0
+        for card in os.listdir("/sys/class/drm"):
+            if "-" in card or not card.startswith("card"):
+                continue
+            dev_path = os.path.realpath("/sys/class/drm/%s/device" % card)
+            if dev_path.endswith(slot) or dev_path.endswith("0000:" + slot):
+                v = read("/sys/class/drm/%s/device/mem_info_vram_total" % card)
+                vram = int(v) if v.isdigit() else 0
+        out.append({"name": "%s %s" % (vendor, name), "slot": slot, "vram": vram, "vramText": human(vram) if vram else "",
+                    "integrated": 0 < vram < 4 << 30})
+    # lspci lumps a family together ("RX 7900 XT/7900 XTX/7900 GRE/7900M");
+    # the Vulkan driver knows the exact card ("AMD Radeon RX 7900 XTX").
+    if any("/" in g["name"] for g in out):
+        vk = [re.sub(r"\s*\(.*\)$", "", m.group(1).strip())
+              for m in re.finditer(r"deviceName\s*=\s*(.*)", run(["vulkaninfo", "--summary"], timeout=6))]
+        for g in out:
+            if "/" not in g["name"]:
+                continue
+            first = g["name"].split("/")[0]                 # "AMD Radeon RX 7900 XT"
+            hit = [v for v in vk if first.split()[-2:] and " ".join(first.split()[-2:]) in v]
+            if hit:
+                g["name"] = hit[0] if hit[0].startswith(("AMD", "NVIDIA", "Intel")) else g["name"].split(" ")[0] + " " + hit[0]
+    out.sort(key=lambda g: (g["integrated"], -g["vram"]))
+    return out
+
+
+def memory():
+    mi = dict((l.split(":")[0], int(l.split()[1]) * 1024) for l in read("/proc/meminfo").splitlines() if l.split()[1:2] and l.split()[1].isdigit())
+    total = mi.get("MemTotal", 0)
+    # The kernel and firmware keep some: installed RAM is the next common
+    # module total (61.9 GB visible = 64 GB installed).
+    gib = total / (1 << 30)
+    sizes = [2, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1024, 1536, 2048]
+    installed = next((g for g in sizes if g >= gib * 0.999), int(gib) + 1) << 30
+    return {"total": total, "installed": installed, "installedText": "%d GB" % (installed >> 30),
+            "available": mi.get("MemAvailable", 0), "swap": mi.get("SwapTotal", 0)}
+
+
+def storage():
+    seen, out = set(), []
+    for line in run(["df", "-B1", "--output=source,fstype,size,used,avail,target", "-x", "tmpfs", "-x", "devtmpfs",
+                     "-x", "efivarfs", "-x", "overlay", "-x", "squashfs", "-x", "fuse.portal"]).splitlines()[1:]:
+        f = line.split(None, 5)
+        if len(f) < 6 or not f[0].startswith("/dev/"):
+            continue
+        if f[0] in seen or f[5].startswith(("/nix/store", "/boot", "/efi")):
+            continue
+        seen.add(f[0])
+        size, used = int(f[2]), int(f[3])
+        if size < 1 << 30:
+            continue
+        label = "Macintosh HD"  # placeholder replaced below
+        label = "System" if f[5] == "/" else os.path.basename(f[5]) or f[5]
+        out.append({"device": f[0], "fstype": f[1], "size": size, "used": used, "free": int(f[4]), "mount": f[5],
+                    "label": label, "sizeText": human(size, step=1000), "freeText": human(int(f[4]), step=1000)})
+    return out
+
+
+def os_info():
+    rel = dict(l.split("=", 1) for l in read("/etc/os-release").splitlines() if "=" in l)
+    rel = {k: v.strip('"') for k, v in rel.items()}
+    arbor = run(["arbor", "--version"]).strip()
+    return {"name": rel.get("NAME", "Linux"), "pretty": rel.get("PRETTY_NAME", ""), "version": rel.get("VERSION_ID", ""),
+            "codename": rel.get("VERSION_CODENAME", ""), "nixos": run(["nixos-version"]).strip(),
+            "kernel": platform.release(), "arbor": arbor.replace("arbor ", ""),
+            "hearth": os.environ.get("HEARTH_VERSION", "development checkout"),
+            "uptime": int(float(read("/proc/uptime", "0").split()[0] or 0))}
+
+
+def displays():
+    out = []
+    try:
+        data = json.loads(run(["arbor", "msg", "--json", "outputs"]) or "{}")
+    except ValueError:
+        data = {}
+    for name, o in (data.items() if isinstance(data, dict) else []):
+        mode = None
+        modes = o.get("modes") or []
+        cur = o.get("current_mode")
+        if cur is not None and cur < len(modes):
+            mode = modes[cur]
+        logical = o.get("logical") or {}
+        size = o.get("physical_size") or [0, 0]
+        inches = round(((size[0] ** 2 + size[1] ** 2) ** 0.5) / 25.4) if size and size[0] else None
+        out.append({"name": name, "make": o.get("make", ""), "model": o.get("model", ""),
+                    "width": mode["width"] if mode else 0, "height": mode["height"] if mode else 0,
+                    "refresh": round(mode["refresh_rate"] / 1000) if mode else 0,
+                    "scale": logical.get("scale"), "inches": inches})
+    return out
+
+
+# --- More Info… --------------------------------------------------------------
+
+def pci():
+    out = []
+    for line in run(["lspci", "-mm"]).splitlines():
+        parts = re.findall(r'"([^"]*)"', line)
+        if len(parts) >= 3:
+            out.append({"slot": line.split()[0], "class": parts[0], "vendor": parts[1], "device": parts[2]})
+    return out
+
+
+def usb():
+    out = []
+    for line in run(["lsusb"]).splitlines():
+        m = re.match(r"Bus (\d+) Device (\d+): ID ([0-9a-f:]+) ?(.*)", line)
+        if m and "root hub" not in m.group(4).lower():
+            out.append({"bus": m.group(1), "device": m.group(2), "id": m.group(3), "name": m.group(4) or "Unknown device"})
+    return out
+
+
+def inputs():
+    out, name = [], None
+    for line in read("/proc/bus/input/devices").splitlines():
+        if line.startswith("N: Name="):
+            name = line.split("=", 1)[1].strip('"')
+        elif line.startswith("H: Handlers=") and name:
+            h = line.split("=", 1)[1]
+            kind = "Keyboard" if "kbd" in h and "mouse" not in h else "Mouse / touchpad" if "mouse" in h else ""
+            if kind:
+                out.append({"name": name, "kind": kind})
+            name = None
+    return out
+
+
+def audio():
+    out = {"outputs": [], "inputs": []}
+    section = None
+    for line in run(["wpctl", "status"]).splitlines():
+        s = line.strip(" │├└─")
+        if s.startswith("Sinks:"):
+            section = "outputs"
+        elif s.startswith("Sources:"):
+            section = "inputs"
+        elif re.match(r"^(Sink endpoints|Source endpoints|Filters|Streams|Devices|Clients|Video|Settings):", s):
+            section = None
+        elif section and re.match(r"^\*?\s*\d+\.", s):
+            default = s.startswith("*")
+            m = re.match(r"^\*?\s*\d+\.\s*(.*?)(\s*\[vol: ([\d.]+)( MUTED)?\])?$", s)
+            if m:
+                out[section].append({"name": m.group(1).strip(), "default": default,
+                                     "volume": round(float(m.group(3)) * 100) if m.group(3) else None,
+                                     "muted": bool(m.group(4))})
+    return out
+
+
+def network():
+    out = []
+    try:
+        addrs = json.loads(run(["ip", "-j", "addr"]) or "[]")
+    except ValueError:
+        addrs = []
+    nm = {}
+    for line in run(["nmcli", "-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "device"]).splitlines():
+        f = line.split(":")
+        if len(f) >= 4:
+            nm[f[0]] = {"type": f[1], "state": f[2], "connection": f[3]}
+    for a in addrs:
+        name = a.get("ifname", "")
+        if name == "lo" or name.startswith(("veth", "br-", "docker", "virbr")):
+            continue
+        n = nm.get(name, {})
+        out.append({"name": name, "mac": a.get("address", ""), "state": a.get("operstate", ""),
+                    "type": n.get("type", ""), "connection": n.get("connection", ""),
+                    "addresses": ["%s/%s" % (i["local"], i["prefixlen"]) for i in a.get("addr_info", [])
+                                  if i.get("scope") == "global"]})
+    return out
+
+
+def firmware():
+    dmi = "/sys/class/dmi/id/"
+    fw = {"biosVendor": read(dmi + "bios_vendor"), "biosVersion": read(dmi + "bios_version"),
+          "biosDate": read(dmi + "bios_date"), "board": (read(dmi + "board_vendor") + " " + read(dmi + "board_name")).strip(),
+          "boardVersion": read(dmi + "board_version"),
+          "boot": "UEFI" if os.path.isdir("/sys/firmware/efi") else "BIOS (legacy)",
+          "secureBoot": None}
+    sb = [f for f in (os.listdir("/sys/firmware/efi/efivars") if os.path.isdir("/sys/firmware/efi/efivars") else [])
+          if f.startswith("SecureBoot-")]
+    if sb:
+        try:
+            with open("/sys/firmware/efi/efivars/" + sb[0], "rb") as f:
+                fw["secureBoot"] = f.read()[-1] == 1
+        except OSError:
+            pass
+    return fw
+
+
+def energy():
+    out = []
+    base = "/sys/class/power_supply"
+    for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
+        p = os.path.join(base, name)
+        kind = read(p + "/type")
+        if kind == "Battery":
+            full = read(p + "/energy_full") or read(p + "/charge_full")
+            design = read(p + "/energy_full_design") or read(p + "/charge_full_design")
+            out.append({"name": name, "kind": "Battery", "status": read(p + "/status"), "capacity": read(p + "/capacity"),
+                        "health": round(100 * int(full) / int(design)) if full.isdigit() and design.isdigit() and int(design) else None,
+                        "cycles": read(p + "/cycle_count"), "model": read(p + "/model_name")})
+        elif kind == "Mains":
+            out.append({"name": name, "kind": "Power adapter", "online": read(p + "/online") == "1"})
+    return out
+
+
+def graphics_driver():
+    txt = run(["vulkaninfo", "--summary"], timeout=6)
+    out = []
+    for block in re.split(r"\nGPU\d+:", txt)[1:]:
+        g = {}
+        for key in ("deviceName", "driverName", "driverInfo", "apiVersion"):
+            m = re.search(r"%s\s*=\s*(.*)" % key, block)
+            if m:
+                g[key] = m.group(1).strip()
+        if g and "llvmpipe" not in g.get("deviceName", ""):
+            out.append(g)
+    return out
+
+
+def main():
+    full = "--full" in sys.argv
+    t0 = time.time()
+    info = {"machine": machine(), "cpu": cpu(), "gpus": gpus(), "memory": memory(), "storage": storage(),
+            "os": os_info(), "displays": displays()}
+    if full:
+        info.update({"pci": pci(), "usb": usb(), "inputs": inputs(), "audio": audio(), "network": network(),
+                     "firmware": firmware(), "energy": energy(), "graphics": graphics_driver()})
+    info["seconds"] = round(time.time() - t0, 2)
+    print(json.dumps(info))
+
+
+if __name__ == "__main__":
+    main()

@@ -34,7 +34,10 @@ Singleton {
                 `hl.config({ input = { sensitivity = ${s}, accel_profile = "${profile}", touchpad = { natural_scroll = ${root.naturalScroll} } } })`];
             hypr.running = true;
         } else if (Compositor.isArbor) {
-            arborFile.setText(`// Written by hearth (Settings > Mouse & Touchpad). Edits here are replaced.
+            // Through ArborConfig.write: checked with `arbor validate` before it
+            // replaces the file, so a bad line can never break arbor's config
+            // (it once wrote `natural-scroll true`; arbor wants a bare flag).
+            ArborConfig.write("arbor-input.kdl", `// Written by hearth (Settings > Mouse & Touchpad). Edits here are replaced.
 input {
     mouse {
         accel-speed ${s}
@@ -43,14 +46,13 @@ input {
     touchpad {
         accel-speed ${s}
         accel-profile "${profile}"
-        natural-scroll ${root.naturalScroll}
-    }
+${root.naturalScroll ? "        natural-scroll\n" : ""}    }
 }
 cursor {
     xcursor-theme "${root.cursorTheme}"
     xcursor-size ${root.cursorSize}
 }
-`);
+`, (ok, err) => { if (!ok) console.warn("hearth: arbor-input.kdl not written:", err); });
         }
     }
 
@@ -83,12 +85,6 @@ cursor {
         }
     }
     Process { id: cursorProc }
-    FileView {
-        id: arborFile
-        path: (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/hearth/arbor-input.kdl"
-        printErrors: false
-        blockLoading: false
-    }
     FileView {
         id: file
         path: (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/hearth/mouse.json"

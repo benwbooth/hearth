@@ -47,6 +47,8 @@ MouseArea {
     property int iconSize: hostWindow && hostWindow.barIconSize ? hostWindow.barIconSize : Theme.iconSize
     property color textColor: menuBarItem ? Theme.barFg : Theme.fg
     property bool monochrome: Settings.menubar.monochromeIcons !== false
+    // Recolour only the colourless parts (app tray icons; see below).
+    property bool adaptive: false
     default property alias overlay: overlayItem.data
 
     hoverEnabled: true
@@ -89,8 +91,19 @@ MouseArea {
             implicitSize: root.iconSize
             // Menu bar: monochrome like SF Symbols (Settings > Menu Bar >
             // Monochrome icons): every status icon in the text colour.
-            layer.enabled: root.menuBarItem && root.monochrome
-            layer.effect: MultiEffect { brightness: Theme.barDark ? 1 : -1; saturation: -1 }
+            // App tray icons (`adaptive`): only their colourless pixels take
+            // the text colour (shaders/trayicon.frag), so white "template"
+            // icons made for dark panels read on a light bar too.
+            layer.enabled: root.menuBarItem && (root.monochrome || root.adaptive)
+            layer.effect: root.monochrome ? monoFx : adaptiveFx
+            Component { id: monoFx; MultiEffect { brightness: Theme.barDark ? 1 : -1; saturation: -1 } }
+            Component {
+                id: adaptiveFx
+                ShaderEffect {
+                    fragmentShader: "../shaders/trayicon.frag.qsb"
+                    readonly property color target: Theme.barFg
+                }
+            }
             Item {
                 id: overlayItem
                 anchors.fill: parent

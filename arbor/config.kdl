@@ -102,6 +102,9 @@ window-rule {
 // hearth's glass: blur behind the menu bar, menus, popups and notifications
 // (installed next to this file).
 include "hearth-layer-rules.kdl"
+// Blur and shadows for menus and tooltips when real glass is off (written
+// by hearth, services/RealGlass.qml; missing while real glass is on).
+include optional=true "~/.config/hearth/arbor-glass-fallback.kdl"
 
 // Mouse & touchpad from hearth's Settings window (overrides the input block
 // above; missing until you change something there).
@@ -138,7 +141,6 @@ spawn-sh-at-startup "printf 'Xft.dpi: 128\\nXcursor.size: 32\\n' | xrdb -merge"
 // the times from Settings > Sleep & Power).
 // KWallet gets SDDM's password (as Plasma's startup does).
 spawn-at-startup "/run/current-system/sw/libexec/pam_kwallet_init"
-spawn-sh-at-startup "systemctl --user start plasma-polkit-agent.service"
 spawn-at-startup "kdeconnect-indicator"
 
 binds {
@@ -156,8 +158,8 @@ binds {
     // history stays on Super+Shift+V.
     Mod+V hotkey-overlay-title="Clipboard history" { spawn "hearth-ipc" "call" "clipboard" "toggle"; }
     Mod+Shift+V hotkey-overlay-title="Clipboard history (Vicinae)" { spawn "vicinae" "cmd" "launch" "clipboard:history"; }
-    Mod+Return hotkey-overlay-title="Terminal" { spawn "konsole"; }
-    Mod+E hotkey-overlay-title="Files" { spawn "dolphin"; }
+    Mod+Return hotkey-overlay-title="Terminal" { spawn "tessera" "--new-window"; }
+    Mod+E hotkey-overlay-title="Files" { spawn "grove"; }
 
     // Pinned apps 1-9 (hearth's dock order).
     Mod+1 { spawn "hearth-ipc" "call" "tasks" "activate" "1"; }

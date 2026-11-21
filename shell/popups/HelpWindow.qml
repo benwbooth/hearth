@@ -29,9 +29,11 @@ Scope {
     // First run: the welcome tour, once.
     Timer {
         interval: 2500
-        running: Settings.loaded && !Settings.get("welcomeShown")
+        // arbor gets its own tour once (the Hyprland one was different).
+        readonly property string key: Compositor.isArbor ? "welcomeShownArbor" : "welcomeShown"
+        running: Settings.loaded && !Settings.get(key)
         onTriggered: {
-            Settings.set("welcomeShown", true);
+            Settings.set(key, true);
             Help.guideRequested("welcome", "");
         }
     }
@@ -329,11 +331,17 @@ Scope {
             spacing: 14
             readonly property var steps: [
                 { title: "Welcome to hearth", text: "This short tour shows where things are. It takes a minute. You can open it again any time from Help (the ? at the top right) → Getting Started.", icon: "help-about" },
-                { title: "The menu bar", text: "Along the top. On the left: the system menu (the logo: settings, sleep, restart, shut down), then the app you are using and its menus. On the right: status icons (sound, network, battery…) and the clock — click any of them for more.", icon: "preferences-desktop" },
-                { title: "The Dock", text: "Along the bottom; it slides in when you move the pointer to the bottom edge. Click an app to open it. A dot under an icon means it is running. Right-click an app for its options (Keep in Dock, Quit…); drag icons to rearrange them, or drag one off the Dock to remove it.", icon: "preferences-system-windows" },
-                { title: "Opening apps", text: "Press Alt+Space (or tap the Super key) and type the app's name, then press Enter. It also finds files, does sums and converts units.", icon: "search" },
-                { title: "Moving and docking windows", text: Compositor.isArbor ? "Drag a window by its title bar. Drop it on the edge of another window to dock it beside that window; drop it anywhere else to let it float." : "Drag a window by its title bar; hold Shift while dragging to snap it into place. Super+Arrow keys move it.", icon: "transform-move" },
-                { title: "Settings and Help", text: "Everything can be changed in Settings (system menu → hearth Settings…): dark or light look, the Dock, the clock and more. Lost? Click the ? in the menu bar and type what you want to do.", icon: "configure" }
+                { title: "The menu bar", text: "Along the top. On the left: the logo menu (About This Computer, System Settings, sleep, restart, shut down), then the app you are using and its menus. On the right: status icons (sound, network, AI models…), Spotlight's magnifier, Control Center, the microphone and the clock: click any of them for more.", icon: "preferences-desktop" },
+                { title: "The Dock", text: "Along the bottom; it slides in when you push the pointer against the bottom edge. Click an app to open it. A dot under an icon means it is running. Right-click an app for its options (Keep in Dock, Quit…); drag icons to rearrange them, or drag one off the Dock to remove it.", icon: "preferences-system-windows" },
+                { title: "Opening apps and finding things", text: "Press Super+Space (or click the magnifier) for Spotlight: type an app's name and press Return. It also finds documents, folders and pictures, opens settings, does sums and converts units.", icon: "search" },
+                { title: "Asking by voice", text: "Press Super+Alt+Space (or click the microphone) and just say it: “open Kog”, “set the volume to 50”, “find the PDF I edited yesterday”. It stops listening when you stop talking. Everything runs on this computer.", icon: "audio-input-microphone" },
+                { title: "Windows: floating and docked", text: Compositor.isArbor
+                    ? "Drag a window by its title bar. Drop it on the edge of another window to dock it beside that one (they share the space and never overlap); drop it anywhere else to let it float. Super+D docks or undocks the window you're in; Super+Q closes it; Super+F makes it full screen."
+                    : "Drag a window by its title bar; hold Shift while dragging to snap it into place. Super+Arrow keys move it.", icon: "transform-move" },
+                { title: "Seeing all your windows", text: Compositor.isArbor
+                    ? "Super+W shows every window and workspace (the overview); click one to go there. Super+Z zooms out to see how your docked windows fit together, Super+X zooms back in and Super+A shows them all. Super+Tab or Alt+Tab switches between apps."
+                    : "Super+W shows every window at once; Alt+Tab switches between apps.", icon: "view-grid" },
+                { title: "Settings and Help", text: "Everything can be changed in System Settings (logo menu): dark or light, the Dock, Spotlight, AI models, the voice assistant and more. Super+/ lists every keyboard shortcut. Lost? Click the ? in the menu bar and type what you want to do.", icon: "configure" }
             ]
             readonly property var s: steps[Math.min(root.welcomeStep, steps.length - 1)]
             Icon { implicitSize: 64; name: parent.s.icon }

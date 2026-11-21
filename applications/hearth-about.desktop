@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=About This Computer
+Comment=Your computer's processor, graphics, memory, displays, storage and system details
+Icon=computer
+Exec=hearth-ipc call about open
+Categories=System;
+Keywords=system;information;hardware;info center;about;specs;

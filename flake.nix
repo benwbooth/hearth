@@ -60,6 +60,10 @@
       # come from sound-theme-freedesktop (HEARTH_SOUND_DIR below).
       piper-tts
       llama-cpp
+      # About This Computer (helpers/hearth-sysinfo).
+      usbutils vulkan-tools
+      # Bluetooth settings (bar/indicators/Bluetooth.qml), in tessera.
+      bluetuith
     ];
 
     # The `kde` platform theme picks the org.kde.desktop Controls style, which
@@ -82,6 +86,9 @@
     # Global menus for plain GtkMenuBars (README "Global menu").
     appmenu-gtk-module = pkgs.callPackage ./nix/appmenu-gtk-module.nix { };
 
+    # Shown in About This Computer: the commit this build came from.
+    hearthVersion = "0.1.0 (${self.shortRev or self.dirtyShortRev or "dev"})";
+
     hearth = pkgs.stdenvNoCC.mkDerivation {
       pname = "hearth";
       version = "0.1.0";
@@ -94,6 +101,10 @@
         # Built-in user pictures (avatars/CREDITS.md), for Settings > Users &
         # Accounts and the login screen: $out/share/hearth/avatars.
         cp -r avatars $out/share/hearth/
+        # hearth Settings and About This Computer as apps (Dock, Spotlight,
+        # Vicinae), replacing KDE's System Settings and Info Center.
+        mkdir -p $out/share/applications
+        cp applications/*.desktop $out/share/applications/
         chmod +x $out/share/hearth/helpers/*
         patchShebangs $out/share/hearth/helpers
         # Apps launched from the dock inherit the bar's working directory;
@@ -108,6 +119,7 @@
           --set-default HEARTH_BACKGROUND_DIRS ${backgroundDirs} \
           --set-default HEARTH_AVATAR_DIR $out/share/hearth/avatars \
           --set-default HEARTH_FONT_DIR ${fontDir} \
+          --set-default HEARTH_VERSION "${hearthVersion}" \
           --set-default HEARTH_SOUND_DIR ${pkgs.sound-theme-freedesktop}/share/sounds/freedesktop/stereo \
           --set-default HEARTH_XKB_RULES ${pkgs.xkeyboard_config}/share/X11/xkb/rules/evdev.lst
         # Talk to the running hearth whichever build started it: quickshell

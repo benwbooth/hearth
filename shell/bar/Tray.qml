@@ -64,6 +64,9 @@ Row {
         // into blobs as silhouettes: only their symbolic/panel icons go
         // monochrome.
         monochrome: Settings.menubar.monochromeIcons !== false && /symbolic|panel|tray|indicator|-mono/i.test(String(modelData.icon))
+        // Everything else: white or grey pictures (an update checker, Claude)
+        // still follow the bar's text colour; colourful icons keep theirs.
+        adaptive: Settings.menubar.monochromeIcons !== false && !monochrome
         tooltip: modelData.tooltipTitle || modelData.title || modelData.id
         tooltipSub: modelData.tooltipDescription
 

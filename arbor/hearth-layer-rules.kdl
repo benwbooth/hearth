@@ -1,28 +1,28 @@
-// hearth's glass for arbor (26.04+): blur what's behind menus and popups,
-// and swaync's notifications. Include it from the arbor config:
+// hearth's glass for arbor (26.04+). Include it from the arbor config:
 //   include "/path/to/hearth/arbor/hearth-layer-rules.kdl"
 // (or paste it in).
 //
-// Real glass: with arbor's liquid glass (arbor 2026-11-20+; Settings >
-// Appearance > Real glass) hearth registers its panes (dock slab, menus,
-// popovers, tooltips, the glass menu bar) over IPC and arbor draws the
-// backdrop refracted under exactly those shapes. A surface with glass
-// shapes skips the rectangular blur and shadow below, so these rules are
-// only the fallback for when real glass is off (or for swaync).
+// Real glass: with arbor's liquid glass (Settings > Appearance > Real glass)
+// hearth registers its panes (dock slab, menus, popovers, tooltips, the
+// glass menu bar) over IPC and arbor draws the backdrop refracted under
+// exactly those shapes. The rectangular blur and shadow for hearth's menus
+// and tooltips are only a fallback for when real glass is off, so hearth
+// writes them itself to ~/.config/hearth/arbor-glass-fallback.kdl
+// (services/RealGlass.qml) only then. Kept here, they made every menu
+// flicker: a menu's first frame (before its glass shapes arrive) and its
+// last got the blurred rectangle.
 //
 // The dock is left out on purpose: its layer surface spans the whole screen
 // edge (so it never resizes while magnifying) and the layer-rule blur covers
-// a layer's whole rectangle, not only its opaque pixels like Hyprland's
-// ignore_alpha. Without real glass hearth draws the dock with a more opaque
-// tint instead.
+// a layer's whole rectangle. Without real glass hearth draws the dock with a
+// more opaque tint instead.
 //
 // The menu bar is left out too: its default style is transparent (macOS 26),
 // which must not be blurred; its Glass style gets real glass.
 
+// Notifications (swaync draws no glass shapes).
 layer-rule {
-    match namespace="^hearth-popup$"
     match namespace="^swaync-(control-center|notification-window)$"
-    // hearth's menus have 12 pt (14 px) corners (macOS 26).
     geometry-corner-radius 14
     background-effect {
         xray false
@@ -31,41 +31,10 @@ layer-rule {
         // Liquid glass vibrancy: the colours behind come through brighter.
         saturation 1.6
     }
-    popups {
-        geometry-corner-radius 8
-        background-effect {
-            xray false
-            blur true
-            saturation 1.6
-        }
-    }
 }
 
-// Menus and popovers: a large, soft, faint shadow like macOS's (hearth
-// leaves its own shadow off on arbor, since the blur covers the layer's
-// whole rectangle).
-layer-rule {
-    match namespace="^hearth-popup$"
-    shadow {
-        on
-        softness 26
-        spread 0
-        offset x=0 y=9
-        color "#00000045"
-    }
-}
-
-// The menu bar is square-cornered and not blurred (see above); its
-// tooltips are.
+// The menu bar is square-cornered and not blurred (see above).
 layer-rule {
     match namespace="^hearth-menubar$"
     geometry-corner-radius 0
-    popups {
-        geometry-corner-radius 8
-        background-effect {
-            xray false
-            blur true
-            saturation 1.6
-        }
-    }
 }

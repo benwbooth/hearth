@@ -39,20 +39,16 @@ BarButton {
             width: Math.round(220 * Theme.pt)
             MenuItem {
                 text: "About This Computer"
-                onTriggered: { menu.close(); Quickshell.execDetached(["kinfocenter"]); }
+                onTriggered: { menu.close(); About.openRequested(); }
             }
             MenuSeparator {}
             MenuItem {
-                text: "hearth Settings…"
+                text: "System Settings…"
                 onTriggered: { menu.close(); Settings.openRequested(""); }
             }
             MenuItem {
-                text: "System Settings…"
-                onTriggered: { menu.close(); Quickshell.execDetached(["systemsettings"]); }
-            }
-            MenuItem {
-                text: "Search Apps…"
-                onTriggered: { menu.close(); Quickshell.execDetached(["vicinae", "toggle"]); }
+                text: "Spotlight Search…"
+                onTriggered: { menu.close(); Spotlight.open = true; }
             }
             MenuSeparator {}
             MenuItem { text: "Sleep"; onTriggered: { menu.close(); Session.run("suspend"); } }

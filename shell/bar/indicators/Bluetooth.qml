@@ -146,7 +146,7 @@ Indicator {
             icon: "preferences-system-bluetooth"
             text: "Bluetooth settings…"
             onTriggered: {
-                Quickshell.execDetached(["kcmshell6", "kcm_bluetooth"]);
+                Quickshell.execDetached(["tessera", "--new-window", "--run", "bluetuith"]);
                 root.popup.close();
             }
         }
