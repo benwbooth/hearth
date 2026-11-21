@@ -47,7 +47,7 @@ BarButton {
                 onTriggered: { menu.close(); Settings.openRequested(""); }
             }
             MenuItem {
-                text: "Spotlight Search…"
+                text: "Search…"
                 shortcut: Binds.menuShortcut(/"spotlight" "toggle"/)
                 onTriggered: { menu.close(); Spotlight.open = true; }
             }

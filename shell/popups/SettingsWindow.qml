@@ -84,7 +84,7 @@ Scope {
                                 { id: "power", label: "Sleep & Power", icon: "preferences-system-power-management" },
                                 { id: "night", label: "Night Light", icon: "redshift-status-on" },
                                 { id: "notifications", label: "Notifications", icon: "preferences-desktop-notification" },
-                                { id: "spotlight", label: "Spotlight", icon: "search" },
+                                { id: "spotlight", label: "Search", icon: "search" },
                                 { id: "ai", label: "AI", icon: Quickshell.shellDir + "/assets/ai.svg" },
                                 { id: "voice", label: "Voice Assistant", icon: "audio-input-microphone" },
                                 { id: "clipboard", label: "Clipboard", icon: "klipper-symbolic" },
@@ -142,7 +142,7 @@ Scope {
                                      wallpaper: "Wallpaper", mouse: "Mouse & Touchpad", night: "Night Light", notifications: "Notifications",
                                      hotcorners: "Hot Corners", displays: "Displays", keyboard: "Keyboard", shortcuts: "Keyboard Shortcuts",
                                      windowrules: "Window Rules", power: "Sleep & Power", lockscreen: "Lock Screen", clipboard: "Clipboard", screenshots: "Screenshots",
-                                     users: "Users & Accounts", spotlight: "Spotlight", ai: "AI", voice: "Voice Assistant" })[root.pane] || ""
+                                     users: "Users & Accounts", spotlight: "Search", ai: "AI", voice: "Voice Assistant" })[root.pane] || ""
                             font.pointSize: Theme.fontSize + 6
                             font.weight: Font.Bold
                         }

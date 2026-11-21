@@ -25,7 +25,7 @@ ColumnLayout {
 
     Label {
         Layout.fillWidth: true
-        text: "Spotlight finds apps, documents, folders, pictures and settings, and does sums and conversions as you type. Press " + Spotlight.shortcutText + " or click the magnifier in the menu bar."
+        text: "Search finds apps, documents, folders, pictures and settings, and does sums and conversions as you type. Press " + Spotlight.shortcutText + " or click the magnifier in the menu bar."
         color: Theme.fgDim
         wrapMode: Text.Wrap
         elide: Text.ElideNone
@@ -125,13 +125,13 @@ ColumnLayout {
         SettingsRow {
             label: "Web suggestions"
             note: "Show search suggestions from the web as you type."
-            tip: "Off by default: with this on, what you type in Spotlight is sent to DuckDuckGo's suggestion service. Nothing else leaves your computer."
+            tip: "Off by default: with this on, what you type in Search is sent to DuckDuckGo's suggestion service. Nothing else leaves your computer."
             Toggle { checked: !!pane.cfg.web; onToggled: c => Settings.set("spotlight.web", c) }
         }
         SettingsDivider {}
         SettingsRow {
             label: "Keyboard shortcut"
-            note: Spotlight.shortcutText + " opens Spotlight."
+            note: Spotlight.shortcutText + " opens Search."
             PushButton { text: "Change…"; tooltip: "Settings > Keyboard Shortcuts"; onClicked: Settings.openRequested("shortcuts") }
         }
     }
@@ -151,7 +151,7 @@ ColumnLayout {
                     label: fr.modelData
                     PushButton {
                         text: "Remove"
-                        tooltip: "Stop indexing this folder (its files disappear from Spotlight)"
+                        tooltip: "Stop indexing this folder (its files disappear from Search)"
                         onClicked: Settings.set("spotlight.folders", pane.cfg.folders.filter(f => f !== fr.modelData))
                     }
                 }
@@ -180,7 +180,7 @@ ColumnLayout {
     Label { text: "Privacy"; font.weight: Font.DemiBold }
     Label {
         Layout.fillWidth: true
-        text: "Spotlight never shows or indexes these, even inside the folders above."
+        text: "Search never shows or indexes these, even inside the folders above."
         color: Theme.fgDim
         wrapMode: Text.Wrap
     }
@@ -223,7 +223,7 @@ ColumnLayout {
 
     FolderDialog {
         id: addDialog
-        title: "Choose a folder for Spotlight to search"
+        title: "Choose a folder to search"
         currentFolder: "file://" + pane.home
         onAccepted: {
             const p = pane.tilde(pane.localPath(selectedFolder));
@@ -232,7 +232,7 @@ ColumnLayout {
     }
     FolderDialog {
         id: excludeDialog
-        title: "Choose a folder Spotlight should leave out"
+        title: "Choose a folder Search should leave out"
         currentFolder: "file://" + pane.home
         onAccepted: {
             const p = pane.tilde(pane.localPath(selectedFolder));

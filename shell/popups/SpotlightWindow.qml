@@ -228,7 +228,7 @@ Scope {
                         Label {
                             anchors.fill: parent
                             visible: !field.text
-                            text: "Spotlight Search"
+                            text: "Search"
                             color: Theme.fgSecondary
                             font: field.font
                         }
@@ -392,7 +392,7 @@ Scope {
                                 x: Math.round(10 * win.pt)
                                 width: rows.width - 2 * x
                                 height: win.rowH
-                                text: "Files aren't indexed yet (Settings > Spotlight)."
+                                text: "Files aren't indexed yet (Settings > Search)."
                                 color: Theme.fgSecondary
                             }
                         }

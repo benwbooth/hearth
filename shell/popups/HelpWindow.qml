@@ -346,16 +346,16 @@ Scope {
 
             readonly property var arborSteps: [
                 { art: "hello", title: "Welcome to arbor",
-                  text: "arbor is your window manager: windows dock beside each other like a tree of panes, a camera zooms out to show them all, and zones snap windows into a layout you choose. hearth is the menu bar, the Dock and Spotlight on top of it. This tour takes a minute; open it again from the ? in the menu bar → Getting Started.",
+                  text: "arbor is your window manager: windows dock beside each other like a tree of panes, a camera zooms out to show them all, and zones snap windows into a layout you choose. hearth is the menu bar, the Dock and Search on top of it. This tour takes a minute; open it again from the ? in the menu bar → Getting Started.",
                   keys: [] },
                 { art: "menubar", title: "The menu bar",
-                  text: "Left: the logo menu (settings, sleep, restart, shut down), then the app you're in and its menus. Right: status icons, Spotlight, Control Center, the microphone and the clock. Click any of them.",
+                  text: "Left: the logo menu (settings, sleep, restart, shut down), then the app you're in and its menus. Right: status icons, Search, Control Center, the assistant and the clock. Click any of them.",
                   keys: [] },
                 { art: "dock", title: "The Dock",
                   text: "Push the pointer against the bottom edge and it slides in. Click an app to open it; a dot means it's running. Right-click for Keep in Dock or Quit; drag icons to reorder, or off the Dock to remove them.",
                   keys: [] },
                 { art: "search", title: "Open anything",
-                  text: "Spotlight opens apps, documents, folders and settings, and does sums and unit conversions. Or press the voice key and just say it: “open Kog”, “volume to 50”. Everything runs on this computer.",
+                  text: "Search opens apps, documents, folders and settings, and does sums and unit conversions. Or press the voice key and just say it: “open Kog”, “volume to 50”. Everything runs on this computer.",
                   keys: [["Super", "Space"], ["Super", "Alt", "Space"]] },
                 { art: "docking", title: "Docking windows",
                   text: "Drag a window by its title bar and drop it on the edge of another one: it docks beside it and they share the space without overlapping. Drop it anywhere else and it floats. Super+D docks or undocks the window you're in.",
@@ -367,7 +367,7 @@ Scope {
                   text: "Super+Z zooms the camera out so you can see how your docked windows fit together, Super+X zooms back in, Super+A frames them all. Super+W opens the overview of every window and workspace; click one to go there.",
                   keys: [["Super", "Z"], ["Super", "X"], ["Super", "A"], ["Super", "W"]] },
                 { art: "settings", title: "Settings and help",
-                  text: "System Settings (logo menu) changes the look, the Dock, zones, Spotlight, the voice assistant and more. Super+/ lists every shortcut, and the ? in the menu bar searches for what you want to do.",
+                  text: "System Settings (logo menu) changes the look, the Dock, zones, Search, the voice assistant and more. Super+/ lists every shortcut, and the ? in the menu bar searches for what you want to do.",
                   keys: [["Super", "/"]] }
             ]
             readonly property var hyprSteps: [

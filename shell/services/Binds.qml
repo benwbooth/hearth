@@ -178,7 +178,7 @@ Singleton {
         { value: "spawn \"hearth-ipc\" \"call\" \"session\" \"open\"", label: "Log out, restart or shut down", group: "System" },
         { value: "spawn \"hearth-ipc\" \"call\" \"settings\" \"open\"", label: "Open hearth Settings", group: "System" },
         { value: "spawn \"hearth-ipc\" \"call\" \"help\" \"shortcuts\"", label: "Show keyboard shortcuts", group: "System" },
-        { value: "spawn \"hearth-ipc\" \"call\" \"spotlight\" \"toggle\"", label: "Spotlight search", group: "Apps & Launcher" },
+        { value: "spawn \"hearth-ipc\" \"call\" \"spotlight\" \"toggle\"", label: "Search (apps, files, settings)", group: "Apps & Launcher" },
         { value: "spawn \"hearth-ipc\" \"call\" \"voice\" \"toggle\"", label: "Voice assistant (start/stop listening)", group: "Apps & Launcher" },
         { value: "spawn \"vicinae\" \"toggle\"", label: "Search apps (launcher)", group: "Apps & Launcher" },
         { value: "spawn \"swaync-client\" \"-t\" \"-sw\"", label: "Notification Center", group: "System" },

@@ -212,7 +212,7 @@ Singleton {
         { id: "notifications", label: "Notifications", icon: "preferences-desktop-notification", words: "do not disturb alerts" },
         { id: "clipboard", label: "Clipboard", icon: "klipper-symbolic", words: "copy paste history" },
         { id: "screenshots", label: "Screenshots", icon: "camera-photo", words: "screen capture record" },
-        { id: "spotlight", label: "Spotlight", icon: "search", words: "search index files folders" },
+        { id: "spotlight", label: "Search", icon: "search", words: "search index files folders" },
         { id: "ai", label: "AI", icon: Quickshell.shellDir + "/assets/ai.svg", words: "models ollama llama vram gpu claude codex gemini" },
         { id: "voice", label: "Voice Assistant", icon: "audio-input-microphone", words: "siri speech microphone whisper voice piper" }
     ]

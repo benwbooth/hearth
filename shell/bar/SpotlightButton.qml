@@ -7,7 +7,7 @@ import ".."
 BarButton {
     icon: "search"
     iconFallback: "edit-find"
-    tooltip: "Spotlight: search apps, files, settings; calculate"
+    tooltip: "Search apps, files and settings; calculate"
     tooltipSub: Spotlight.shortcutText
     active: Spotlight.open
     onClicked: mouse => { if (mouse.button === Qt.LeftButton) Spotlight.toggle(); }

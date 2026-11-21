@@ -24,7 +24,7 @@ ColumnLayout {
 
     Label {
         Layout.fillWidth: true
-        text: "Everything that uses AI on this desktop (the voice assistant, Spotlight's Ask) goes through the models here. Local models run on your graphics card and nothing leaves the computer."
+        text: "Everything that uses AI on this desktop (the voice assistant, Search's Ask) goes through the models here. Local models run on your graphics card and nothing leaves the computer."
         color: Theme.fgDim
         wrapMode: Text.Wrap
         elide: Text.ElideNone
@@ -97,7 +97,7 @@ ColumnLayout {
     SettingsGroup {
         SettingsRow {
             label: "AI"
-            note: "Which server or app answers the voice assistant and Spotlight's Ask."
+            note: "Which server or app answers the voice assistant and Search's Ask."
             Dropdown {
                 implicitWidth: 220
                 options: Ai.providers.filter(p => p.kind === "local" || pane.cfg.allowCloud).map(p => ({ value: p.id, label: p.label + (p.kind === "cloud" ? " (cloud)" : "") }))
