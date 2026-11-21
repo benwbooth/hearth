@@ -405,9 +405,10 @@ PanelWindow {
             opacity: want ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: nameLabel.want ? Theme.labelFadeMs : 90 } }
             readonly property real maxText: dockWin.vertical ? dockWin.labelSpace - 44 : 420
-            // A glass capsule (macOS 26), 13 pt text.
-            width: labelCol.implicitWidth + 2 * Math.round(9 * Theme.pt)
-            height: labelCol.implicitHeight + Math.round(7 * Theme.pt)
+            // macOS's Dock label: the app's name alone, 13 pt, in a compact
+            // rounded box (6 pt corners) of dense glass.
+            width: labelCol.implicitWidth + 2 * Math.round(10 * Theme.pt)
+            height: labelCol.implicitHeight + Math.round(8 * Theme.pt)
             readonly property real inner: dockWin.margin + dockWin.thickness + ext + Math.round(8 * Theme.pt)
             x: Math.round(!dockWin.vertical ? Math.max(4, Math.min(dockWin.width - width - 4, cx - width / 2))
                           : dockWin.edge === "left" ? inner : dockWin.width - inner - width)
@@ -415,7 +416,7 @@ PanelWindow {
                           : dockWin.height - inner - height)
             GlassFrame {
                 anchors.fill: parent
-                radius: nameLabel.sub !== "" ? Math.round(10 * Theme.pt) : height / 2
+                radius: Math.round(6 * Theme.pt)
                 tint: Theme.glassTip
                 shadowBlur: 12
                 shadowY: 3
@@ -432,8 +433,10 @@ PanelWindow {
                     font.pointSize: Theme.menuFontSize
                     font.letterSpacing: Theme.menuTracking
                 }
+                // (No description line: macOS shows the name only. What an
+                // app does is in its right-click menu and in Search.)
                 Label {
-                    visible: nameLabel.sub !== ""
+                    visible: false
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: Math.min(implicitWidth, nameLabel.maxText)
                     elide: Text.ElideRight
