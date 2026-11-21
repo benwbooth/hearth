@@ -15,7 +15,13 @@ Singleton {
     // while you clicked other dock icons.
     function pressedIn(item) {
         const p = activePopup;
-        if (p && p.open && p.anchorItem !== item) p.close();
+        if (!p || !p.open || p.anchorItem === item) return;
+        // A button inside the open popup itself (Bluetooth's Connect,
+        // Drives' Eject): pressing it must not close that popup, or the
+        // click never lands.
+        const w = item && item.QsWindow ? item.QsWindow.window : null;
+        if (w && w === p) return;
+        p.close();
     }
     // Open a menu bar indicator's menu by its ipcName (Control Center's ›).
     signal openIndicator(string name)
