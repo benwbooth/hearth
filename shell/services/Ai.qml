@@ -39,6 +39,7 @@ Singleton {
     property var providers: []
     property var gpus: []
     property var processes: []
+    property var clis: []               // [{ id, label, installed }] Claude Code, Codex, Gemini CLI
     property bool ready: false
     property string busy: ""            // "provider/model" being loaded
     property string lastError: ""
@@ -119,6 +120,7 @@ Singleton {
             root.providers = m.providers || [];
             root.gpus = m.gpus || [];
             if (m.processes) root.processes = m.processes;
+            root.clis = m.clis || [];
             root.ready = true;
             break;
         case "busy":

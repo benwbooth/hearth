@@ -13,7 +13,7 @@ import Quickshell.Io
 // the glowing overlay (popups/VoiceOverlay.qml) and, with Settings > Voice
 // > Speak replies, read aloud by Piper.
 //
-//   hearth-ipc call voice toggle | listen | stop | cancel | ask "TEXT"
+//   hearth-ipc call voice toggle | start | stop | cancel | ask "TEXT"
 Singleton {
     id: root
 
@@ -190,7 +190,7 @@ Singleton {
     IpcHandler {
         target: "voice"
         function toggle(): void { root.toggle(); }
-        function listen(): void { root.listen(); }
+        function start(): void { root.listen(); }
         function stop(): void { root.stop(); }
         function cancel(): void { root.dismiss(); }
         function ask(text: string): void { root.ask(text); }

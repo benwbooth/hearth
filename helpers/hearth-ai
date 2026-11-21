@@ -485,7 +485,9 @@ def vram_processes():
             cmd = open("/proc/%s/cmdline" % pid).read().replace("\0", " ").strip()
         except OSError:
             continue
-        label = comm
+        # comm is cut at 15 characters; Nix wrappers add ".x-wrapped".
+        exe = os.path.basename(cmd.split(" ", 1)[0]) if cmd else comm
+        label = re.sub(r"-wrapped$", "", exe.lstrip(".")) or comm
         for pat, name in KNOWN:
             if re.search(pat, cmd):
                 label = name
@@ -566,11 +568,12 @@ def system_prompt(ctx):
     now = time.localtime()
     return (
         "You are the voice assistant of the user's Linux desktop (hearth). Today is %s, the time is %s. %s"
-        "Do what the user asks by calling tools; you may call several in a row. "
+        "Do what the user asks by calling tools; you may call several in a row. Never take an action the user didn't "
+        "ask for (don't open apps, files or websites unless asked). "
         "For files the user 'edited yesterday' etc., work out the dates and pass modified_after/modified_before. "
         "When a search finds what they asked to open, open the best match. If a search finds nothing, search again "
         "right away with fewer filters (drop the kind, then widen the dates) before telling the user. "
-        "Answer in one or two short, friendly sentences meant to be spoken aloud: no markdown, no lists, no file paths "
+        "If nothing matches, say so in one sentence and offer one next step. Answer in one or two short, friendly sentences meant to be spoken aloud: no markdown, no lists, no file paths "
         "unless asked. If you can't do something, say so plainly."
     ) % (time.strftime("%A, %B %-d, %Y", now), time.strftime("%-I:%M %p", now),
          ("The user is in %s. " % ctx["place"]) if ctx.get("place") else "")

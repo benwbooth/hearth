@@ -146,6 +146,10 @@ binds {
     Mod+Slash hotkey-overlay-title="Keyboard shortcuts and help" { spawn "hearth-ipc" "call" "help" "shortcuts"; }
 
     // Launcher and clipboard (Vicinae).
+    // Spotlight (hearth): apps, files, settings, calculator. Voice
+    // assistant: speak after pressing, it stops when you stop talking.
+    Mod+Space hotkey-overlay-title="Spotlight Search" { spawn "hearth-ipc" "call" "spotlight" "toggle"; }
+    Mod+Alt+Space hotkey-overlay-title="Voice assistant" { spawn "hearth-ipc" "call" "voice" "toggle"; }
     Alt+Space hotkey-overlay-title="Launcher" { spawn "vicinae" "toggle"; }
     Alt+F1 { spawn "vicinae" "toggle"; }
     // Clipboard history: hearth's popover (like Klipper); Vicinae's own
