@@ -158,9 +158,9 @@ Indicator {
         property bool clickable: true
         signal zoneClicked(int index)
         radius: 3
-        color: Qt.rgba(1, 1, 1, 0.035)
-        border.color: active ? root.accent : Theme.border
-        border.width: active ? 2 : 1
+        color: Qt.rgba(0, 0, 0, 0.18)
+        border.color: Theme.border
+        border.width: 1
         Repeater {
             model: dia.layout ? dia.layout.zones : []
             delegate: Rectangle {
@@ -172,13 +172,14 @@ Indicator {
                 width: Math.max(3, modelData.width * (dia.width - 6) - 2)
                 height: Math.max(3, modelData.height * (dia.height - 6) - 2)
                 radius: 2
-                color: zm.containsMouse ? Theme.hover : Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.28)
+                color: zm.containsMouse ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.55)
+                     : Qt.rgba(root.accent.r, root.accent.g, root.accent.b, dia.active ? 0.38 : 0.22)
                 border.color: zm.containsMouse ? root.accent : Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.45)
                 border.width: zm.containsMouse ? 2 : 1
                 Label {
                     anchors.centerIn: parent
                     text: zr.index + 1
-                    color: Theme.fgDim
+                    color: zm.containsMouse ? Theme.fg : Theme.fgDim
                     font.pointSize: Theme.smallFontSize
                     visible: zr.height > 14 && zr.width > 12
                 }
@@ -249,7 +250,7 @@ Indicator {
     popupContent: ColumnLayout {
         id: menu
         spacing: 4
-        implicitWidth: 440
+        implicitWidth: 480
 
         // null: list view; otherwise the layout being edited
         // ({ id, name, cols, rows } with weights as text).
@@ -301,71 +302,119 @@ Indicator {
             }
         }
 
-        // ---- Layout list ----
-        Repeater {
-            model: menu.editing ? [] : root.layouts
-            delegate: MouseArea {
-                id: row
-                required property var modelData
-                readonly property bool active: root.layoutFor(root.display) && root.layoutFor(root.display).id === modelData.id
-                Layout.fillWidth: true
-                Layout.preferredHeight: 84
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.useLayout(modelData.id)
+        // ---- Layout list: a grid of cards (preview above, name below) ----
+        Label {
+            visible: !menu.editing
+            Layout.fillWidth: true
+            // Wrap at the menu's width instead of widening it.
+            Layout.preferredWidth: menu.implicitWidth
+            Layout.bottomMargin: 2
+            text: "Click a layout to use it on this display, or a zone to move the focused window there. "
+                + "Shift-drag a window or press Super+Ctrl+1…9 to snap."
+            wrapMode: Text.WordWrap
+            color: Theme.fgDim
+            font.pointSize: Theme.smallFontSize
+        }
+        GridLayout {
+            id: cards
+            visible: !menu.editing
+            Layout.fillWidth: true
+            columns: 3
+            columnSpacing: 8
+            rowSpacing: 8
+            readonly property real cardWidth: (width - columnSpacing * (columns - 1)) / columns
 
-                Rectangle {
-                    anchors.fill: parent
-                    radius: Theme.radius
-                    color: row.containsMouse ? Theme.hover : Theme.bgRaised
-                    border.color: row.active ? root.accent : "transparent"
-                }
-                ColumnLayout {
-                    x: 10
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 180
-                    spacing: 2
-                    Label {
-                        text: row.modelData.name
-                        font.bold: row.active
-                        Layout.maximumWidth: 180
+            Repeater {
+                model: menu.editing ? [] : root.layouts
+                delegate: MouseArea {
+                    id: card
+                    required property var modelData
+                    readonly property bool active: root.layoutFor(root.display) && root.layoutFor(root.display).id === modelData.id
+                    Layout.preferredWidth: cards.cardWidth
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    implicitHeight: col.implicitHeight + 16
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.useLayout(modelData.id)
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: Theme.radius
+                        color: card.active ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.14)
+                             : card.containsMouse ? Theme.hover : Theme.bgRaised
+                        border.color: card.active ? root.accent : card.containsMouse ? Theme.border : "transparent"
+                        border.width: card.active ? 2 : 1
                     }
-                    Label {
-                        text: row.active ? "Active" : row.modelData.zones.length + " zones"
-                        color: row.active ? root.accent : Theme.fgDim
-                        font.pointSize: Theme.smallFontSize
+                    ColumnLayout {
+                        id: col
+                        x: 8
+                        y: 8
+                        width: parent.width - 16
+                        height: parent.height - 16
+                        spacing: 6
+                        Diagram {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: Math.round(Math.max(44, Math.min(80, width / root.screenAspect)))
+                            layout: card.modelData
+                            active: card.active
+                            onZoneClicked: i => root.snapZone(card.modelData, i)
+                        }
+                        Label {
+                            Layout.fillWidth: true
+                            text: card.modelData.name
+                            font.bold: card.active
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.WordWrap
+                            maximumLineCount: 2
+                            elide: Text.ElideRight
+                        }
+                        Label {
+                            Layout.fillWidth: true
+                            text: card.active ? "Active" : card.modelData.zones.length + " zones"
+                            color: card.active ? root.accent : Theme.fgDim
+                            font.pointSize: Theme.smallFontSize
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+                        Item { Layout.fillHeight: true }
                     }
-                    RowLayout {
-                        visible: !row.modelData.is_built_in
-                        spacing: 12
+                    // Custom layouts: edit / delete on hover.
+                    Row {
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 4
+                        spacing: 2
+                        visible: !card.modelData.is_built_in && card.containsMouse
                         Repeater {
-                            model: [{ t: "Edit", f: () => menu.startEdit(row.modelData) },
-                                    { t: "Delete", f: () => root.deleteLayout(row.modelData.id) }]
-                            delegate: Label {
+                            model: [{ i: "document-edit", t: "Edit", f: () => menu.startEdit(card.modelData) },
+                                    { i: "edit-delete", t: "Delete", f: () => root.deleteLayout(card.modelData.id) }]
+                            delegate: Rectangle {
                                 required property var modelData
-                                text: modelData.t
-                                font.pointSize: Theme.smallFontSize
-                                color: lm.containsMouse ? (modelData.t === "Delete" ? Theme.bad : root.accent) : Theme.fgDim
+                                width: 22
+                                height: 22
+                                radius: 11
+                                color: bm.containsMouse ? Theme.hover : Theme.bg
+                                border.color: Theme.border
+                                Icon {
+                                    anchors.centerIn: parent
+                                    implicitSize: 14
+                                    name: parent.modelData.i
+                                }
                                 MouseArea {
-                                    id: lm
+                                    id: bm
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: parent.modelData.f()
+                                    Tooltip {
+                                        anchorItem: bm
+                                        hovered: bm.containsMouse
+                                        text: bm.parent.modelData.t + " this layout"
+                                    }
                                 }
                             }
                         }
                     }
-                }
-                Diagram {
-                    anchors.right: parent.right
-                    anchors.rightMargin: 8
-                    anchors.verticalCenter: parent.verticalCenter
-                    height: 70
-                    width: Math.min(220, Math.round(70 * root.screenAspect))
-                    layout: row.modelData
-                    active: row.active
-                    onZoneClicked: i => root.snapZone(row.modelData, i)
                 }
             }
         }
