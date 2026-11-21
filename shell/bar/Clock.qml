@@ -37,7 +37,9 @@ Indicator {
         visible: root.compact
         anchors.centerIn: parent
         text: root.lineText
-        font.weight: Font.Medium
+        // macOS: regular weight, tabular digits so the time doesn't jiggle.
+        font.pointSize: Theme.menuBarFontSize
+        font.features: { "tnum": 1 }
         style: Text.Raised
         styleColor: Theme.textHalo
     }

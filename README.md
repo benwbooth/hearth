@@ -28,6 +28,10 @@ Layout: `shell/shell.qml` (root), `shell/bar/` (panel pieces),
 polkit), `shell/services/` (singletons), `shell/widgets/` (shared building
 blocks), `helpers/` (small DBus relays Quickshell can't do itself).
 
+Font: Apple's SF Pro when installed (never shipped: Apple-licensed),
+otherwise Inter, which the wrapper passes in as `HEARTH_FONT_DIR` (nixpkgs
+`inter`); Settings > Appearance > Font.
+
 Text: every Text uses native rendering (`//@ pragma NativeTextRendering` plus
 `widgets/Label.qml`), and every window/popup root carries a
 `Translate { x: 0.001; y: 0.001 }` so text never lands on an exact half

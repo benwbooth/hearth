@@ -121,7 +121,7 @@ Row {
         property string tip: ""
         hoverEnabled: true
         implicitHeight: Theme.menuBarHeight
-        implicitWidth: label.implicitWidth + 20
+        implicitWidth: label.implicitWidth + 18
         onClicked: popup.toggle()
         onContainsMouseChanged: if (containsMouse && enabled) root.hoverOpen(popup)
         Rectangle {
@@ -141,6 +141,7 @@ Row {
             anchors.centerIn: parent
             text: t.text
             color: t.enabled ? Theme.fg : Theme.fgDim
+            font.pointSize: Theme.menuBarFontSize
             font.weight: t.bold ? Font.Bold : Font.Normal
             style: Text.Raised
             styleColor: Theme.textHalo

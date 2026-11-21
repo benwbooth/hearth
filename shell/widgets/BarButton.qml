@@ -57,6 +57,7 @@ MouseArea {
             visible: root.text !== ""
             text: root.text
             color: root.textColor
+            font.pointSize: root.hostWindow && root.hostWindow.barFontSize ? root.hostWindow.barFontSize : Theme.fontSize
         }
     }
 

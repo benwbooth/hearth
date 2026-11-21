@@ -42,6 +42,18 @@ Singleton {
         return Qt.rgba(base.r, base.g, base.b, a);
     }
     readonly property color glassBar: glassColor(dark ? Qt.rgba(0.10, 0.11, 0.12, 1) : Qt.rgba(0.95, 0.95, 0.96, 1), 0.34)
+    // The menu bar (Settings > Menu Bar > Style): "glass" (a light tinted
+    // strip with a specular rim), "transparent" (macOS 26: items float on
+    // the wallpaper) or "solid". Reduce transparency forces solid.
+    readonly property string menuBarStyle: ap.reduceTransparency ? "solid" : (Settings.menubar.style || "glass")
+    // Glass strip opacity. Hyprland only blurs pixels above its
+    // ignore_alpha (0.25, hypr/hyprland.lua), so it never goes below 0.28.
+    readonly property real menuBarOpacity: Math.max(0.28, Math.min(0.95, Number(Settings.menubar.opacity) || 0.32))
+    readonly property color menuBarTint: menuBarStyle === "solid" ? bg
+        : dark ? Qt.rgba(0.19, 0.20, 0.23, menuBarOpacity) : Qt.rgba(0.97, 0.97, 0.98, menuBarOpacity)
+    // Specular light on glass edges: strongest at the top-left, like a
+    // light source above-left of the screen.
+    readonly property real specular: dark ? 0.30 : 0.85
     readonly property color glassDock: glassColor(dark ? Qt.rgba(0.16, 0.17, 0.19, 1) : Qt.rgba(0.97, 0.97, 0.98, 1), 0.40)
     readonly property color glassDockSolid: glassColor(dark ? Qt.rgba(0.16, 0.17, 0.19, 1) : Qt.rgba(0.97, 0.97, 0.98, 1), 0.85)
     readonly property color glassMenu: glassColor(dark ? Qt.rgba(0.14, 0.15, 0.17, 1) : Qt.rgba(0.97, 0.97, 0.98, 1), 0.62)
@@ -49,7 +61,10 @@ Singleton {
     readonly property color glassRim: dark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.75)
     readonly property color glassEdge: dark ? Qt.rgba(0, 0, 0, 0.55) : Qt.rgba(0, 0, 0, 0.16)
     // Under menu bar text: lifts it off busy wallpaper behind the glass.
-    readonly property color textHalo: dark ? Qt.rgba(0, 0, 0, 0.45) : Qt.rgba(1, 1, 1, 0.6)
+    // Stronger on the transparent menu bar, where text sits on the wallpaper.
+    readonly property color textHalo: menuBarStyle === "transparent"
+        ? (dark ? Qt.rgba(0, 0, 0, 0.7) : Qt.rgba(1, 1, 1, 0.8))
+        : (dark ? Qt.rgba(0, 0, 0, 0.45) : Qt.rgba(1, 1, 1, 0.6))
     readonly property color shadow: Qt.rgba(0, 0, 0, dark ? 0.45 : 0.22)
 
     readonly property int barHeight: 44
@@ -61,8 +76,31 @@ Singleton {
     readonly property int popupRadius: 10
     readonly property int spacing: 6
 
-    readonly property string fontFamily: "Noto Sans"
+    // --- fonts ---
+    // macOS uses SF Pro, which is Apple-licensed: used when it is installed,
+    // never shipped. Otherwise Inter, its closest open relative, which the
+    // hearth wrapper hands over in HEARTH_FONT_DIR (nixpkgs `inter`) so it
+    // works without a system-wide install. Settings > Appearance > Font.
+    readonly property string fontDir: Quickshell.env("HEARTH_FONT_DIR") || ""
+    FontLoader {
+        id: interFile
+        source: root.fontDir ? "file://" + root.fontDir + "/Inter.ttc" : ""
+    }
+    readonly property var families: { void interFile.status; return Qt.fontFamilies(); }
+    function hasFamily(f) { return families.indexOf(f) >= 0; }
+    readonly property string sfFamily: hasFamily("SF Pro") ? "SF Pro" : hasFamily("SF Pro Text") ? "SF Pro Text" : ""
+    readonly property string interFamily: hasFamily("Inter") ? "Inter" : hasFamily("Inter Variable") ? "Inter Variable" : ""
+    readonly property string fontChoice: ap.font || "auto"   // "auto" | "sf" | "inter" | "noto"
+    readonly property string fontFamily: fontChoice === "noto" ? "Noto Sans"
+        : fontChoice === "inter" ? (interFamily || "Noto Sans")
+        : (sfFamily || interFamily || "Noto Sans")
+    // Large titles: the Display cut where there is one.
+    readonly property string displayFontFamily: fontFamily === "Inter" && hasFamily("Inter Display") ? "Inter Display"
+        : fontFamily.startsWith("SF Pro") && hasFamily("SF Pro Display") ? "SF Pro Display" : fontFamily
+    // 10 pt = 13.3 logical px, macOS's 13 pt menu text; the menu bar uses
+    // exactly 13 px like macOS.
     readonly property real fontSize: 10
+    readonly property real menuBarFontSize: 9.75
     readonly property real smallFontSize: 8.5
     readonly property string monoFamily: "Hack"
 }

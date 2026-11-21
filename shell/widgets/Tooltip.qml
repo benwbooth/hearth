@@ -37,17 +37,14 @@ PopupWindow {
         onTriggered: tip.visible = tip.hovered && tip.text !== ""
     }
 
-    Rectangle {
+    GlassFrame {
         id: frame
         anchors.fill: parent
         opacity: tip.visible ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: 120 } }
-        color: Theme.glassMenu
-        border.color: Theme.glassEdge
         radius: Theme.radius
         implicitWidth: col.implicitWidth + 16
         implicitHeight: col.implicitHeight + 10
-        transform: Translate { x: 0.001; y: 0.001 }
 
         Column {
             id: col

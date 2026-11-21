@@ -46,6 +46,11 @@
       kirigami.unwrapped qqc2-desktop-style sonnet kitemmodels
     ]);
 
+    # Inter: the shell font when Apple's SF Pro isn't installed (SF Pro is
+    # Apple-licensed, so never shipped). Theme.qml loads it from here with a
+    # FontLoader, so it works without a system-wide install.
+    fontDir = "${pkgs.inter}/share/fonts/truetype";
+
     hearth = pkgs.stdenvNoCC.mkDerivation {
       pname = "hearth";
       version = "0.1.0";
@@ -64,7 +69,8 @@
           --run 'cd "$HOME"' \
           --add-flags "-p $out/share/hearth/shell" \
           --prefix PATH : ${lib.makeBinPath runtimeDeps}:$out/share/hearth/helpers \
-          --prefix QML_IMPORT_PATH : ${qmlPath}
+          --prefix QML_IMPORT_PATH : ${qmlPath} \
+          --set-default HEARTH_FONT_DIR ${fontDir}
         # Talk to the running hearth whichever build started it: quickshell
         # matches instances by config path, so after a rebuild (or a bar
         # started from another build) `-p` finds nothing and every keybind
@@ -92,6 +98,7 @@
       packages = runtimeDeps ++ [ pkgs.kdePackages.qtdeclarative ];
       shellHook = ''
         export PATH="$PWD/helpers:$PATH"
+        export HEARTH_FONT_DIR=''${HEARTH_FONT_DIR:-${fontDir}}
       '';
     };
   };

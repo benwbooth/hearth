@@ -21,10 +21,13 @@ Singleton {
             mode: "dark",               // "dark" | "light" | "auto" (light 7:00-19:00)
             accent: "#3daee9",
             glass: 0.55,                // 0 = opaque .. 1 = most transparent
-            reduceTransparency: false
+            reduceTransparency: false,
+            font: "auto"                // "auto" (SF Pro if installed, else Inter) | "sf" | "inter" | "noto"
         },
         menubar: {
             autohide: false,
+            style: "glass",             // "glass" | "transparent" | "solid"
+            opacity: 0.32,              // glass strip opacity, 0.28 .. 0.95
             showAppName: true,
             logo: "nixos",              // "nixos" | "penguin" | "none"   (shell/assets/<name>.svg)
             clock24h: true,

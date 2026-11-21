@@ -257,7 +257,7 @@ Scope {
             Group {
                 SliderRow {
                     label: "Glass transparency"
-                    note: "How much of the blurred background shows through the menu bar, dock and menus."
+                    note: "How much of the blurred background shows through the dock and menus (the menu bar has its own under Menu Bar)."
                     key: "appearance.glass"
                     from: 0; to: 100; step: 5; scale: 100; suffix: "%"
                     enabled: !Settings.appearance.reduceTransparency
@@ -269,6 +269,15 @@ Scope {
                     key: "appearance.reduceTransparency"
                 }
             }
+            Group {
+                ChoiceRow {
+                    label: "Font"
+                    note: "Automatic uses Apple's SF Pro when it is installed, otherwise Inter (the closest free look-alike, built in). Now: " + Theme.fontFamily + "."
+                    key: "appearance.font"
+                    options: [{ value: "auto", label: "Automatic" }, { value: "sf", label: "SF Pro" },
+                              { value: "inter", label: "Inter" }, { value: "noto", label: "Noto Sans" }]
+                }
+            }
         }
     }
 
@@ -277,6 +286,22 @@ Scope {
         ColumnLayout {
             spacing: 14
             Group {
+                ChoiceRow {
+                    label: "Menu bar style"
+                    note: "Glass: a frosted strip. Transparent: items float on the wallpaper, like macOS 26. Solid: no see-through."
+                    key: "menubar.style"
+                    enabled: !Settings.appearance.reduceTransparency
+                    options: [{ value: "glass", label: "Glass" }, { value: "transparent", label: "Transparent" }, { value: "solid", label: "Solid" }]
+                }
+                Divider {}
+                SliderRow {
+                    label: "Glass opacity"
+                    note: "How strongly the glass menu bar is tinted. Lower shows more of the blurred wallpaper."
+                    key: "menubar.opacity"
+                    from: 28; to: 95; step: 1; scale: 100; suffix: "%"
+                    enabled: Theme.menuBarStyle === "glass"
+                }
+                Divider {}
                 SwitchRow { label: "Automatically hide and show the menu bar"; note: "Hidden until you move the pointer to the top edge."; key: "menubar.autohide" }
                 Divider {}
                 SwitchRow { label: "Show the app name"; note: "The bold name of the app you are using, next to the logo."; key: "menubar.showAppName" }
