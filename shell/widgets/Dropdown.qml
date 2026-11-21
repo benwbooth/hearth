@@ -12,7 +12,7 @@ MouseArea {
     property var options: []
     property var value
     property string placeholder: "Choose…"
-    property bool searchable: options.length > 12
+    property bool searchable: options.length > 15
     property int listWidth: Math.max(width, 260)
     signal picked(var value)
 
@@ -29,7 +29,7 @@ MouseArea {
         if (!host) return;
         const p = listComp.createObject(host, {});
         const pt = root.mapToItem(host, 0, root.height + 2);
-        p.x = Math.max(4, Math.min(pt.x, host.width - p.panelWidth - 4));
+        p.panelX = Math.max(4, Math.min(pt.x, host.width - p.panelWidth - 4));
         const below = host.height - pt.y - 8;
         if (below < Math.min(p.panelHeight, 200) && pt.y - root.height > below)
             p.panelY = Math.max(4, pt.y - root.height - 4 - p.panelHeight);
@@ -65,6 +65,7 @@ MouseArea {
             id: catcher
             anchors.fill: parent
             z: 10000
+            property real panelX: 0
             property real panelY: 0
             readonly property int panelWidth: root.listWidth
             readonly property int panelHeight: Math.min(360, list.contentHeight + (search.visible ? 44 : 8))
@@ -82,7 +83,7 @@ MouseArea {
 
             Rectangle {
                 id: panel
-                x: 0
+                x: catcher.panelX
                 y: catcher.panelY
                 width: catcher.panelWidth
                 height: catcher.panelHeight

@@ -17,6 +17,18 @@ indicators for everything the Plasma tray did, Settings and Help windows.
   `com.canonical.AppMenu.Registrar` (so Qt apps export their menus) and relays
   com.canonical.dbusmenu; the address comes from arbor IPC `Window.app_menu`.
 - Help: the ? in the menu bar, `hearth-ipc call help shortcuts` (Super+/).
+- arbor settings from the GUI (Settings > Displays, Keyboard, Keyboard
+  Shortcuts, Window Rules; the arbor config itself is a read-only nix-store
+  file): hearth writes `~/.config/hearth/arbor-{displays,keyboard,binds,rules}.kdl`
+  (checked with `arbor validate` on a temp file first), which
+  `arbor/config.kdl` includes optionally: displays before its output blocks
+  (arbor takes the first block per output), the rest after their defaults.
+  Displays apply over IPC at once, then a 15 s "Keep these settings?"
+  prompt reverts unless kept (`hearth-ipc call displays keep|revert`).
+- Hot corners (Settings > Hot Corners): invisible 1 px layer surfaces, only
+  in corners that have an action. Sleep & Power: hearth runs swayidle
+  itself under arbor with the chosen times (restarted on change); the power
+  button runs `hearth-ipc call power button`.
 
 - `nix run` / `hearth`: run the installed shell. `hearth-ipc call launcher toggle` etc.
 - `nix develop`, then `quickshell -p shell`: run from the checkout; QML hot-reloads on save.
