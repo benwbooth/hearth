@@ -42,8 +42,9 @@ ShellRoot {
     LockScreen {}
     Osd {}
     BtPairDialog {}
-    // FanzyZones is Hyprland Lua.
-    LazyLoader { active: Compositor.isHyprland; ZoneOverlay {} }
+    // FanzyZones: Hyprland Lua (hypr/fanzyzones.lua) or arbor's own zones
+    // (services/ArborZones.qml).
+    LazyLoader { active: Compositor.isHyprland || Compositor.isArbor; ZoneOverlay {} }
     Switcher {}
     Overview {}
     WallpaperInfo {}

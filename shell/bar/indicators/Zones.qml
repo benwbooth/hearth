@@ -12,7 +12,8 @@ import "../.."
 // preview: click a row to use it on this display, click a zone in a preview
 // to snap the focused window there. Layouts and settings live in
 // ~/.config/hearth/zones.json, shared with hypr/fanzyzones.lua, which this
-// drives through `FanzyZones.cmd(...)` dispatches. Custom layouts are made
+// drives through `FanzyZones.cmd(...)` dispatches under Hyprland; under arbor
+// services/ArborZones.qml hands the zones to arbor, which snaps windows itself. Custom layouts are made
 // with a simple columns x rows editor (relative widths/heights).
 Indicator {
     id: root
@@ -35,10 +36,9 @@ Indicator {
         return s && s.height > 0 ? s.width / s.height : 16 / 9;
     }
 
-    // FanzyZones is a Hyprland Lua module.
-    shown: Compositor.isHyprland && cfg !== null
+    shown: (Compositor.isHyprland || Compositor.isArbor) && cfg !== null
     tooltip: activeLayout ? "Zones: " + activeLayout.name : "Zones"
-    tooltipSub: "Scroll to change layout"
+    tooltipSub: "Scroll to change layout. Shift-drag a window or press Super+Ctrl+1…9 to snap it into a zone"
 
     readonly property string configPath: {
         const env = Quickshell.env("HEARTH_ZONES_CONFIG");
@@ -55,13 +55,15 @@ Indicator {
     // FanzyZones only exists under the Lua config, so no legacy fallback.
     function lua(expr) { Hyprland.dispatch(expr); }
     function useLayout(id) {
+        if (Compositor.isArbor) { ArborZones.setLayout(root.display, id); return; }
         lua(`FanzyZones.cmd("set_layout", ${Hypr.lit(root.display)}, ${Hypr.lit(id)})`);
     }
     function snapZone(layout, index) {
         // Snapping goes by the focused window's own display; make sure that
         // display shows this layout first.
         if (root.layoutFor(root.display) !== layout) useLayout(layout.id);
-        lua(`FanzyZones.cmd("snap", ${index + 1})`);
+        if (Compositor.isArbor) ArborZones.snap(index + 1);
+        else lua(`FanzyZones.cmd("snap", ${index + 1})`);
     }
     // Write zones.json, then have the Lua side re-read it.
     property bool reloadAfterSave: false
@@ -97,9 +99,10 @@ Indicator {
 
     onScrolled: delta => {
         if (!cfg || layouts.length === 0) return;
+        if (Compositor.isArbor) { ArborZones.setLayout(root.screenName, delta < 0 ? "next" : "prev"); return; }
         lua(`FanzyZones.cmd("set_layout", ${Hypr.lit(root.screenName)}, ${Hypr.lit(delta < 0 ? "next" : "prev")})`);
     }
-    onRightClicked: lua(`FanzyZones.cmd("toggle_overlay")`)
+    onRightClicked: Compositor.isArbor ? ArborZones.toggleOverlay() : lua(`FanzyZones.cmd("toggle_overlay")`)
 
     FileView {
         id: file
@@ -114,7 +117,8 @@ Indicator {
         onSaved: {
             if (root.reloadAfterSave) {
                 root.reloadAfterSave = false;
-                root.lua(`FanzyZones.cmd("reload")`);
+                // arbor: ArborZones watches the file and resends the zones.
+                if (Compositor.isHyprland) root.lua(`FanzyZones.cmd("reload")`);
             }
         }
     }
@@ -380,10 +384,12 @@ Indicator {
                 { t: "Snap only while holding Shift", k: "snap_mode", on: root.cfg.snap_mode !== "auto",
                   v: on => on ? "modifier" : "auto" },
                 { t: "Show zone overlay while dragging", k: "enable_zone_overlay", on: root.cfg.enable_zone_overlay !== false },
+            ].concat(Compositor.isArbor ? [] : [
+                // Hyprland only: arbor keeps its own dynamic workspaces.
                 { t: "Maximized / fullscreen windows get their own workspace", k: "macsimize_maximized",
                   on: root.cfg.macsimize_maximized !== false && root.cfg.macsimize_fullscreen !== false },
                 { t: "Dynamic workspaces", k: "dynamic_workspaces", on: root.cfg.dynamic_workspaces !== false },
-            ]
+            ])
             delegate: MenuItem {
                 required property var modelData
                 Layout.fillWidth: true

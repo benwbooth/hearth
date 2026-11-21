@@ -351,7 +351,7 @@ Scope {
             Group {
                 Repeater {
                     model: [
-                        { id: "media", label: "Now Playing" }, { id: "zones", label: "Window zones (Hyprland)" },
+                        { id: "media", label: "Now Playing" }, { id: "zones", label: "Window zones" },
                         { id: "network", label: "Network" }, { id: "rdp", label: "Remote desktop" },
                         { id: "camera", label: "Camera in use" }, { id: "printers", label: "Printers" },
                         { id: "drives", label: "Drives" }, { id: "weather", label: "Weather" },

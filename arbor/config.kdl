@@ -180,6 +180,20 @@ binds {
     // Super+Shift+PgDn) to bring it back there.
     Mod+Page_Down hotkey-overlay-title="Minimize window" { minimize-window; }
     Mod+Shift+Page_Down hotkey-overlay-title="Restore last minimized window" { restore-window; }
+    // Window zones (FancyZones; tray picker, ~/.config/hearth/zones.json):
+    // Super+Ctrl+N puts the window in zone N, Shift while dragging drops it
+    // into the zone under the pointer, Super+Ctrl+PgDn/PgUp switch layouts.
+    Mod+Ctrl+1 hotkey-overlay-title="Snap window into zone 1" { move-window-to-zone 1; }
+    Mod+Ctrl+2 hotkey-overlay-title="Snap window into zone 2" { move-window-to-zone 2; }
+    Mod+Ctrl+3 hotkey-overlay-title="Snap window into zone 3" { move-window-to-zone 3; }
+    Mod+Ctrl+4 hotkey-overlay-title="Snap window into zone 4" { move-window-to-zone 4; }
+    Mod+Ctrl+5 hotkey-overlay-title="Snap window into zone 5" { move-window-to-zone 5; }
+    Mod+Ctrl+6 hotkey-overlay-title="Snap window into zone 6" { move-window-to-zone 6; }
+    Mod+Ctrl+7 hotkey-overlay-title="Snap window into zone 7" { move-window-to-zone 7; }
+    Mod+Ctrl+8 hotkey-overlay-title="Snap window into zone 8" { move-window-to-zone 8; }
+    Mod+Ctrl+9 hotkey-overlay-title="Snap window into zone 9" { move-window-to-zone 9; }
+    Mod+Ctrl+Page_Down hotkey-overlay-title="Next zone layout" { spawn "hearth-ipc" "call" "zones" "nextLayout"; }
+    Mod+Ctrl+Page_Up hotkey-overlay-title="Previous zone layout" { spawn "hearth-ipc" "call" "zones" "prevLayout"; }
     // Tab groups: drop a window on the middle of a docked one to group them.
     Mod+Comma hotkey-overlay-title="Previous tab" { focus-tab-prev; }
     Mod+Period hotkey-overlay-title="Next tab" { focus-tab-next; }

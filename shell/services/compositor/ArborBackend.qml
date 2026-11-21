@@ -94,6 +94,9 @@ Scope {
     }
 
     signal customEvent(string data)
+    // arbor: a window drag that snaps into zones ({ output, area: [x, y, w, h],
+    // zone: index | null }), or null when it ended (services/ArborZones.qml).
+    signal zoneDrag(var drag)
 
     // --- state from events ---
 
@@ -174,6 +177,9 @@ Scope {
         case "WorkspaceActiveWindowChanged":
             root.wsList = root.wsList.map(w => w.id === d.workspace_id
                 ? Object.assign({}, w, { active_window_id: d.active_window_id }) : w);
+            break;
+        case "ZoneDragChanged":
+            root.zoneDrag(d.drag || null);
             break;
         case "WorkspaceUrgencyChanged":
             root.wsList = root.wsList.map(w => w.id === d.id ? Object.assign({}, w, { is_urgent: d.urgent }) : w);

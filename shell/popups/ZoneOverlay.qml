@@ -2,13 +2,15 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
-import Quickshell.Hyprland
 import "../widgets"
+import "../services"
 import ".."
 
 // FanzyZones drag overlay: the zones of the layout under the cursor, with
 // numbers, the one under the cursor highlighted. Hyprland's Lua can't draw,
-// so hypr/fanzyzones.lua tracks drags and sends socket2 `custom` events:
+// so hypr/fanzyzones.lua tracks drags and sends socket2 `custom` events
+// (under arbor, services/ArborZones.qml sends the same commands from arbor's
+// ZoneDragChanged events):
 //   fanzyzones show <monitor> <layout-id> <x> <y> <w> <h>   (work area, monitor-relative)
 //   fanzyzones hover <zone, 1-based; 0 = none>
 //   fanzyzones flash <monitor> <layout-id> <x> <y> <w> <h>  (layout switched: brief preview)
@@ -61,10 +63,17 @@ PanelWindow {
     }
 
     Connections {
-        target: Hyprland
-        function onRawEvent(event) {
-            if (event.name !== "custom" || !event.data.startsWith("fanzyzones ")) return;
-            const a = event.data.split(" ");
+        target: Compositor
+        function onCustomEvent(data) { win.command(data); }
+    }
+    Connections {
+        target: Compositor.isArbor ? ArborZones : null
+        ignoreUnknownSignals: true
+        function onOverlayCommand(data) { win.command("fanzyzones " + data); }
+    }
+    function command(data) {
+            if (!data.startsWith("fanzyzones ")) return;
+            const a = data.split(" ");
             switch (a[1]) {
             case "show":
             case "flash":
@@ -88,7 +97,6 @@ PanelWindow {
                 win.hover = 0;
                 break;
             }
-        }
     }
 
     Item {

@@ -64,10 +64,13 @@ Singleton {
 
     // Raised for Hyprland `custom` socket2 events (hl.dsp.event(...)).
     signal customEvent(string data)
+    // arbor: zone-snapping drags (see services/ArborZones.qml).
+    signal zoneDrag(var drag)
     Connections {
         target: root.backend
         ignoreUnknownSignals: true
         function onCustomEvent(data) { root.customEvent(data); }
+        function onZoneDrag(drag) { root.zoneDrag(drag); }
     }
 
     function screenFor(outputName) {
