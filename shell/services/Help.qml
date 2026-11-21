@@ -21,6 +21,8 @@ Singleton {
         { group: "Apps & Launcher", title: "Search apps, files and more", keys: "Super (tap), Alt+Space" },
         { group: "Apps & Launcher", title: "Open the Nth app in the Dock", keys: "Super+1 … Super+9" },
         { group: "Apps & Launcher", title: "Clipboard history", keys: "Super+V" },
+        { group: "Apps & Launcher", title: "Dock app options: hide, move to workspace, keep in Dock, open at login, force quit", keys: "Right-click an app in the Dock" },
+        { group: "Apps & Launcher", title: "Reorder or remove Dock apps", keys: "Drag an icon along the Dock, or out of it" },
         { group: "Windows", title: "Close window", keys: "Alt+F4" },
         { group: "Windows", title: "Force quit window", keys: "Super+Ctrl+Esc" },
         { group: "Windows", title: "Maximize window", keys: "Super+Page Up" },
