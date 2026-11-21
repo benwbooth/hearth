@@ -66,7 +66,13 @@ Singleton {
 
     // arbor binds parsed from the config.
     property var arborShortcuts: []
-    readonly property var shortcuts: Compositor.isArbor && arborShortcuts.length ? arborShortcuts : hyprShortcuts
+    // Built into arbor (its window switcher), so not in the config's binds.
+    readonly property var arborBuiltins: [
+        { group: "Windows", title: "Switch windows (hold Alt, press Tab again to go further)", keys: "Alt+Tab, Super+Tab" },
+        { group: "Windows", title: "Switch back the other way", keys: "Alt+Shift+Tab" },
+        { group: "Windows", title: "Switch between windows of the same app", keys: "Alt+`" }
+    ]
+    readonly property var shortcuts: Compositor.isArbor && arborShortcuts.length ? arborBuiltins.concat(arborShortcuts) : hyprShortcuts
 
     // Settings and actions the search can open or run.
     readonly property var actions: [

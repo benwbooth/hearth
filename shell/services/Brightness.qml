@@ -11,10 +11,11 @@ import Quickshell.Io
 // once at startup (and when asked to refresh) and keeps at most one write in
 // flight: dragging a slider only ever sends the latest value.
 //
-// Night light is the hyprsunset daemon (started by hyprland.lua), which
-// follows its own schedule in ~/.config/hypr/hyprsunset.conf (4500 K from
-// 19:00 to 07:00, like KDE's Night Color). The toggle and slider override
-// it live through `hyprctl hyprsunset`, until the next scheduled change.
+// Night light: 4500 K from 19:00 to 07:00, like KDE's Night Color.
+// Hyprland: the hyprsunset daemon keeps that schedule itself; the toggle and
+// slider override it live through `hyprctl hyprsunset`.
+// arbor: hearth runs it — gammastep holds the temperature (wlr gamma
+// control) while night light is on; the schedule timer below flips it.
 //
 // HEARTH_BRIGHTNESS_DRYRUN=1 logs DDC/backlight writes instead of sending them.
 Singleton {
@@ -256,10 +257,19 @@ Singleton {
     }
 
     function applyNightLight() {
+        if (Compositor.isArbor) {
+            // Restart with the new temperature (or stop).
+            gammastep.running = false;
+            gammastep.command = ["gammastep", "-P", "-O", String(root.temperature)];
+            gammastep.running = root.nightLight;
+            return;
+        }
         Quickshell.execDetached(root.nightLight
             ? ["hyprctl", "hyprsunset", "temperature", String(root.temperature)]
             : ["hyprctl", "hyprsunset", "identity"]);
     }
+    Process { id: gammastep }
+    Component.onCompleted: if (Compositor.isArbor) applyNightLight()
 
     Timer {
         id: tempDebounce
@@ -275,7 +285,7 @@ Singleton {
         property bool last: root.scheduledNight()
         onTriggered: {
             const now = root.scheduledNight();
-            if (now !== last) { last = now; root.nightLight = now; }
+            if (now !== last) { last = now; root.nightLight = now; if (Compositor.isArbor) root.applyNightLight(); }
         }
     }
 

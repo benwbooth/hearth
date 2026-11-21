@@ -32,6 +32,9 @@ output "DP-1" {
         sdr-brightness 670
         max-luminance 800
     }
+    // Adaptive sync (FreeSync) only while a game or video asks for it (see
+    // the window rule below): always-on can flicker on the desktop.
+    variable-refresh-rate on-demand=true
 }
 
 environment {
@@ -71,6 +74,12 @@ window-rule {
     geometry-corner-radius 10
     clip-to-geometry true
 }
+// Games get adaptive sync (Steam games, gamescope).
+window-rule {
+    match app-id=r#"^steam_app_"#
+    match app-id=r#"^gamescope$"#
+    variable-refresh-rate true
+}
 window-rule {
     match app-id=r#"^org\.kde\.polkit-kde-authentication-agent-1$"#
     match app-id=r#"^org\.kde\.kdialog$"#
@@ -97,8 +106,11 @@ screenshot-path "~/Pictures/Screenshots/Screenshot_%Y%m%d_%H%M%S.png"
 spawn-at-startup "hearth"
 spawn-at-startup "vicinae" "server"
 spawn-sh-at-startup "swaybg -m fill -i ~/.cache/hearth/wallpaper"
-// Night light like KDE Night Color: 4500 K from 19:00 to 07:00.
-spawn-at-startup "wlsunset" "-t" "4500" "-T" "6500" "-S" "07:00" "-s" "19:00"
+// Night light (4500 K from 19:00 to 07:00) is run by hearth: Settings >
+// Night Light, or the brightness menu.
+// X11 apps (Steam, older tools) scale themselves from Xft.dpi: 128 = 96 x
+// 4/3, the screen's scale (Plasma loads this at login).
+spawn-sh-at-startup "printf 'Xft.dpi: 128\\nXcursor.size: 32\\n' | xrdb -merge"
 // Lock after 10 minutes, screen off after 15, lock before sleep.
 spawn-sh-at-startup "swayidle -w timeout 600 'pidof hyprlock || hyprlock &' timeout 900 'arbor msg action power-off-monitors' resume 'arbor msg action power-on-monitors' before-sleep 'pidof hyprlock || hyprlock &' lock 'pidof hyprlock || hyprlock &'"
 // KWallet gets SDDM's password (as Plasma's startup does).

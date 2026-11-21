@@ -30,7 +30,7 @@
     runtimeDeps = with pkgs; [
       quickshell
       wl-clipboard vicinae
-      ddcutil hyprsunset
+      ddcutil hyprsunset gammastep
       udisks networkmanager
       curl jq libnotify xdg-utils pciutils cups
       wlogout hyprpaper swaynotificationcenter grim satty

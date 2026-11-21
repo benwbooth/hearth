@@ -544,10 +544,8 @@ Scope {
             Group {
                 Row_ {
                     label: "Night Light"
-                    note: Compositor.isHyprland ? `On by schedule from ${Brightness.nightStartHour}:00 to ${Brightness.nightEndHour}:00 (hyprsunset); this overrides it until the next change.`
-                                                : "Needs hyprsunset (Hyprland)."
+                    note: `Warmer colours in the evening: on automatically from ${Brightness.nightStartHour}:00 to ${Brightness.nightEndHour}:00. Switching it here lasts until the next scheduled change.`
                     Toggle {
-                        enabled: Compositor.isHyprland
                         checked: Brightness.nightLight
                         onToggled: c => Brightness.setNightLight(c)
                     }
@@ -557,7 +555,6 @@ Scope {
                     label: "Colour temperature"
                     ValueSlider {
                         implicitWidth: 300
-                        enabled: Compositor.isHyprland
                         from: Brightness.minTemperature
                         to: Brightness.maxTemperature
                         step: 100
