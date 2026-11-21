@@ -1179,6 +1179,13 @@ def cmd_export(args):
                 pass
     if j.get("shader") and os.path.isfile(j["shader"]):
         res["shader"] = copy(j["shader"], "shader")
+    else:
+        res["shader"] = ""
+        for old in glob.glob(os.path.join(sysdir, "shader.*")):
+            try:
+                os.unlink(old)
+            except OSError:
+                pass
     tmp = os.path.join(sysdir, ".wallpaper.json.tmp")
     with open(tmp, "w") as f:
         json.dump(res, f, indent=2)
