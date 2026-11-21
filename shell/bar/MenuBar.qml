@@ -283,7 +283,9 @@ PanelWindow {
                 DevApps { iconSize: Theme.menuBarIconSize; implicitWidth: Theme.menuBarItemWidth }
                 Tray {}
                 HelpMenu {}
+                SpotlightButton {}
                 ControlCenter {}
+                VoiceButton {}
                 Clock {}
             }
         }
