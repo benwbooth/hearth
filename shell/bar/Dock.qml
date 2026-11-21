@@ -447,11 +447,13 @@ PanelWindow {
                 id: slab
                 anchors.fill: parent
                 radius: Math.round(dockWin.thickness * 0.38)
-                // Hyprland blurs behind the dock; arbor can't for this wide
-                // surface (see arbor/hearth-layer-rules.kdl), so more tint.
-                tint: Compositor.isHyprland ? Theme.glassDock : Theme.glassDockSolid
-                // arbor doesn't blur the dock (see above), so its own shadow
-                // is fine there too.
+                // Hyprland blurs behind the dock, arbor draws real glass
+                // under the slab (services/RealGlass.qml); arbor's layer-rule
+                // blur can't (it would cover the whole wide surface, see
+                // arbor/hearth-layer-rules.kdl), so more tint without it.
+                tint: Compositor.isHyprland || RealGlass.active ? Theme.glassDock : Theme.glassDockSolid
+                // Nothing blurs the dock's whole surface, so its own shadow
+                // is fine everywhere.
                 shadow: true
                 shadowBlur: 30
                 shadowY: 8

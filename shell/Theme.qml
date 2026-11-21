@@ -85,10 +85,15 @@ Singleton {
     // Hyprland's ignore_alpha (0.3) so the blur never spreads into them.
     readonly property real shadowOpacity: dark ? 0.27 : 0.17
     // hearth draws glass shadows itself where the compositor blurs only the
-    // opaque pixels (Hyprland's ignore_alpha). arbor blurs a layer's whole
-    // rectangle, so a drawn shadow would get a blurred box around it: there
-    // the compositor draws the shadow (arbor/hearth-layer-rules.kdl).
-    readonly property bool glassShadows: Compositor.isHyprland
+    // opaque pixels (Hyprland's ignore_alpha) or draws real glass under the
+    // panes only (arbor's glass, services/RealGlass.qml). arbor's layer-rule
+    // blur covers a layer's whole rectangle, so without real glass a drawn
+    // shadow would get a blurred box around it: there the compositor draws
+    // the shadow (arbor/hearth-layer-rules.kdl).
+    readonly property bool glassShadows: Compositor.isHyprland || RealGlass.active
+    // How much of a pane's tint the shell still draws over arbor's real
+    // glass (which tints, saturates and lights the backdrop itself).
+    readonly property real realGlassTint: 0.55
     readonly property real menuShadowBlur: 26
     readonly property real menuShadowY: 9
 

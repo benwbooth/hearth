@@ -269,6 +269,23 @@ Scope {
                     note: "Solid menu bar, dock and menus."
                     key: "appearance.reduceTransparency"
                 }
+                Divider {}
+                SwitchRow {
+                    label: "Real glass (arbor)"
+                    note: RealGlass.supported
+                        ? "arbor draws the dock, menus and tooltips as real liquid glass: what's behind bends at their edges, like macOS 26."
+                        : "Needs the arbor compositor with liquid glass; elsewhere the shell's own glass look is used."
+                    key: "appearance.realGlass"
+                    enabled: !Settings.appearance.reduceTransparency
+                }
+                Divider {}
+                SliderRow {
+                    label: "Glass strength"
+                    note: "How strongly real glass bends, blurs and lights what's behind it."
+                    key: "appearance.realGlassStrength"
+                    from: 0; to: 100; step: 5; scale: 100; suffix: "%"
+                    enabled: RealGlass.supported && Settings.appearance.realGlass !== false && !Settings.appearance.reduceTransparency
+                }
             }
             Group {
                 ChoiceRow {

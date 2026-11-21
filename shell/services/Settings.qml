@@ -22,6 +22,8 @@ Singleton {
             accent: "#3daee9",
             glass: 0.55,                // 0 = opaque .. 1 = most transparent
             reduceTransparency: false,
+            realGlass: true,            // arbor: the compositor draws refracting liquid glass under panes
+            realGlassStrength: 1.0,     // 0..1: refraction, blur, rim and vibrancy together
             font: "auto",               // "auto" (SF Pro if installed, else Inter) | "sf" | "inter" | "noto"
             cursor: "macos"             // "macos" (apple-cursor's macOS theme, if installed) | "breeze"
         },

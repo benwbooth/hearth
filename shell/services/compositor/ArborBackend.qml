@@ -198,6 +198,54 @@ Scope {
         onTriggered: { stream.connected = false; stream.connected = true; }
     }
 
+    // --- liquid glass (arbor's SetGlass, services/RealGlass.qml) ---
+    // A persistent connection for SetGlass requests (sent up to once per
+    // frame per window, so no socket per request). The first request after
+    // connecting is an empty probe: arbor builds without glass reply an
+    // error (unknown request), which turns the feature off.
+    property var glassSupported: undefined
+    // Bumped on every (re)connect: RealGlass resends all shapes.
+    property int glassEpoch: 0
+    property bool glassProbing: false
+    Socket {
+        id: glassSock
+        path: root.socketPath
+        connected: root.socketPath !== ""
+        onConnectionStateChanged: {
+            if (connected) {
+                root.glassProbing = true;
+                write('{"SetGlass":{"namespace":"hearth-probe","shapes":[]}}\n');
+                flush();
+            } else if (root.socketPath !== "") {
+                glassReconnect.start();
+            }
+        }
+        parser: SplitParser {
+            onRead: line => {
+                let r = null;
+                try { r = JSON.parse(line); } catch (e) { return; }
+                if (root.glassProbing) {
+                    root.glassProbing = false;
+                    root.glassSupported = r.Ok !== undefined;
+                    root.glassEpoch++;
+                } else if (r.Err !== undefined) {
+                    console.warn("arbor SetGlass failed:", r.Err);
+                }
+            }
+        }
+    }
+    Timer {
+        id: glassReconnect
+        interval: 2000
+        onTriggered: { glassSock.connected = false; glassSock.connected = true; }
+    }
+    function setGlass(req) {
+        if (!glassSock.connected || root.glassSupported !== true) return false;
+        glassSock.write(JSON.stringify({ SetGlass: req }) + "\n");
+        glassSock.flush();
+        return true;
+    }
+
     // --- actions ---
 
     Component {
