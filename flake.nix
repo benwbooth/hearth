@@ -36,6 +36,11 @@
       systemd procps coreutils gnugrep gawk util-linux iproute2
       swayidle
       python
+      # Wallpaper engine (helpers/hearth-wallpaper, desktop/Background.qml):
+      # Wallpaper Engine projects, macOS .heic dynamic desktops, video
+      # posters, Shadertoy compiles (qsb), API keys in the Secret Service.
+      linux-wallpaperengine libheif.bin ffmpeg-headless
+      kdePackages.qtshadertools libsecret
     ];
 
     # The `kde` platform theme picks the org.kde.desktop Controls style, which
@@ -43,7 +48,12 @@
     # (Hyprland) nothing does, so controls fail to load without this.
     qmlPath = lib.makeSearchPath "lib/qt-6/qml" (with pkgs.kdePackages; [
       kirigami.unwrapped qqc2-desktop-style sonnet kitemmodels
+      qtmultimedia
     ]);
+    # QtMultimedia's FFmpeg backend (video wallpapers, VA-API decoding).
+    pluginPath = "${pkgs.kdePackages.qtmultimedia}/lib/qt-6/plugins";
+    # GNOME's light/dark wallpaper pairs, listed under Dynamic.
+    backgroundDirs = "${pkgs.gnome-backgrounds}/share/gnome-background-properties";
 
     # Inter: the shell font when Apple's SF Pro isn't installed (SF Pro is
     # Apple-licensed, so never shipped). Theme.qml loads it from here with a
@@ -69,6 +79,8 @@
           --add-flags "-p $out/share/hearth/shell" \
           --prefix PATH : ${lib.makeBinPath runtimeDeps}:$out/share/hearth/helpers \
           --prefix QML_IMPORT_PATH : ${qmlPath} \
+          --prefix QT_PLUGIN_PATH : ${pluginPath} \
+          --set-default HEARTH_BACKGROUND_DIRS ${backgroundDirs} \
           --set-default HEARTH_FONT_DIR ${fontDir} \
           --set-default HEARTH_XKB_RULES ${pkgs.xkeyboard_config}/share/X11/xkb/rules/evdev.lst
         # Talk to the running hearth whichever build started it: quickshell
@@ -99,6 +111,9 @@
       shellHook = ''
         export PATH="$PWD/helpers:$PATH"
         export HEARTH_FONT_DIR=''${HEARTH_FONT_DIR:-${fontDir}}
+        export QML_IMPORT_PATH=${qmlPath}''${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}
+        export QT_PLUGIN_PATH=${pluginPath}''${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}
+        export HEARTH_BACKGROUND_DIRS=''${HEARTH_BACKGROUND_DIRS:-${backgroundDirs}}
       '';
     };
   };

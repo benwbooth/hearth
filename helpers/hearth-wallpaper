@@ -12,13 +12,13 @@ array) on stdout; errors print {"error": "..."} and exit 1.
   hearth-wallpaper crop SRC W H OUT
   hearth-wallpaper dynamic PATH --dir CACHE [--index N] [--lat L --lon L]
   hearth-wallpaper scan-dynamic DIR...
-  hearth-wallpaper scan-we DIR...
+  hearth-wallpaper scan-we [--steam] [DIR...]   --steam: find Steam libraries too
   hearth-wallpaper scan-media DIR...          videos and pictures (for the grid)
   hearth-wallpaper scan-folder DIR [--recursive]
   hearth-wallpaper poster VIDEO OUT
   hearth-wallpaper shader SRC OUT              Shadertoy mainImage() -> .qsb
   hearth-wallpaper secret get|set|delete NAME  (set reads the value on stdin)
-  hearth-wallpaper export JSONFILE [--system DIR]
+  hearth-wallpaper export JSONFILE [--data JSON] [--system DIR]
 """
 
 import base64
@@ -882,10 +882,37 @@ def cmd_scan_dynamic(args):
 
 # ---------------------------------------------------------------- Wallpaper Engine
 
+def steam_libraries():
+    """Steam library roots: the default install plus libraryfolders.vdf."""
+    roots = []
+    for base in ("~/.local/share/Steam", "~/.steam/steam", "~/.var/app/com.valvesoftware.Steam/data/Steam"):
+        base = os.path.realpath(os.path.expanduser(base))
+        if os.path.isdir(base) and base not in roots:
+            roots.append(base)
+            try:
+                vdf = open(os.path.join(base, "steamapps", "libraryfolders.vdf"), encoding="utf-8", errors="replace").read()
+                for m in re.findall(r'"path"\s+"([^"]+)"', vdf):
+                    m = os.path.realpath(m.replace("\\\\", "/"))
+                    if os.path.isdir(m) and m not in roots:
+                        roots.append(m)
+            except OSError:
+                pass
+    return roots
+
+
 def cmd_scan_we(args):
     res = []
     seen = set()
-    for d in args:
+    assets = ""
+    dirs = [a for a in args if a != "--steam"]
+    if "--steam" in args:
+        for lib in steam_libraries():
+            we = os.path.join(lib, "steamapps", "common", "wallpaper_engine")
+            if os.path.isdir(os.path.join(we, "assets")) and not assets:
+                assets = os.path.join(we, "assets")
+            dirs += [os.path.join(we, "projects", "myprojects"), os.path.join(lib, "steamapps", "workshop", "content", "431960"),
+                     os.path.join(we, "projects", "defaultprojects")]
+    for d in dirs:
         d = os.path.expanduser(d)
         if not os.path.isdir(d):
             continue
@@ -911,7 +938,7 @@ def cmd_scan_we(args):
                 "workshop": os.path.basename(proj).isdigit(),
                 "rating": j.get("contentrating") or "", "tags": j.get("tags") or [],
             })
-    out(res)
+    out({"assets": assets, "projects": res})
 
 
 # ---------------------------------------------------------------- media
@@ -1087,7 +1114,14 @@ def cmd_export(args):
     sysdir = "/var/lib/hearth/wallpaper"
     if "--system" in args:
         sysdir = args[args.index("--system") + 1]
-    j = json.load(open(src))
+    if "--data" in args:
+        j = json.loads(args[args.index("--data") + 1])
+        os.makedirs(os.path.dirname(src), exist_ok=True)
+        with open(src + ".tmp", "w") as f:
+            json.dump(j, f, indent=2)
+        os.replace(src + ".tmp", src)
+    else:
+        j = json.load(open(src))
     status = {"system": "off"}
     if j.get("lockScreen") is False:
         out(status)

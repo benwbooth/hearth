@@ -87,6 +87,32 @@ Singleton {
             ignoreSecrets: true,        // skip what password managers mark secret
             ignoreApps: [],             // app ids: copies made in them aren't kept
             clearOnLogout: false        // forget the history (not pins) when you log out
+        },
+        // Wallpaper (services/Wallpaper.qml, drawn by desktop/Background.qml).
+        // displays: output name or "*" (all) -> what it shows:
+        //   { type: "potd", source: "bing" } | { type: "image", path }
+        //   { type: "folder", path, interval (min), shuffle, recursive }
+        //   { type: "dynamic", path, index } | { type: "video", path }
+        //   { type: "shader", path ("builtin:aurora" or a .frag/.glsl) }
+        //   { type: "we", path (Wallpaper Engine project dir) }
+        wallpaper: {
+            displays: { "*": { type: "potd", source: "bing" } },
+            fit: "fill",                // "fill" | "fit" | "center" | "tile"
+            smartCrop: true,            // fill: crop around the interesting part (libvips attention)
+            stillOnly: false,           // never animate: videos, shaders and Wallpaper Engine show a still
+            fps: 30,                    // shaders and Wallpaper Engine
+            shaderScale: 0.5,           // shaders render at this fraction of the screen's pixels
+            pauseCovered: true,         // pause animation on a screen covered by windows
+            pauseFullscreen: true,      // pause everywhere while any app is full screen (games)
+            pauseBattery: true,
+            pauseIdle: true,            // pause once the screen locks or turns off when idle
+            weAudio: false,             // Wallpaper Engine sounds
+            weVolume: 15,
+            lockScreen: true,           // copy it for the lock and login screens
+            sources: {},                // per source options: { interval (min), query, ... }
+            folders: [],                // slideshow folders: [{ path, interval, shuffle, recursive }]
+            added: [],                  // pictures/videos/shaders/dynamic sets added by hand: [{ type, path }]
+            extraDirs: []               // more folders to look in for videos, shaders and dynamic sets
         }
     })
 
@@ -133,6 +159,7 @@ Singleton {
     readonly property var hotCorners: { void root.data; return Object.assign({}, defaults.hotCorners, data.hotCorners || {}); }
     readonly property var power: { void root.data; return Object.assign({}, defaults.power, data.power || {}); }
     readonly property var clipboard: { void root.data; return Object.assign({}, defaults.clipboard, data.clipboard || {}); }
+    readonly property var wallpaper: { void root.data; return Object.assign({}, defaults.wallpaper, data.wallpaper || {}); }
 
     // pane: "" (last used) or a Settings window pane id ("dock", ...).
     signal openRequested(string pane)

@@ -7,6 +7,7 @@
 import QtQuick
 import Quickshell
 import "bar"
+import "desktop"
 import "popups"
 import "services"
 
@@ -15,6 +16,12 @@ ShellRoot {
     // Touch singletons that own IPC targets (or start daemons): singletons
     // are created on first use, so e.g. `session` (Super+L) wouldn't exist.
     Component.onCompleted: { void Swaync; void Session; void AppMenu; void Help; void Mouse; void Power; void Keyboard; void Displays; void WindowRules; void Binds; void Clipboard; }
+    // The wallpaper (services/Wallpaper.qml): hearth's own background
+    // surface on every screen.
+    Variants {
+        model: Quickshell.screens
+        Background {}
+    }
     // Layout "mac" (default): menu bar + dock; "panel": the classic bottom
     // panel. Settings > Layout, or settings.json `layout`.
     Variants {
