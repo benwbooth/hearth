@@ -171,6 +171,7 @@ Singleton {
     function groupFor(action) {
         const a = action.toLowerCase();
         if (/screenshot/.test(a)) return "Screenshots";
+        if (/^zoom-|reduce-motion/.test(a)) return "Accessibility";
         if (/workspace|overview|monitor/.test(a)) return "Workspaces & Overview";
         if (/spawn|launch/.test(a)) return "Apps & Launcher";
         if (/quit|power|lock|session|hotkey|inhibit/.test(a)) return "System";

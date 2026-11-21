@@ -188,6 +188,13 @@ binds {
     Mod+Shift+Minus { set-window-height "-5%"; }
     Mod+Shift+Equal { set-window-height "+5%"; }
 
+    // Screen zoom (magnifier) around the pointer, like KWin's Zoom.
+    Mod+Alt+Equal hotkey-overlay-title="Zoom screen in (magnifier)" { zoom-in; }
+    Mod+Alt+Minus hotkey-overlay-title="Zoom screen out (magnifier)" { zoom-out; }
+    Mod+Alt+0 hotkey-overlay-title="Turn screen zoom off" { zoom-reset; }
+    Mod+Alt+WheelScrollUp cooldown-ms=50 hotkey-overlay-title="Zoom screen in (magnifier)" { zoom-in; }
+    Mod+Alt+WheelScrollDown cooldown-ms=50 hotkey-overlay-title="Zoom screen out (magnifier)" { zoom-out; }
+
     // Camera: zoom out to see how windows are docked (small ones become app
     // tiles), zoom back in, frame one window. Super+pinch zooms too.
     Mod+Z hotkey-overlay-title="Zoom out (camera)" { camera-zoom-out; }

@@ -142,6 +142,10 @@ Singleton {
         { value: "spawn \"hearth-ipc\" \"call\" \"screenshot\" \"all\"", label: "Screenshot of all screens", group: "Screenshots" },
         { value: "spawn \"hearth-ipc\" \"call\" \"screenshot\" \"activeWindow\"", label: "Screenshot of the active window", group: "Screenshots" },
         { value: "spawn \"hearth-ipc\" \"call\" \"screenshot\" \"record\"", label: "Record the screen (again: stop)", group: "Screenshots" },
+        { value: "zoom-in", label: "Zoom the screen in (magnifier)", group: "Accessibility" },
+        { value: "zoom-out", label: "Zoom the screen out", group: "Accessibility" },
+        { value: "zoom-reset", label: "Turn screen zoom off", group: "Accessibility" },
+        { value: "toggle-reduce-motion", label: "Reduce motion (animations off) on/off", group: "Accessibility" },
         { value: "screenshot", label: "arbor's quick region screenshot (to the clipboard)", group: "Screenshots" },
         { value: "screenshot-screen", label: "arbor's quick screen screenshot", group: "Screenshots" },
         { value: "screenshot-window", label: "arbor's quick window screenshot", group: "Screenshots" },
@@ -159,6 +163,7 @@ Singleton {
         if (/screenshot/.test(a)) return "Screenshots";
         if (/workspace|overview|monitor|camera/.test(a)) return "Workspaces & Overview";
         if (/wpctl|playerctl|brightness|volume/.test(a)) return "Sound, Media & Brightness";
+        if (/^zoom-|reduce-motion/.test(a)) return "Accessibility";
         if (/session|quit|power|lock|hotkey|inhibit|help|settings/.test(a)) return "System";
         if (/spawn|launch/.test(a)) return "Apps & Launcher";
         return "Windows";

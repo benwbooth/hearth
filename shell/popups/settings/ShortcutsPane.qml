@@ -16,7 +16,7 @@ ColumnLayout {
     property string query: ""
     // A pending change that clashes with another shortcut.
     property var clash: null      // { entry, combo, other }
-    readonly property var groupOrder: ["Apps & Launcher", "Windows", "Workspaces & Overview", "Screenshots", "Sound, Media & Brightness", "System"]
+    readonly property var groupOrder: ["Apps & Launcher", "Windows", "Workspaces & Overview", "Screenshots", "Sound, Media & Brightness", "Accessibility", "System"]
     readonly property var shown: {
         const q = pane.query.trim().toLowerCase();
         const words = q ? q.split(/\s+/) : [];
