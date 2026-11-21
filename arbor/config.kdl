@@ -114,7 +114,11 @@ screenshot-path "~/Pictures/Screenshots/Screenshot_%Y%m%d_%H%M%S.png"
 // Startup. arbor also starts xwayland-satellite on demand for X11 apps.
 spawn-at-startup "hearth"
 spawn-at-startup "vicinae" "server"
-spawn-sh-at-startup "swaybg -m fill -i ~/.cache/hearth/wallpaper"
+// The wallpaper is drawn by hearth itself (a background-layer surface per
+// screen, cross-faded; Settings > Wallpaper), so there's no swaybg. Until
+// hearth is up (about a second at login) the screen is black; if a
+// swaybg is still running from an older config, hearth stops it once its
+// own wallpaper is on screen.
 // "Set as wallpaper" from apps goes to hearth's wallpaper.
 portal {
     wallpaper-command "hearth-ipc" "call" "wallpaper" "setImage"

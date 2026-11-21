@@ -56,6 +56,43 @@ indicators for everything the Plasma tray did, Settings and Help windows.
   `screenshot-overlay` and `screenshot-editor` targets script the open
   overlay / window.
 
+- Wallpaper (Settings > Wallpaper, `services/Wallpaper.qml`,
+  `desktop/Background.qml`, `helpers/hearth-wallpaper`): hearth draws the
+  wallpaper itself on a background-layer surface per screen and cross-fades
+  every change (no swaybg/hyprpaper). Sources: Bing, NASA APOD, Wikimedia
+  Commons, NASA Earth Observatory, NOAA live Earth (GOES), Windows
+  Spotlight, Google Earth View, Simon Stålenhag, David Revoy, Wallhaven
+  (SFW unless you add a key), Reddit (often refused without sign-in),
+  Unsplash/Pexels/Flickr with your own free key (kept by `secret-tool` in
+  KWallet, else `~/.config/hearth/wallpaper-keys.json`, 0600), each with a
+  refresh interval and a history (Previous/Next). Also a picture, folder
+  slideshows (interval, shuffle, subfolders), dynamic sets (GNOME timed
+  XML and light/dark pairs, macOS `.heic` dynamic desktops via libheif:
+  `h24`, `solar` and light/dark metadata, or a folder with
+  `dynamic.json`: `{"frames": [{"file": "a.jpg", "time": "06:30", "fade":
+  30}]}` or `{"light": "l.jpg", "dark": "d.jpg"}`), videos (QtMultimedia,
+  VA-API decoding with zero-copy textures), GLSL shaders (4 built in,
+  `shaders/wallpaper/*.frag`; add any Shadertoy `mainImage` shader without
+  `iChannel` textures, compiled with qsb), and Wallpaper Engine projects
+  (Steam libraries found from `libraryfolders.vdf`, played by
+  `linux-wallpaperengine` on its own layer surface). Fill uses a libvips
+  "attention" smart crop sized to each screen. Animation pauses on a screen
+  covered by windows, everywhere while an app is full screen, when idle or
+  locked, on battery (Wallpaper Engine gets SIGSTOP); "Still image only"
+  turns it all off. IPC: `hearth-ipc call wallpaper next|previous|info|state`,
+  `set '{"type":"shader","path":"builtin:aurora"}' [OUTPUT]`.
+- Wallpaper for the lock and login screens: `~/.cache/hearth/wallpaper` is
+  always the current still (a link), `~/.cache/hearth/wallpaper.json`
+  describes it (`type`: potd/image/folder/dynamic/video/shader/we, `kind`,
+  `path` still, `video`, `shader` (.qsb), `wallpaperEngine`, `fit`,
+  `title`, `copyright`, `link`, `source`, `outputs` per screen). With "Show
+  on the lock screen and login screen" on, the still (and a video under 1
+  GB) are copied to `/var/lib/hearth/wallpaper/` (`wallpaper.<ext>`,
+  `video.<ext>`, `wallpaper.json` pointing at the copies) for the greeter.
+  NixOS creates that directory with
+  `systemd.tmpfiles.rules = [ "d /var/lib/hearth 0755 root root -" "d /var/lib/hearth/wallpaper 2775 root users -" ];`
+  hearth skips the copy while it's missing.
+
 - `nix run` / `hearth`: run the installed shell. `hearth-ipc call launcher toggle` etc.
 - `nix develop`, then `quickshell -p shell`: run from the checkout; QML hot-reloads on save.
 - `scripts/test-session.sh start|run|shot|stop NAME`: headless KWin -> nested Hyprland

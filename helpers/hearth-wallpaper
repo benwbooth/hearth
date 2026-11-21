@@ -555,6 +555,13 @@ def cmd_crop(args):
     if p.returncode != 0:
         raise Fail("crop failed: " + p.stderr.strip())
     os.replace(part, dest)
+    # Slideshows crop every picture once: keep the newest 200 crops.
+    crops = sorted(glob.glob(os.path.join(os.path.dirname(dest), "*.jpg")), key=os.path.getmtime, reverse=True)
+    for old in crops[200:]:
+        try:
+            os.unlink(old)
+        except OSError:
+            pass
     out({"file": dest, "width": w, "height": h})
 
 
