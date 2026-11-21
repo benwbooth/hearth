@@ -77,6 +77,16 @@ Singleton {
             sleep: 0,
             lockOnSleep: true,          // ask for the password after sleep
             powerButton: "menu"         // "menu" | "sleep" | "lock" | "poweroff" | "displayoff" | "nothing"
+        },
+        // Clipboard history (services/Clipboard.qml: cliphist + wl-paste).
+        clipboard: {
+            enabled: true,
+            historySize: 100,           // items kept (pinned ones don't count)
+            images: true,               // keep copied pictures too
+            primary: false,             // also keep selected text (middle-click paste)
+            ignoreSecrets: true,        // skip what password managers mark secret
+            ignoreApps: [],             // app ids: copies made in them aren't kept
+            clearOnLogout: false        // forget the history (not pins) when you log out
         }
     })
 
@@ -122,6 +132,7 @@ Singleton {
     readonly property var notifications: { void root.data; return Object.assign({}, defaults.notifications, data.notifications || {}); }
     readonly property var hotCorners: { void root.data; return Object.assign({}, defaults.hotCorners, data.hotCorners || {}); }
     readonly property var power: { void root.data; return Object.assign({}, defaults.power, data.power || {}); }
+    readonly property var clipboard: { void root.data; return Object.assign({}, defaults.clipboard, data.clipboard || {}); }
 
     // pane: "" (last used) or a Settings window pane id ("dock", ...).
     signal openRequested(string pane)

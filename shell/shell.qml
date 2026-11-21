@@ -14,7 +14,7 @@ ShellRoot {
     // Touch the singleton so swaync starts with the shell.
     // Touch singletons that own IPC targets (or start daemons): singletons
     // are created on first use, so e.g. `session` (Super+L) wouldn't exist.
-    Component.onCompleted: { void Swaync; void Session; void AppMenu; void Help; void Mouse; void Power; void Keyboard; void Displays; void WindowRules; void Binds; }
+    Component.onCompleted: { void Swaync; void Session; void AppMenu; void Help; void Mouse; void Power; void Keyboard; void Displays; void WindowRules; void Binds; void Clipboard; }
     // Layout "mac" (default): menu bar + dock; "panel": the classic bottom
     // panel. Settings > Layout, or settings.json `layout`.
     Variants {

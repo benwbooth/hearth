@@ -138,7 +138,10 @@ binds {
     // Launcher and clipboard (Vicinae).
     Alt+Space hotkey-overlay-title="Launcher" { spawn "vicinae" "toggle"; }
     Alt+F1 { spawn "vicinae" "toggle"; }
-    Mod+V hotkey-overlay-title="Clipboard history" { spawn "vicinae" "cmd" "launch" "clipboard:history"; }
+    // Clipboard history: hearth's popover (like Klipper); Vicinae's own
+    // history stays on Super+Shift+V.
+    Mod+V hotkey-overlay-title="Clipboard history" { spawn "hearth-ipc" "call" "clipboard" "toggle"; }
+    Mod+Shift+V hotkey-overlay-title="Clipboard history (Vicinae)" { spawn "vicinae" "cmd" "launch" "clipboard:history"; }
     Mod+Return hotkey-overlay-title="Terminal" { spawn "konsole"; }
     Mod+E hotkey-overlay-title="Files" { spawn "dolphin"; }
 

@@ -17,6 +17,10 @@ indicators for everything the Plasma tray did, Settings and Help windows.
   `com.canonical.AppMenu.Registrar` (so Qt apps export their menus) and relays
   com.canonical.dbusmenu; the address comes from arbor IPC `Window.app_menu`.
 - Help: the ? in the menu bar, `hearth-ipc call help shortcuts` (Super+/).
+- Clipboard history (like Klipper): the clipboard icon in the menu bar or
+  Super+V (`hearth-ipc call clipboard toggle`); kept by cliphist, fed by
+  `wl-paste --watch helpers/hearth-clipboard store` (needs the compositor's
+  data-control protocol). Settings > Clipboard. Vicinae's is on Super+Shift+V.
 - arbor settings from the GUI (Settings > Displays, Keyboard, Keyboard
   Shortcuts, Window Rules; the arbor config itself is a read-only nix-store
   file): hearth writes `~/.config/hearth/arbor-{displays,keyboard,binds,rules}.kdl`

@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+# hearth's clipboard history (shell/services/Clipboard.qml), kept by
+# cliphist in two databases: the history (trimmed to the last N items) and
+# the pinned items (never trimmed).
+#
+#   wl-paste --watch hearth-clipboard store   store the new clipboard
+#   hearth-clipboard list                     pinned, then history (TSV)
+#   hearth-clipboard copy  h|p ID [FMT]       put an item on the clipboard
+#   hearth-clipboard decode h|p ID            print an item's full content
+#   hearth-clipboard delete h|p ID
+#   hearth-clipboard pin ID | unpin ID        move between history and pins
+#   hearth-clipboard wipe                     clear the history (pins stay)
+#
+# Environment (set by Clipboard.qml): HEARTH_CLIP_DB, HEARTH_CLIP_PINS,
+# HEARTH_CLIP_THUMBS (image cache dir), HEARTH_CLIP_MAX (history size),
+# HEARTH_CLIP_SECRETS (1 = skip what password managers mark secret),
+# HEARTH_CLIP_IGNORE (app ids, one per line: skip copies made while one of
+# them is focused), HEARTH_CLIP_PRIMARY (1 = this watcher is the selection).
+set -u
+hist=${HEARTH_CLIP_DB:?}
+pins=${HEARTH_CLIP_PINS:?}
+thumbs=${HEARTH_CLIP_THUMBS:-${XDG_CACHE_HOME:-$HOME/.cache}/hearth/clipboard-thumbs}
+mkdir -p "$(dirname "$hist")" "$(dirname "$pins")" "$thumbs"
+
+# -config-path /dev/null: never pick up ~/.config/cliphist/config.
+ch() { local db=$1; shift; cliphist -config-path /dev/null -db-path "$db" "$@"; }
+dbof() { [[ $1 == p ]] && echo "$pins" || echo "$hist"; }
+
+focused_app() {
+    if [[ -n ${ARBOR_SOCKET:-}${NIRI_SOCKET:-} ]]; then
+        arbor msg --json focused-window 2>/dev/null | jq -r '.app_id // empty' 2>/dev/null
+    elif [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]]; then
+        hyprctl activewindow -j 2>/dev/null | jq -r '.class // empty' 2>/dev/null
+    fi
+}
+
+case ${1:-} in
+store)
+    state=${CLIPBOARD_STATE:-data}
+    sel=(); [[ ${HEARTH_CLIP_PRIMARY:-0} == 1 ]] && sel=(--primary)
+    # wl-paste says "sensitive" for x-kde-passwordManagerHint (KeePassXC,
+    # KDE apps); also look ourselves in case an older wl-paste doesn't.
+    if [[ $state == data ]] && wl-paste "${sel[@]}" --list-types 2>/dev/null | grep -qx 'x-kde-passwordManagerHint'; then
+        state=sensitive
+    fi
+    # "clear"/"nil" (cleared or empty clipboard) keep the history as it is:
+    # cliphist would delete the newest item, which isn't the secret it
+    # never stored.
+    case $state in
+    data) ;;
+    sensitive) [[ ${HEARTH_CLIP_SECRETS:-1} == 1 ]] && { cat >/dev/null; exit 0; } ;;
+    *) cat >/dev/null; exit 0 ;;
+    esac
+    if [[ -n ${HEARTH_CLIP_IGNORE:-} ]]; then
+        app=$(focused_app)
+        if [[ -n $app ]] && grep -qixF -- "$app" <<<"$HEARTH_CLIP_IGNORE"; then
+            cat >/dev/null; exit 0
+        fi
+    fi
+    CLIPBOARD_STATE=data ch "$hist" -max-items "${HEARTH_CLIP_MAX:-100}" store
+    echo stored
+    ;;
+list)
+    # kind \t id \t preview \t thumbnail (images only)
+    declare -A keep=()
+    for kind in p h; do
+        db=$(dbof $kind)
+        [[ -e $db ]] || continue
+        while IFS=$'\t' read -r id prev; do
+            thumb=""
+            if [[ $prev =~ ^\[\[\ binary\ data\ .*\ ([a-z]+)\ [0-9]+x[0-9]+\ \]\]$ ]]; then
+                thumb=$thumbs/$kind-$id.${BASH_REMATCH[1]}
+                [[ -s $thumb ]] || ch "$db" decode "$id" >"$thumb" 2>/dev/null
+                keep[$thumb]=1
+            fi
+            printf '%s\t%s\t%s\t%s\n' "$kind" "$id" "$prev" "$thumb"
+        done < <(ch "$db" -preview-width 400 list 2>/dev/null)
+    done
+    # Drop thumbnails of items that are gone.
+    shopt -s nullglob
+    for f in "$thumbs"/*; do [[ -n ${keep[$f]:-} ]] || rm -f "$f"; done
+    ;;
+copy)
+    db=$(dbof "$2")
+    if [[ -n ${4:-} ]]; then
+        ch "$db" decode "$3" | wl-copy --type "image/$4" >/dev/null 2>&1
+    else
+        ch "$db" decode "$3" | wl-copy >/dev/null 2>&1
+    fi
+    ;;
+decode)
+    ch "$(dbof "$2")" decode "$3"
+    ;;
+delete)
+    printf '%s\t\n' "$3" | ch "$(dbof "$2")" delete
+    rm -f "$thumbs/$2-$3".*
+    ;;
+pin)
+    ch "$hist" decode "$2" | CLIPBOARD_STATE=data ch "$pins" -max-items 100000 store \
+        && printf '%s\t\n' "$2" | ch "$hist" delete
+    rm -f "$thumbs/h-$2".*
+    ;;
+unpin)
+    ch "$pins" decode "$2" | CLIPBOARD_STATE=data ch "$hist" -max-items "${HEARTH_CLIP_MAX:-100}" store \
+        && printf '%s\t\n' "$2" | ch "$pins" delete
+    rm -f "$thumbs/p-$2".*
+    ;;
+wipe)
+    [[ -e $hist ]] && ch "$hist" wipe
+    rm -f "$thumbs"/h-*
+    ;;
+*)
+    sed -n '2,/^set -u/p' "$0" | sed '$d; s/^# \{0,1\}//' >&2
+    exit 2
+    ;;
+esac

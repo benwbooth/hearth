@@ -26,7 +26,7 @@
     # Everything the shell's widgets shell out to.
     runtimeDeps = with pkgs; [
       quickshell
-      wl-clipboard vicinae
+      wl-clipboard cliphist vicinae
       ddcutil hyprsunset gammastep
       udisks networkmanager
       curl jq libnotify xdg-utils pciutils cups

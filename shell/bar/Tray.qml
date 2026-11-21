@@ -22,6 +22,7 @@ Row {
     }
 
     Media { ipcName: "media" }
+    Clipboard { ipcName: "clipboard" }
     Zones { ipcName: "zones" }
     Network { ipcName: "network" }
     Rdp { ipcName: "rdp" }
