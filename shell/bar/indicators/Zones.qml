@@ -52,6 +52,34 @@ Indicator {
         const id = (cfg.display_layouts || {})[mon] || cfg.default_layout;
         return layouts.find(l => l.id === id) || layouts[0] || null;
     }
+    readonly property var activeLayoutHere: layoutFor(display)
+    // The picker's order: this display's layout first, then most recently used.
+    readonly property var orderedLayouts: {
+        const mru = (cfg && cfg.layout_mru) || [];
+        const rank = l => l === activeLayoutHere ? -1 : (mru.indexOf(l.id) < 0 ? 1000 + layouts.indexOf(l) : mru.indexOf(l.id));
+        return layouts.slice().sort((a, b) => rank(a) - rank(b));
+    }
+    // The editor window saved a layout: store it and use it on that display,
+    // in one write of zones.json (ArborZones / the Lua module re-read it).
+    Connections {
+        target: root.ipcHere ? ZoneEditor : null
+        function onSaved(layout, displayName) {
+            const out = displayName || root.display;
+            const c = Object.assign({}, root.cfg);
+            const ls = root.layouts.slice();
+            const i = ls.findIndex(l => l.id === layout.id);
+            if (i >= 0) ls[i] = layout; else ls.push(layout);
+            c.layouts = ls;
+            c.display_layouts = Object.assign({}, c.display_layouts || {});
+            c.display_layouts[out] = layout.id;
+            c.layout_mru = [layout.id].concat((c.layout_mru || []).filter(id => id !== layout.id));
+            root.cfg = c;
+            root.save();
+            if (Compositor.isArbor) flashLater.restart();
+        }
+    }
+    Timer { id: flashLater; interval: 400; onTriggered: ArborZones.flash(root.display) }
+
     // FanzyZones only exists under the Lua config, so no legacy fallback.
     function lua(expr) { Hyprland.dispatch(expr); }
     function useLayout(id) {
@@ -219,70 +247,18 @@ Indicator {
         }
     }
 
-    component Field: Rectangle {
-        id: fld
-        property alias text: input.text
-        property string placeholder: ""
-        implicitHeight: 26
-        implicitWidth: 140
-        radius: Theme.radius
-        color: Theme.bg
-        border.color: input.activeFocus ? Theme.accent : Theme.border
-        TextInput {
-            id: input
-            anchors.fill: parent
-            anchors.leftMargin: 8
-            anchors.rightMargin: 8
-            verticalAlignment: TextInput.AlignVCenter
-            color: Theme.fg
-            font.family: Theme.fontFamily
-            font.pointSize: Theme.fontSize
-            renderType: Text.NativeRendering
-            selectByMouse: true
-            clip: true
-        }
-        Label {
-            anchors.fill: input
-            anchors.leftMargin: 8
-            text: fld.placeholder
-            color: Theme.fgDim
-            visible: input.text === "" && !input.activeFocus
-        }
-    }
-
     popupContent: ColumnLayout {
         id: menu
         spacing: 4
         implicitWidth: 480
 
-        // null: list view; otherwise the layout being edited
-        // ({ id, name, cols, rows } with weights as text).
-        property var editing: null
-
-        function weights(s) {
-            const w = String(s).split(/[\s,:\/]+/).map(Number).filter(n => n > 0);
-            return w.length ? w : [1];
-        }
-        function gridZones(cols, rows) {
-            const cw = weights(cols), rw = weights(rows);
-            const cs = cw.reduce((a, b) => a + b, 0), rs = rw.reduce((a, b) => a + b, 0);
-            const zones = [];
-            let y = 0;
-            for (let r = 0; r < rw.length; r++) {
-                let x = 0;
-                for (let c = 0; c < cw.length; c++) {
-                    zones.push({ name: "Zone " + (zones.length + 1), x: x / cs, y: y / rs,
-                                 width: cw[c] / cs, height: rw[r] / rs });
-                    x += cw[c];
-                }
-                y += rw[r];
-            }
-            return zones;
-        }
+        // Opens the layout editor window (popups/ZoneEditorWindow.qml); a
+        // built-in layout is edited as a copy.
         function startEdit(l) {
-            if (l) editing = { id: l.id, name: l.name, cols: l.grid ? l.grid.cols : "1 1", rows: l.grid ? l.grid.rows : "1" };
-            else editing = { id: "", name: "", cols: "1 2 1", rows: "1" };
+            ZoneEditor.edit(l, root.display);
+            if (root.menuPopup) root.menuPopup.close();
         }
+        readonly property bool editing: false
 
         // Header: title and the display being configured.
         RowLayout {
@@ -290,7 +266,7 @@ Indicator {
             Layout.bottomMargin: 4
             spacing: 6
             Label {
-                text: menu.editing ? (menu.editing.id ? "Edit layout" : "New layout") : "Zones"
+                text: "Zones"
                 font.bold: true
                 Layout.fillWidth: true
             }
@@ -328,7 +304,7 @@ Indicator {
             readonly property real cardWidth: (width - columnSpacing * (columns - 1)) / columns
 
             Repeater {
-                model: menu.editing ? [] : root.layouts
+                model: menu.editing ? [] : root.orderedLayouts
                 delegate: MouseArea {
                     id: card
                     required property var modelData
@@ -387,10 +363,12 @@ Indicator {
                         anchors.top: parent.top
                         anchors.margins: 4
                         spacing: 2
-                        visible: !card.modelData.is_built_in && card.containsMouse
+                        visible: card.containsMouse
                         Repeater {
-                            model: [{ i: "document-edit", t: "Edit", f: () => menu.startEdit(card.modelData) },
-                                    { i: "edit-delete", t: "Delete", f: () => root.deleteLayout(card.modelData.id) }]
+                            model: card.modelData.is_built_in
+                                ? [{ i: "document-edit", t: "Customize a copy of", f: () => menu.startEdit(card.modelData) }]
+                                : [{ i: "document-edit", t: "Edit", f: () => menu.startEdit(card.modelData) },
+                                   { i: "edit-delete", t: "Delete", f: () => root.deleteLayout(card.modelData.id) }]
                             delegate: Rectangle {
                                 required property var modelData
                                 width: 22
@@ -469,67 +447,13 @@ Indicator {
             text: "New custom layout…"
             onTriggered: menu.startEdit(null)
         }
-
-        // ---- Editor: columns x rows with relative sizes ----
-        GridLayout {
-            visible: menu.editing !== null
+        MenuItem {
+            visible: !menu.editing && root.activeLayoutHere !== null
             Layout.fillWidth: true
-            columns: 2
-            columnSpacing: 10
-            rowSpacing: 6
-            Label { text: "Name" }
-            Field {
-                id: nameField
-                Layout.fillWidth: true
-                placeholder: "My layout"
-                text: menu.editing ? menu.editing.name : ""
-            }
-            Label { text: "Columns" }
-            Field {
-                id: colsField
-                Layout.fillWidth: true
-                placeholder: "relative widths, e.g. 1 2 1"
-                text: menu.editing ? menu.editing.cols : ""
-            }
-            Label { text: "Rows" }
-            Field {
-                id: rowsField
-                Layout.fillWidth: true
-                placeholder: "relative heights, e.g. 1 1"
-                text: menu.editing ? menu.editing.rows : ""
-            }
-        }
-        Diagram {
-            visible: menu.editing !== null
-            Layout.alignment: Qt.AlignHCenter
-            Layout.topMargin: 4
-            Layout.preferredHeight: 110
-            Layout.preferredWidth: Math.min(420, Math.round(110 * root.screenAspect))
-            clickable: false
-            layout: menu.editing ? { zones: menu.gridZones(colsField.text, rowsField.text) } : null
-        }
-        RowLayout {
-            visible: menu.editing !== null
-            Layout.fillWidth: true
-            Layout.topMargin: 4
-            Item { Layout.fillWidth: true }
-            Pill {
-                text: "Cancel"
-                onClicked: menu.editing = null
-            }
-            Pill {
-                text: "Save"
-                selected: true
-                onClicked: {
-                    const name = nameField.text.trim() || "Custom layout";
-                    const id = menu.editing.id
-                        || "user." + name.toLowerCase().replace(/[^a-z0-9]+/g, "-") + "-" + Date.now().toString(36);
-                    root.saveLayout({ id: id, name: name, is_built_in: false,
-                                      grid: { cols: colsField.text, rows: rowsField.text },
-                                      zones: menu.gridZones(colsField.text, rowsField.text) });
-                    menu.editing = null;
-                }
-            }
+            icon: "document-edit"
+            text: root.activeLayoutHere && !root.activeLayoutHere.is_built_in
+                ? "Edit “" + root.activeLayoutHere.name + "”…" : "Customize the active layout (as a copy)…"
+            onTriggered: menu.startEdit(root.activeLayoutHere)
         }
     }
 }

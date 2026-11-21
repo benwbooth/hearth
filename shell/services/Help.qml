@@ -94,6 +94,7 @@ Singleton {
         { title: "Window zones: next zone layout (the tray's zones picker lists and edits them)", keys: "Super+Ctrl+PgDn", run: () => ArborZones.setLayout("", "next") },
         { title: "Window zones: previous zone layout", keys: "Super+Ctrl+PgUp", run: () => ArborZones.setLayout("", "prev") },
         { title: "Window zones: show the zones of this display", run: () => ArborZones.toggleOverlay() },
+        { title: "Window zones: make or edit a zone layout (drag zones, resize by edges and corners, split, fill gaps, grid, snapping, undo)", run: () => ZoneEditor.edit(null, "") },
         { title: "Take a screenshot: region, window, screen or all screens (Spectacle)", keys: "Print", run: () => Screenshots.overlayRequested("") },
         { title: "Screenshot of the whole screen", keys: "Shift+Print", run: () => Screenshots.captureScreen() },
         { title: "Screenshot of the active window", keys: "Super+Print, Alt+Print", run: () => Screenshots.captureActiveWindow() },

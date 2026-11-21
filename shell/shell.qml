@@ -50,6 +50,7 @@ ShellRoot {
     WallpaperInfo {}
     Screenshot {}
     ScreenshotEditor {}
+    ZoneEditorWindow {}
     SettingsWindow {}
     HotCorners {}
     DisplayConfirm {}
