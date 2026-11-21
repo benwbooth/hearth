@@ -26,17 +26,22 @@ PanelWindow {
     readonly property int appCount: TaskGroups.groups.length + (cfg.showRecents ? TaskGroups.recentGroups.length : 0)
     readonly property int fitSize: Math.floor(((vertical ? height : width) - 60 - 2 * 17) / Math.max(1, appCount)) - 10
     readonly property int iconSize: Math.max(20, Math.min(128, cfg.size, fitSize))
-    readonly property real cell: iconSize + 10
-    readonly property real sepLen: 17
-    readonly property real pad: 6
-    readonly property real thickness: iconSize + 18
-    readonly property real margin: 4
+    // macOS 26 proportions (README "Look"): icons ~17% apart (macOS icon
+    // art has its own margin, most Linux icons fill their square), a slab
+    // a third of an icon thicker than the icons with the running dots in
+    // its lower padding, corners ~38% of its thickness, floating 4 pt off
+    // the screen edge.
+    readonly property real cell: iconSize + Math.round(iconSize * 0.17)
+    readonly property real sepLen: Math.round(iconSize * 0.36)
+    readonly property real pad: Math.round(iconSize * 0.12)
+    readonly property real thickness: iconSize + Math.round(iconSize / 3)
+    readonly property real margin: Math.round(4 * Theme.pt)
     readonly property real maxZoom: cfg.magnify ? Math.max(1, cfg.magnifySize / iconSize) : 1
     readonly property real extra: iconSize * (maxZoom - 1)
     // Room above the icons for the app-name label (drawn inside this
     // surface, so hovering never maps or unmaps popup windows).
     // Side docks put it beside the icons, so they need the label's width.
-    readonly property real labelSpace: vertical ? 300 : 54
+    readonly property real labelSpace: vertical ? 300 : 64
     readonly property real winThickness: margin + thickness + extra + 14 + labelSpace
     readonly property bool autohide: cfg.autohide
 
@@ -81,11 +86,18 @@ PanelWindow {
         interval: Math.max(0, dockWin.cfg.autohideDelay)
         onTriggered: if (!hover.hovered) dockWin.held = false
     }
+    // macOS waits `autohide-delay` (0.5 s by default) after the pointer
+    // reaches the edge before the Dock comes out (Settings > Dock).
+    Timer {
+        id: showTimer
+        interval: Math.max(0, Number(dockWin.cfg.showDelay) || 0)
+        onTriggered: if (edgeHover.hovered || hover.hovered) { dockWin.held = true; hideTimer.stop(); }
+    }
     Connections {
         target: hover
         function onHoveredChanged() {
-            if (hover.hovered) { dockWin.held = true; hideTimer.stop(); }
-            else hideTimer.restart();
+            if (hover.hovered) { if (dockWin.shown) { dockWin.held = true; hideTimer.stop(); } }
+            else { showTimer.stop(); hideTimer.restart(); }
         }
     }
     onPreviewsChanged: if (previews === 0 && !hover.hovered) hideTimer.restart()
@@ -123,7 +135,14 @@ PanelWindow {
         y: dockWin.vertical ? frameMask.y : parent.height - 2
         width: dockWin.vertical ? 2 : frameMask.width
         height: dockWin.vertical ? frameMask.height : 2
-        HoverHandler { onHoveredChanged: if (hovered) { dockWin.held = true; hideTimer.stop(); } }
+        HoverHandler {
+            id: edgeHover
+            onHoveredChanged: {
+                if (!hovered) { showTimer.stop(); return; }
+                if (showTimer.interval <= 0 || dockWin.shown) { dockWin.held = true; hideTimer.stop(); }
+                else showTimer.restart();
+            }
+        }
     }
 
     // --- model ---
@@ -180,7 +199,10 @@ PanelWindow {
     // them every frame, and a 260 ms slide chasing that moving target made
     // the icons wobble as the dock grew and shrank.
     readonly property bool slide: !tracking && (magLevel === 0 || dragKey !== "")
-    Behavior on magLevel { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+    // macOS grows the icons quickly when the pointer arrives and settles
+    // them a little slower when it leaves; in between they follow the
+    // pointer with no lag.
+    Behavior on magLevel { NumberAnimation { duration: dockWin.tracking ? 150 : 230; easing.type: Easing.OutQuad } }
     readonly property var geo: {
         const z = [], pos = [], lens = [];
         const range = cell * 2.6;
@@ -306,19 +328,22 @@ PanelWindow {
         id: body
         anchors.fill: parent
         // Slide out across the edge when hidden.
-        readonly property real hideOffset: dockWin.shown ? 0 : dockWin.margin + dockWin.thickness + 8
+        // Out past the slab's shadow too.
+        readonly property real hideOffset: dockWin.shown ? 0 : dockWin.margin + dockWin.thickness + 24
+        // macOS: decelerates in, accelerates out (Settings > Dock > Animation).
+        readonly property int slideEase: dockWin.shown ? Easing.OutCubic : Easing.InCubic
         transform: Translate {
             x: (dockWin.edge === "left" ? -body.hideOffset : dockWin.edge === "right" ? body.hideOffset : 0) + 0.001
             y: (dockWin.edge === "bottom" ? body.hideOffset : 0) + 0.001
-            Behavior on x { NumberAnimation { duration: dockWin.cfg.animationMs; easing.type: Easing.OutCubic } }
-            Behavior on y { NumberAnimation { duration: dockWin.cfg.animationMs; easing.type: Easing.OutCubic } }
+            Behavior on x { NumberAnimation { duration: dockWin.cfg.animationMs; easing.type: body.slideEase } }
+            Behavior on y { NumberAnimation { duration: dockWin.cfg.animationMs; easing.type: body.slideEase } }
         }
 
         // One app-name label (macOS-style) that glides to the icon under the
         // pointer, instead of a popup window per icon: those mapped and
         // unmapped one after another as the pointer crossed the dock, which
         // read as flicker.
-        Rectangle {
+        Item {
             id: nameLabel
             readonly property int idx: dockWin.hotIndex
             readonly property bool want: idx >= 0 && hover.hovered && !dockWin.menuOpen
@@ -341,21 +366,28 @@ PanelWindow {
             readonly property real text_ext: idx >= 0 ? dockWin.iconSize * ((dockWin.geo.zoom[idx] ?? 1) - 1) : ext
             onTcxChanged: cx = tcx
             onText_extChanged: ext = text_ext
-            Behavior on cx { enabled: nameLabel.opacity > 0.01; NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
+            // macOS moves the label straight to the next icon; a very short
+            // glide keeps it from flickering between neighbours.
+            Behavior on cx { enabled: nameLabel.opacity > 0.01; NumberAnimation { duration: 70; easing.type: Easing.OutCubic } }
             visible: opacity > 0
             opacity: want ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 140 } }
+            Behavior on opacity { NumberAnimation { duration: nameLabel.want ? Theme.labelFadeMs : 90 } }
             readonly property real maxText: dockWin.vertical ? dockWin.labelSpace - 44 : 420
-            width: labelCol.implicitWidth + 20
-            height: labelCol.implicitHeight + 8
-            radius: Math.min(height / 2, 12)
-            readonly property real inner: dockWin.margin + dockWin.thickness + ext + 8
+            // A glass capsule (macOS 26), 13 pt text.
+            width: labelCol.implicitWidth + 2 * Math.round(9 * Theme.pt)
+            height: labelCol.implicitHeight + Math.round(7 * Theme.pt)
+            readonly property real inner: dockWin.margin + dockWin.thickness + ext + Math.round(8 * Theme.pt)
             x: Math.round(!dockWin.vertical ? Math.max(4, Math.min(dockWin.width - width - 4, cx - width / 2))
                           : dockWin.edge === "left" ? inner : dockWin.width - inner - width)
             y: Math.round(dockWin.vertical ? Math.max(4, Math.min(dockWin.height - height - 4, cx - height / 2))
                           : dockWin.height - inner - height)
-            color: Qt.rgba(Theme.bgRaised.r, Theme.bgRaised.g, Theme.bgRaised.b, 0.92)
-            border.color: Theme.border
+            GlassFrame {
+                anchors.fill: parent
+                radius: nameLabel.sub !== "" ? Math.round(10 * Theme.pt) : height / 2
+                tint: Theme.glassTip
+                shadowBlur: 12
+                shadowY: 3
+            }
             Column {
                 id: labelCol
                 anchors.centerIn: parent
@@ -365,6 +397,8 @@ PanelWindow {
                     width: Math.min(implicitWidth, nameLabel.maxText)
                     elide: Text.ElideRight
                     text: nameLabel.text
+                    font.pointSize: Theme.menuFontSize
+                    font.letterSpacing: Theme.menuTracking
                 }
                 Label {
                     visible: nameLabel.sub !== ""
@@ -372,8 +406,8 @@ PanelWindow {
                     width: Math.min(implicitWidth, nameLabel.maxText)
                     elide: Text.ElideRight
                     text: nameLabel.sub
-                    color: Theme.fgDim
-                    font.pointSize: Theme.smallFontSize
+                    color: Theme.fgSecondary
+                    font.pointSize: Theme.menuSmallFontSize
                 }
             }
         }
@@ -396,42 +430,18 @@ PanelWindow {
             Behavior on y { enabled: !dockWin.tracking && dockWin.vertical; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
             Behavior on height { enabled: !dockWin.tracking && dockWin.vertical; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
 
-            // Soft shadow.
-            Rectangle {
-                anchors.fill: parent
-                anchors.margins: -3
-                anchors.topMargin: dockWin.vertical ? -3 : -1
-                radius: slab.radius + 3
-                color: "transparent"
-                border.width: 3
-                border.color: Qt.rgba(0, 0, 0, Theme.dark ? 0.18 : 0.08)
-            }
-            Rectangle {
+            // The liquid-glass slab (GlassFrame): clearer than menus, with
+            // the specular rim, edge lensing and a wide soft shadow.
+            GlassFrame {
                 id: slab
                 anchors.fill: parent
-                radius: Math.min(22, dockWin.thickness * 0.32)
-                // Hyprland blurs behind the dock; niri can't for this wide
+                radius: Math.round(dockWin.thickness * 0.38)
+                // Hyprland blurs behind the dock; arbor can't for this wide
                 // surface (see arbor/hearth-layer-rules.kdl), so more tint.
-                color: Compositor.isHyprland ? Theme.glassDock : Theme.glassDockSolid
-                border.color: Theme.glassEdge
-                border.width: 1
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: 1
-                    radius: parent.radius - 1
-                    color: "transparent"
-                    border.color: Theme.glassRim
-                    border.width: 1
-                }
-                // Top highlight, like light catching the glass edge.
-                Rectangle {
-                    visible: !dockWin.vertical
-                    x: parent.radius
-                    y: 1
-                    width: parent.width - parent.radius * 2
-                    height: 1
-                    color: Theme.dark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(1, 1, 1, 0.9)
-                }
+                tint: Compositor.isHyprland ? Theme.glassDock : Theme.glassDockSolid
+                shadowBlur: 30
+                shadowY: 8
+                glow: Theme.glassGlow * 1.25
             }
         }
 
@@ -514,11 +524,12 @@ PanelWindow {
                 Component {
                     id: sepComp
                     Item {
+                        // macOS: a hairline across ~55% of the slab.
                         Rectangle {
                             anchors.centerIn: parent
-                            width: dockWin.vertical ? parent.width - 22 : 1
-                            height: dockWin.vertical ? 1 : parent.height - 22
-                            color: Theme.dark ? Qt.rgba(1, 1, 1, 0.38) : Qt.rgba(0, 0, 0, 0.28)
+                            width: dockWin.vertical ? Math.round(parent.width * 0.55) : 1
+                            height: dockWin.vertical ? 1 : Math.round(parent.height * 0.55)
+                            color: Theme.dark ? Qt.rgba(1, 1, 1, 0.30) : Qt.rgba(0, 0, 0, 0.22)
                         }
                     }
                 }

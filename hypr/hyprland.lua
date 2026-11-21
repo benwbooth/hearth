@@ -69,8 +69,9 @@ hl.config({
         rounding = 6,
         shadow = { enabled = true, range = 12, render_power = 3, color = "rgba(00000066)" },
         -- Frosted glass under hearth's menu bar, dock and menus (layer
-        -- rules below): a wide, soft blur with a little vibrancy.
-        blur = { enabled = true, size = 8, passes = 3, vibrancy = 0.2, noise = 0.02, popups = true, xray = false },
+        -- rules below): a wide, soft blur with vibrancy (saturation boost)
+        -- like macOS 26 Liquid Glass; hearth adds tint, rim and lensing.
+        blur = { enabled = true, size = 8, passes = 3, vibrancy = 0.35, vibrancy_darkness = 0.15, noise = 0.015, popups = true, xray = false },
     },
     animations = { enabled = true },
     dwindle = { preserve_split = true },

@@ -57,8 +57,17 @@ MouseArea {
 
     function launch() {
         if (entry) entry.execute();
-        if (dock) bounce.restart();
+        if (dock) { launching = true; bounces = 0; launchTimeout.restart(); if (!bounce.running) bounce.start(); }
     }
+    // Launch bounce, macOS style: hops of half an icon, ~0.6 s each, until
+    // the app's first window shows (at most ~6 s); an app asking for
+    // attention (urgent) bounces three times.
+    property bool launching: false
+    property int bounces: 0
+    property int bounceLimit: 10
+    onRunningChanged: if (running) launching = false
+    onUrgentChanged: if (urgent && dock && !bounce.running) { bounces = 0; bounceLimit = 3; bounce.start(); }
+    Timer { id: launchTimeout; interval: 6000; onTriggered: task.launching = false }
 
     // Left click: launch, focus, minimize, or cycle through windows.
     function trigger() {
@@ -189,9 +198,17 @@ MouseArea {
     QtObject { id: bounceOffset; property real value: 0 }
     SequentialAnimation {
         id: bounce
-        loops: 2
-        NumberAnimation { target: bounceOffset; property: "value"; to: task.iconSize * 0.4; duration: 220; easing.type: Easing.OutQuad }
-        NumberAnimation { target: bounceOffset; property: "value"; to: 0; duration: 220; easing.type: Easing.InQuad }
+        loops: Animation.Infinite
+        // Up decelerating, down accelerating: a ball under gravity.
+        NumberAnimation { target: bounceOffset; property: "value"; to: task.iconSize * 0.5; duration: 300; easing.type: Easing.OutQuad }
+        NumberAnimation { target: bounceOffset; property: "value"; to: 0; duration: 300; easing.type: Easing.InQuad }
+        ScriptAction {
+            script: {
+                task.bounces++;
+                const more = task.launching ? task.bounces < task.bounceLimit : (task.urgent && task.bounces < task.bounceLimit);
+                if (!more) { bounce.stop(); bounceOffset.value = 0; task.bounceLimit = 10; }
+            }
+        }
     }
 
     // Running indicator. Panel: one dash per window along the bottom.
@@ -214,12 +231,13 @@ MouseArea {
     }
     Rectangle {
         visible: opacity > 0
-        opacity: task.dock && task.running && task.showIndicator ? 0.85 : 0
+        // macOS: a 4 pt dot, black in light mode, white in dark.
+        opacity: task.dock && task.running && task.showIndicator ? (Theme.dark ? 0.85 : 0.7) : 0
         Behavior on opacity { NumberAnimation { duration: 250 } }
-        width: 5
-        height: 5
-        radius: 2.5
-        color: task.urgent ? Theme.warn : Theme.fg
+        width: Math.round(4 * Theme.pt)
+        height: width
+        radius: width / 2
+        color: task.urgent ? Theme.warn : Theme.dark ? "#ffffff" : "#000000"
         x: !task.vertical ? (parent.width - width) / 2
          : task.edge === "left" ? 2 : parent.width - width - 2
         y: task.vertical ? (parent.height - height) / 2 : parent.height - height - 2

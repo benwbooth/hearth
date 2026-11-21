@@ -79,7 +79,7 @@ void main() {
     // Hairline outline just outside the edge (separates glass from
     // similar backgrounds), then the drop shadow.
     float line = outline * (smoothstep(-aa, 0.0, d) - smoothstep(0.9, 0.9 + aa, d));
-    vec4 o = vec4(0.0, 0.0, 0.0, line * (dark > 0.5 ? 0.55 : 0.18));
+    vec4 o = vec4(0.0, 0.0, 0.0, line * (dark > 0.5 ? 0.38 : 0.14));
     float sd = sdPane(lp - vec2(0.0, shadowY), half_, radius);
     float s = 1.0 - smoothstep(-shadowBlur * 0.35, shadowBlur, sd);
     s = s * s * shadowColor.a;

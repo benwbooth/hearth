@@ -61,7 +61,7 @@ Singleton {
     // Liquid glass "regular" (menus, popovers, tooltips) and the clearer
     // Dock glass. Tahoe's menus are fairly dense; the Dock is clearer.
     readonly property color glassMenu: glassColor(dark ? Qt.rgba(0.15, 0.155, 0.17, 1) : Qt.rgba(0.975, 0.975, 0.98, 1), 0.52)
-    readonly property color glassDock: glassColor(dark ? Qt.rgba(0.17, 0.18, 0.20, 1) : Qt.rgba(0.98, 0.98, 0.99, 1), 0.36)
+    readonly property color glassDock: glassColor(dark ? Qt.rgba(0.21, 0.22, 0.25, 1) : Qt.rgba(0.98, 0.98, 0.99, 1), 0.26)
     readonly property color glassDockSolid: glassColor(dark ? Qt.rgba(0.16, 0.17, 0.19, 1) : Qt.rgba(0.97, 0.97, 0.98, 1), 0.85)
     readonly property color glassTip: glassColor(dark ? Qt.rgba(0.16, 0.165, 0.18, 1) : Qt.rgba(0.98, 0.98, 0.985, 1), 0.78)
     // The thin bright rim and darker outline that make glass read as a pane.

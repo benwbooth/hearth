@@ -26,8 +26,8 @@ Singleton {
         },
         menubar: {
             autohide: false,
-            style: "glass",             // "glass" | "transparent" | "solid"
-            opacity: 0.32,              // glass strip opacity, 0.28 .. 0.95
+            style: "transparent",       // "transparent" (macOS 26 default) | "glass" | "solid"
+            opacity: 0.36,              // glass strip opacity, 0.32 .. 0.95
             showSysMonitor: true,       // treetop's CPU/memory/GPU graphs
             showAppName: true,
             logo: "nixos",              // "nixos" | "penguin" | "none"   (shell/assets/<name>.svg)
@@ -38,13 +38,14 @@ Singleton {
             hiddenIndicators: []        // ipcNames from bar/Tray.qml
         },
         dock: {
-            size: 48,                   // icon px
+            size: 54,                   // icon px (macOS's 48 pt default)
             magnify: true,
             magnifySize: 80,            // icon px under the pointer
             position: "bottom",         // "bottom" | "left" | "right"
             autohide: true,
             autohideDelay: 600,         // ms after the pointer leaves
-            animationMs: 220,
+            showDelay: 500,             // ms at the edge before it shows (macOS autohide-delay 0.5 s)
+            animationMs: 300,           // slide in/out
             showIndicators: true,
             showRecents: true,          // recently used, unpinned apps
             recents: [],                // kept by the dock
