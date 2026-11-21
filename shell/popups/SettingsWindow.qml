@@ -58,6 +58,7 @@ Scope {
                                 { id: "dock", label: "Desktop & Dock", icon: "preferences-system-windows" },
                                 { id: "layout", label: "Layout", icon: "view-split-top-bottom" },
                                 { id: "wallpaper", label: "Wallpaper", icon: "preferences-desktop-wallpaper" },
+                                { id: "mouse", label: "Mouse & Touchpad", icon: "preferences-desktop-mouse" },
                                 { id: "night", label: "Night Light", icon: "redshift-status-on" },
                                 { id: "notifications", label: "Notifications", icon: "preferences-desktop-notification" }
                             ]
@@ -109,7 +110,7 @@ Scope {
 
                         Label {
                             text: ({ appearance: "Appearance", menubar: "Menu Bar", dock: "Desktop & Dock", layout: "Layout",
-                                     wallpaper: "Wallpaper", night: "Night Light", notifications: "Notifications" })[root.pane]
+                                     wallpaper: "Wallpaper", mouse: "Mouse & Touchpad", night: "Night Light", notifications: "Notifications" })[root.pane]
                             font.pointSize: Theme.fontSize + 6
                             font.weight: Font.Bold
                         }
@@ -117,7 +118,7 @@ Scope {
                         Loader {
                             Layout.fillWidth: true
                             sourceComponent: ({ appearance: appearancePane, menubar: menubarPane, dock: dockPane, layout: layoutPane,
-                                                wallpaper: wallpaperPane, night: nightPane, notifications: notificationsPane })[root.pane]
+                                                wallpaper: wallpaperPane, mouse: mousePane, night: nightPane, notifications: notificationsPane })[root.pane]
                         }
                     }
                 }
@@ -476,6 +477,45 @@ Scope {
                 command: ["sh", "-c", "kdialog --getopenfilename \"$HOME/Pictures\" 'Images (*.jpg *.jpeg *.png *.webp)' 2>/dev/null || zenity --file-selection --file-filter='*.jpg *.jpeg *.png *.webp' 2>/dev/null"]
                 stdout: StdioCollector {
                     onStreamFinished: { const p = text.trim(); if (p) Wallpaper.setMode("image", p); }
+                }
+            }
+        }
+    }
+
+    Component {
+        id: mousePane
+        ColumnLayout {
+            spacing: 14
+            Group {
+                Row_ {
+                    label: "Pointer speed"
+                    note: "How far the pointer moves for the same hand movement. Changes apply right away."
+                    ValueSlider {
+                        implicitWidth: 300
+                        from: -100
+                        to: 100
+                        step: 5
+                        value: Math.round(Mouse.speed * 100)
+                        onMoved: v => Mouse.set("speed", v / 100)
+                    }
+                }
+                Divider {}
+                Row_ {
+                    label: "Acceleration"
+                    note: "On: quick movements go further than slow ones (like Plasma and macOS). Off: the same distance at any speed (some gamers prefer this)."
+                    Toggle {
+                        checked: Mouse.acceleration
+                        onToggled: c => Mouse.set("acceleration", c)
+                    }
+                }
+                Divider {}
+                Row_ {
+                    label: "Natural scrolling (touchpad)"
+                    note: "On: the page follows your fingers, like a phone or macOS. Off: fingers move the scroll bar."
+                    Toggle {
+                        checked: Mouse.naturalScroll
+                        onToggled: c => Mouse.set("naturalScroll", c)
+                    }
                 }
             }
         }

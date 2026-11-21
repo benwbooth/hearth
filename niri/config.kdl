@@ -83,6 +83,10 @@ window-rule {
 // (installed next to this file).
 include "hearth-layer-rules.kdl"
 
+// Mouse & touchpad from hearth's Settings window (overrides the input block
+// above; missing until you change something there).
+include optional=true "~/.config/hearth/arbor-input.kdl"
+
 hotkey-overlay {
     skip-at-startup
 }
