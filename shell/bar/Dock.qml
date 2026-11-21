@@ -72,7 +72,7 @@ PanelWindow {
             if (a && a.open && a.barWindow === dockWin) a.handleKey(event);
         }
     }
-    // Input only on the dock itself; hidden, a 2 px strip along the edge.
+    // Input only on the dock itself; hidden, a 4 px strip along the edge.
     mask: Region { item: dockWin.shown ? frameMask : trigger }
     // The slab's resting geometry out to the screen edge (so the pointer
     // can rest on the edge), outside the sliding (transformed) body:
@@ -107,7 +107,18 @@ PanelWindow {
     Connections {
         target: hover
         function onHoveredChanged() {
-            if (hover.hovered) { if (dockWin.shown) { dockWin.held = true; hideTimer.stop(); } }
+            if (hover.hovered) {
+                if (dockWin.shown) { dockWin.held = true; hideTimer.stop(); }
+                // Hidden, the input region is only the edge strip, so any
+                // hover here is the pointer touching the edge. The strip's
+                // own HoverHandler never fired at Ben's 4/3 scale (the
+                // pointer's last row and the 2 px strip didn't overlap), so
+                // the dock never came out.
+                else if (dockWin.autohide) {
+                    if (showTimer.interval <= 0) { dockWin.held = true; hideTimer.stop(); }
+                    else if (!showTimer.running) showTimer.restart();
+                }
+            }
             else { showTimer.stop(); hideTimer.restart(); }
         }
     }
@@ -142,10 +153,12 @@ PanelWindow {
     // (that toggled show/hide in a loop along the rest of the edge).
     Item {
         id: trigger
-        x: dockWin.vertical ? (dockWin.edge === "right" ? parent.width - 2 : 0) : frameMask.x
-        y: dockWin.vertical ? frameMask.y : parent.height - 2
-        width: dockWin.vertical ? 2 : frameMask.width
-        height: dockWin.vertical ? frameMask.height : 2
+        // 4 px: at a fractional scale (Ben's 4/3) the pointer's last row
+        // can fall outside a 2 px strip.
+        x: dockWin.vertical ? (dockWin.edge === "right" ? parent.width - 4 : 0) : frameMask.x
+        y: dockWin.vertical ? frameMask.y : parent.height - 4
+        width: dockWin.vertical ? 4 : frameMask.width
+        height: dockWin.vertical ? frameMask.height : 4
         HoverHandler {
             id: edgeHover
             onHoveredChanged: {
