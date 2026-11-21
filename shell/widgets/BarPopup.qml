@@ -60,10 +60,12 @@ PanelWindow {
     // Room for the shadow around the pane; towards a top bar only the gap
     // (the shadow falls downwards and has faded out by then).
     readonly property real shadowPad: frame.shadowPad
-    readonly property real padL: shadowPad
-    readonly property real padR: shadowPad
+    // Towards a bottom/side bar the pane keeps its small gap and the
+    // shadow ends where the bar's reserved space begins.
+    readonly property real padL: edge === "left" ? Math.min(shadowPad, gap + edgeGap) : shadowPad
+    readonly property real padR: edge === "right" ? Math.min(shadowPad, gap + edgeGap) : shadowPad
     readonly property real padT: fromTop ? gap : shadowPad
-    readonly property real padB: shadowPad
+    readonly property real padB: edge === "bottom" ? Math.min(shadowPad, gap + edgeGap) : shadowPad
 
     screen: barWindow ? barWindow.screen : null
     anchors.top: edge !== "bottom"
