@@ -556,10 +556,13 @@ done`]
     // programs using that resource, refreshed while the pointer stays.
     property string hoverKind: ""
     property var topData: null
+    // An item's hover ends only when another item takes it or the pointer
+    // leaves the whole monitor (a gap between items keeps the last one).
     function setHover(kind, on) {
         if (on) hoverKind = kind;
-        else if (hoverKind === kind) hoverKind = "";
+        else if (hoverKind === kind && !containsMouse) hoverKind = "";
     }
+    onContainsMouseChanged: if (!containsMouse) hoverKind = ""
     Process {
         id: topProbe
         command: ["busctl", "--user", "--json=short", "call", "com.benwbooth.treetop", "/treetop", "com.benwbooth.treetop", "Top"]
@@ -721,7 +724,12 @@ done`]
         anchor.adjustment: PopupAdjustment.Slide
         // The surface has room for the glass's shadow around the pane.
         readonly property real pad: tipFrame.shadowPad
-        anchor.margins.top: root.onTop ? 4 - pad : -4 + pad
+        // The surface (shadow padding included) stays clear of the bar:
+        // overlapping it put the pointer over the tooltip as soon as it
+        // showed, the bar lost the hover, and the tooltip fell back to the
+        // overall summary or hid (arbor doesn't let pointer input through
+        // an empty input region).
+        anchor.margins.top: root.onTop ? 4 : -4
         color: "transparent"
         visible: false
         implicitWidth: tipFrame.implicitWidth + 2 * pad
