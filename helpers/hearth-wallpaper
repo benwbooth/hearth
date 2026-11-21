@@ -1,0 +1,1173 @@
+#!/usr/bin/env python3
+"""hearth-wallpaper: the wallpaper engine's worker (services/Wallpaper.qml).
+
+Everything slow or networked runs here, in a separate process, so the shell's
+UI thread never waits: picture-of-the-day providers, downloads, smart crops,
+dynamic-wallpaper schedules (GNOME XML, macOS .heic, hearth's dynamic.json),
+Wallpaper Engine project scans, video posters, Shadertoy compiles, API keys
+and the lock/login-screen export. Each command prints one JSON object (or
+array) on stdout; errors print {"error": "..."} and exit 1.
+
+  hearth-wallpaper fetch SOURCE --dir CACHE [--opts JSON] [--offset N] [--min WxH]
+  hearth-wallpaper crop SRC W H OUT
+  hearth-wallpaper dynamic PATH --dir CACHE [--index N] [--lat L --lon L]
+  hearth-wallpaper scan-dynamic DIR...
+  hearth-wallpaper scan-we DIR...
+  hearth-wallpaper scan-media DIR...          videos and pictures (for the grid)
+  hearth-wallpaper scan-folder DIR [--recursive]
+  hearth-wallpaper poster VIDEO OUT
+  hearth-wallpaper shader SRC OUT              Shadertoy mainImage() -> .qsb
+  hearth-wallpaper secret get|set|delete NAME  (set reads the value on stdin)
+  hearth-wallpaper export JSONFILE [--system DIR]
+"""
+
+import base64
+import datetime as dt
+import glob
+import hashlib
+import html
+import json
+import math
+import os
+import plistlib
+import random
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import urllib.parse
+import xml.etree.ElementTree as ET
+
+UA = "hearth-wallpaper/1.0 (+https://github.com/benwbooth/hearth; desktop wallpaper)"
+IMAGE_EXT = (".jpg", ".jpeg", ".png", ".webp", ".jxl", ".avif", ".heic", ".bmp", ".tif", ".tiff", ".svg")
+VIDEO_EXT = (".mp4", ".webm", ".mkv", ".mov", ".m4v", ".avi")
+HISTORY_MAX = 40
+
+
+class Fail(Exception):
+    pass
+
+
+def out(obj):
+    sys.stdout.write(json.dumps(obj) + "\n")
+    sys.stdout.flush()
+
+
+# ---------------------------------------------------------------- network
+
+def curl(url, headers=None, timeout=30, binary=False):
+    """GET url with curl (follows redirects); returns bytes or str."""
+    cmd = ["curl", "-fsSL", "--max-time", str(timeout), "--retry", "1", "-A", UA]
+    for k, v in (headers or {}).items():
+        cmd += ["-H", f"{k}: {v}"]
+    cmd.append(url)
+    p = subprocess.run(cmd, capture_output=True)
+    if p.returncode != 0:
+        msg = p.stderr.decode(errors="replace").strip() or f"curl exit {p.returncode}"
+        raise Fail(f"{urllib.parse.urlsplit(url).netloc}: {msg}")
+    return p.stdout if binary else p.stdout.decode("utf-8", errors="replace")
+
+
+def get_json(url, headers=None):
+    text = curl(url, headers)
+    try:
+        return json.loads(text)
+    except ValueError:
+        raise Fail(f"{urllib.parse.urlsplit(url).netloc}: not JSON")
+
+
+def image_size(path):
+    try:
+        w = subprocess.run(["vipsheader", "-f", "width", path], capture_output=True, text=True, timeout=30)
+        h = subprocess.run(["vipsheader", "-f", "height", path], capture_output=True, text=True, timeout=30)
+        if w.returncode == 0 and h.returncode == 0:
+            return int(w.stdout.strip()), int(h.stdout.strip())
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        pass
+    return 0, 0
+
+
+def download(url, dest, headers=None):
+    """Download to dest atomically; checks that it really is a picture."""
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    part = dest + ".part"
+    cmd = ["curl", "-fsSL", "--max-time", "300", "--retry", "2", "-A", UA, "-o", part]
+    for k, v in (headers or {}).items():
+        cmd += ["-H", f"{k}: {v}"]
+    cmd.append(url)
+    p = subprocess.run(cmd, capture_output=True)
+    if p.returncode != 0:
+        try:
+            os.unlink(part)
+        except OSError:
+            pass
+        raise Fail("download failed: " + (p.stderr.decode(errors="replace").strip() or url))
+    w, h = image_size(part)
+    if not w:
+        os.unlink(part)
+        raise Fail("download is not a picture: " + url)
+    os.replace(part, dest)
+    return w, h
+
+
+def strip_html(s):
+    s = re.sub(r"<[^>]+>", "", s or "")
+    return re.sub(r"\s+", " ", html.unescape(s)).strip()
+
+
+def ext_of(url, default=".jpg"):
+    path = urllib.parse.urlsplit(url).path.lower()
+    for e in (".jpg", ".jpeg", ".png", ".webp"):
+        if path.endswith(e):
+            return e
+    return default
+
+
+def safe_id(s):
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", s)[:120] or hashlib.sha1(s.encode()).hexdigest()[:16]
+
+
+# ---------------------------------------------------------------- providers
+#
+# Each returns a candidate dict: {id, url, title, copyright, link, date,
+# headers?, after?}. `seen` is the set of ids already in the history, so
+# providers with many pictures (random, top lists) can pick a new one.
+
+def p_bing(o, offset, seen, minsize):
+    mkt = o.get("market") or "en-US"
+    j = get_json(f"https://www.bing.com/HPImageArchive.aspx?format=js&idx={min(offset, 7)}&n=1&mkt={mkt}")
+    img = (j.get("images") or [None])[0]
+    if not img or not img.get("urlbase"):
+        raise Fail("Bing: no picture")
+    pid = img["urlbase"].split("id=")[-1]
+    return {
+        "id": pid, "url": "https://www.bing.com" + img["urlbase"] + "_UHD.jpg",
+        "fallback": "https://www.bing.com" + img.get("url", ""),
+        "title": img.get("title") or "", "copyright": img.get("copyright") or "",
+        "link": img.get("copyrightlink") or "", "date": img.get("startdate") or "",
+    }
+
+
+def p_apod(o, offset, seen, minsize):
+    items = get_json("https://science.nasa.gov/wp-json/wp/v2/apod-basic")
+    imgs = [i for i in items if i.get("media_type") == "image" and (i.get("hdurl") or i.get("url"))]
+    if not imgs:
+        raise Fail("APOD: no picture (today's may be a video)")
+    i = imgs[min(offset, len(imgs) - 1)]
+    return {
+        "id": "apod-" + (i.get("date") or i.get("post_id") or ""), "url": i.get("hdurl") or i.get("url"),
+        "title": strip_html(i.get("title")), "copyright": strip_html(i.get("credit") or i.get("copyright")),
+        "link": i.get("permalink") or "https://apod.nasa.gov/apod/", "date": (i.get("date") or "").replace("-", ""),
+    }
+
+
+def p_wikimedia(o, offset, seen, minsize):
+    day = dt.datetime.now(dt.timezone.utc).date() - dt.timedelta(days=offset)
+    api = "https://commons.wikimedia.org/w/api.php"
+
+    def expand(text):
+        q = urllib.parse.urlencode({"action": "expandtemplates", "text": text, "prop": "wikitext", "format": "json"})
+        return get_json(f"{api}?{q}").get("expandtemplates", {}).get("wikitext", "").strip()
+    name = expand("{{Potd/%s}}" % day.isoformat())
+    if not name or "Template:" in name or "\n" in name:
+        raise Fail("Wikimedia Commons: no picture for " + day.isoformat())
+    caption = ""
+    try:
+        caption = strip_html(re.sub(r"\[\[(?:[^|\]]*\|)?([^\]]*)\]\]", r"\1", expand("{{Potd/%s (en)}}" % day.isoformat())))
+        if "Template:" in caption:
+            caption = ""
+    except Fail:
+        pass
+    credit = ""
+    try:
+        q = urllib.parse.urlencode({"action": "query", "titles": "File:" + name, "prop": "imageinfo",
+                                    "iiprop": "extmetadata", "format": "json"})
+        pages = get_json(f"{api}?{q}").get("query", {}).get("pages", {})
+        for pg in pages.values():
+            md = (pg.get("imageinfo") or [{}])[0].get("extmetadata", {})
+            artist = strip_html(md.get("Artist", {}).get("value", ""))
+            lic = strip_html(md.get("LicenseShortName", {}).get("value", ""))
+            credit = ", ".join(x for x in (artist, lic) if x)
+    except Fail:
+        pass
+    width = max(3840, minsize[0])
+    return {
+        "id": "wc-" + day.isoformat(),
+        # Originals can be 100 MB TIFFs: ask for a screen-sized rendering.
+        "url": "https://commons.wikimedia.org/wiki/Special:FilePath/" + urllib.parse.quote(name) + f"?width={width}",
+        "title": caption or os.path.splitext(name)[0].replace("_", " "), "copyright": credit,
+        "link": "https://commons.wikimedia.org/wiki/File:" + urllib.parse.quote(name.replace(" ", "_")),
+        "date": day.strftime("%Y%m%d"),
+    }
+
+
+def p_earthobs(o, offset, seen, minsize):
+    # NASA Earth Observatory moved into science.nasa.gov; its old feed URL
+    # redirects to a NASA Science feed that also carries other posts.
+    s = curl("https://earthobservatory.nasa.gov/feeds/image-of-the-day.rss")
+    items = []
+    for it in re.findall(r"<item>(.*?)</item>", s, re.S):
+        if "CDATA[Earth Observatory]" not in it:
+            continue
+        title = strip_html(re.sub(r"<!\[CDATA\[|\]\]>", "", (re.search(r"<title>(.*?)</title>", it, re.S) or [None, ""])[1]))
+        link = (re.search(r"<link>(.*?)</link>", it, re.S) or [None, ""])[1].strip()
+        date = (re.search(r"<pubDate>(.*?)</pubDate>", it, re.S) or [None, ""])[1].strip()
+        imgs = [html.unescape(u) for u in re.findall(r"(https://assets\.science\.nasa\.gov/content/dam/[^\"' ]+?/iotd/[^\"' ]+?\.(?:jpe?g|png))", it)]
+        imgs = [u for u in dict.fromkeys(imgs) if not re.search(r"_th\.\w+$", u)]
+        if not imgs:
+            continue
+        big = [u for u in imgs if "_lrg." in u]
+        items.append({"title": title, "link": link, "date": date, "url": (big or imgs)[0]})
+    if not items:
+        raise Fail("Earth Observatory: no picture in the feed")
+    i = items[min(offset, len(items) - 1)]
+    try:
+        d = dt.datetime.strptime(i["date"][:16], "%a, %d %b %Y").strftime("%Y%m%d")
+    except ValueError:
+        d = ""
+    return {"id": "eo-" + safe_id(os.path.basename(urllib.parse.urlsplit(i["url"]).path)), "url": i["url"],
+            "title": i["title"], "copyright": "NASA Earth Observatory", "link": i["link"], "date": d}
+
+
+def p_noaa(o, offset, seen, minsize):
+    sat = o.get("satellite") or "GOES19"
+    names = {"GOES19": "GOES-East", "GOES18": "GOES-West"}
+    url = f"https://cdn.star.nesdis.noaa.gov/{sat}/ABI/FD/GEOCOLOR/5424x5424.jpg"
+    stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d%H%M")
+    return {"id": f"noaa-{sat}-{stamp[:11]}", "url": url,
+            "title": f"Earth right now from {names.get(sat, sat)}",
+            "copyright": "NOAA / NESDIS STAR (GeoColor)",
+            "link": f"https://www.star.nesdis.noaa.gov/GOES/fulldisk.php?sat=G{sat[4:]}",
+            "date": stamp[:8], "fit": "fit"}
+
+
+def p_stalenhag(o, offset, seen, minsize):
+    entry = get_json("https://raw.githubusercontent.com/a-andreyev/simonstalenhag-se-metadata/main/entrypoint.json")
+    pool = []
+    for url in entry.get("simonstalenhag-se-entrypoint", []):
+        if not url.startswith("https://"):
+            continue
+        try:
+            pool += get_json(url).get("simonstalenhag.se", [])
+        except Fail:
+            pass
+    pool = [p for p in pool if p.get("imagebig")]
+    if not pool:
+        raise Fail("Simon Stålenhag: no pictures")
+    fresh = [p for p in pool if "ss-" + safe_id(p.get("name", "")) not in seen] or pool
+    p = random.choice(fresh)
+    url = p["imagebig"].replace("http://", "https://", 1)
+    title = p.get("name", "")
+    if p.get("section"):
+        title = p["section"].title() + " – " + title
+    return {"id": "ss-" + safe_id(p.get("name", "")), "url": url, "title": title,
+            "copyright": "Simon Stålenhag", "link": "https://www.simonstalenhag.se/", "date": ""}
+
+
+def p_davidrevoy(o, offset, seen, minsize):
+    j = get_json("https://autoconfig.kde.org/potd/davidrevoy-data.json")
+    pool = [p for p in j.get("imageList", []) if p.get("image")]
+    if not pool:
+        raise Fail("David Revoy: no pictures")
+    fresh = [p for p in pool if "dr-" + safe_id(p.get("checksum") or p["image"]) not in seen] or pool
+    p = random.choice(fresh)
+    return {"id": "dr-" + safe_id(p.get("checksum") or p["image"]), "url": p["image"], "title": p.get("name", ""),
+            "copyright": "David Revoy (CC BY 4.0)", "link": p.get("url") or j.get("defaultUrl", ""), "date": ""}
+
+
+def p_spotlight(o, offset, seen, minsize):
+    loc = o.get("market") or "en-US"
+    country = loc.split("-")[-1]
+    j = get_json(f"https://fd.api.iris.microsoft.com/v4/api/selection?placement=88000820&bcnt=4&country={country}&locale={loc}&fmt=json")
+    cands = []
+    for it in j.get("batchrsp", {}).get("items", []):
+        try:
+            ad = json.loads(it["item"])["ad"]
+        except (KeyError, ValueError):
+            continue
+        url = (ad.get("landscapeImage") or {}).get("asset")
+        if not url:
+            continue
+        hover = (ad.get("iconHoverText") or "").split("\r\n")
+        link = ad.get("ctaUri") or ""
+        if not link.startswith("http"):
+            m = re.search(r"https?%3a%2f%2f[^&]+", link, re.I)
+            link = urllib.parse.unquote(m.group(0)) if m else ""
+        cands.append({"id": "sp-" + safe_id(os.path.basename(urllib.parse.urlsplit(url).path).rsplit(".", 1)[0][-60:]),
+                      "url": url, "title": ad.get("title") or (hover[0] if hover else ""),
+                      "copyright": " – ".join(x for x in hover[:2] if x),
+                      "link": link, "date": dt.date.today().strftime("%Y%m%d")})
+    if not cands:
+        raise Fail("Windows Spotlight: no pictures")
+    fresh = [c for c in cands if c["id"] not in seen]
+    return (fresh or cands)[0]
+
+
+def p_earthview(o, offset, seen, minsize):
+    for _ in range(25):
+        n = random.randint(1003, 14800)
+        if f"ev-{n}" in seen:
+            continue
+        try:
+            meta = get_json(f"https://www.gstatic.com/prettyearth/assets/data/v3/{n}.json")
+        except Fail:
+            continue
+        geo = meta.get("geocode") or {}
+        place = ", ".join(x for x in (geo.get("locality") or geo.get("administrative_area_level_1"), geo.get("country")) if x)
+        return {"id": f"ev-{n}", "url": f"https://www.gstatic.com/prettyearth/assets/full/{n}.jpg",
+                "title": place or "Google Earth View", "copyright": meta.get("attribution", ""),
+                "link": f"https://earthview.withgoogle.com/{n}", "date": ""}
+    raise Fail("Google Earth View: no picture found (try again)")
+
+
+def p_wallhaven(o, offset, seen, minsize):
+    q = {
+        "q": o.get("query", ""),
+        "categories": o.get("categories") or "100",       # general/anime/people
+        "purity": o.get("purity") or "100",               # SFW only by default
+        "sorting": o.get("sorting") or "toplist",
+        "order": "desc",
+    }
+    if q["sorting"] == "toplist":
+        q["topRange"] = o.get("topRange") or "1w"
+    if q["sorting"] == "random":
+        q["seed"] = "".join(random.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(6))
+    if minsize[0] and o.get("atLeastScreen", True):
+        q["atleast"] = f"{minsize[0]}x{minsize[1]}"
+    if o.get("ratios"):
+        q["ratios"] = o["ratios"]
+    headers = {}
+    key = secret_get("wallhaven")
+    if key:
+        headers["X-API-Key"] = key
+    elif q["purity"][-1:] == "1" or q["purity"][1:2] == "1":
+        q["purity"] = "100"   # sketchy/NSFW need an API key; stay SFW
+    for page in (1, 2, 3):
+        q["page"] = page
+        j = get_json("https://wallhaven.cc/api/v1/search?" + urllib.parse.urlencode(q), headers)
+        for w in j.get("data", []):
+            if "wh-" + w["id"] in seen:
+                continue
+            title = "Wallhaven " + w["id"]
+            credit = ""
+            try:
+                d = get_json(f"https://wallhaven.cc/api/v1/w/{w['id']}", headers).get("data", {})
+                tags = [t["name"] for t in d.get("tags", [])][:4]
+                if tags:
+                    title = ", ".join(tags).capitalize()
+                up = (d.get("uploader") or {}).get("username")
+                credit = " – ".join(x for x in (f"uploaded by {up}" if up else "", d.get("source") or "") if x)
+            except Fail:
+                pass
+            return {"id": "wh-" + w["id"], "url": w["path"], "title": title, "copyright": credit,
+                    "link": w.get("url", ""), "date": (w.get("created_at") or "")[:10].replace("-", "")}
+        if not j.get("data"):
+            break
+    raise Fail("Wallhaven: nothing new matches (loosen the search or resolution)")
+
+
+def p_reddit(o, offset, seen, minsize):
+    subs = re.sub(r"[^A-Za-z0-9_+]", "", (o.get("subreddits") or "EarthPorn").replace(",", "+").replace(" ", ""))
+    t = o.get("top") or "day"
+    minw = int(o.get("minWidth") or (minsize[0] if o.get("atLeastScreen", True) else 0) or 0)
+    minaspect = float(o.get("minAspect") or 0)
+    try:
+        j = get_json(f"https://www.reddit.com/r/{subs}/top.json?t={t}&limit=100&raw_json=1")
+    except Fail as e:
+        raise Fail(f"Reddit refused the request ({e}); Reddit blocks some networks without sign-in")
+    for c in j.get("data", {}).get("children", []):
+        d = c.get("data", {})
+        if d.get("over_18") or d.get("is_video"):
+            continue
+        url = d.get("url_overridden_by_dest") or d.get("url") or ""
+        if not re.search(r"\.(jpe?g|png|webp)$", urllib.parse.urlsplit(url).path, re.I):
+            continue
+        try:
+            src = d["preview"]["images"][0]["source"]
+            w, h = int(src["width"]), int(src["height"])
+        except (KeyError, IndexError, ValueError, TypeError):
+            m = re.search(r"(\d{3,5})\s*[x×X]\s*(\d{3,5})", d.get("title", ""))
+            w, h = (int(m.group(1)), int(m.group(2))) if m else (0, 0)
+        if minw and w and w < minw:
+            continue
+        if w and h and (w / h < max(minaspect, 1.0)):
+            continue      # wallpapers: landscape only
+        pid = "rd-" + d.get("id", safe_id(url))
+        if pid in seen:
+            continue
+        return {"id": pid, "url": url, "title": d.get("title", ""),
+                "copyright": f"u/{d.get('author', '')} in r/{d.get('subreddit', subs)}",
+                "link": "https://www.reddit.com" + d.get("permalink", ""),
+                "date": dt.datetime.fromtimestamp(d.get("created_utc", 0)).strftime("%Y%m%d")}
+    raise Fail(f"Reddit: nothing new in r/{subs} matches the size filter")
+
+
+def p_unsplash(o, offset, seen, minsize):
+    key = secret_get("unsplash")
+    if not key:
+        raise Fail("Unsplash needs an access key (Settings > Wallpaper)")
+    q = {"orientation": "landscape", "content_filter": "high"}
+    if o.get("query"):
+        q["query"] = o["query"]
+    h = {"Authorization": "Client-ID " + key, "Accept-Version": "v1"}
+    p = get_json("https://api.unsplash.com/photos/random?" + urllib.parse.urlencode(q), h)
+    w = max(minsize[0], 3840)
+    user = p.get("user", {})
+    return {"id": "us-" + p["id"], "url": p["urls"]["raw"] + f"&w={w}&fm=jpg&q=85",
+            "title": strip_html(p.get("description") or p.get("alt_description") or "Unsplash photo").capitalize(),
+            "copyright": f"Photo by {user.get('name', '')} on Unsplash",
+            "link": (p.get("links", {}).get("html") or "https://unsplash.com") + "?utm_source=hearth&utm_medium=referral",
+            "date": (p.get("created_at") or "")[:10].replace("-", ""),
+            # Unsplash API guidelines: report the download.
+            "after": ("https://" + p["links"]["download_location"].split("://", 1)[1], h) if p.get("links", {}).get("download_location") else None}
+
+
+def p_pexels(o, offset, seen, minsize):
+    key = secret_get("pexels")
+    if not key:
+        raise Fail("Pexels needs an API key (Settings > Wallpaper)")
+    h = {"Authorization": key}
+    if o.get("query"):
+        url = "https://api.pexels.com/v1/search?" + urllib.parse.urlencode(
+            {"query": o["query"], "orientation": "landscape", "size": "large", "per_page": 60})
+    else:
+        url = "https://api.pexels.com/v1/curated?per_page=60"
+    photos = get_json(url, h).get("photos", [])
+    photos = [p for p in photos if p.get("width", 0) > p.get("height", 1)
+              and (not minsize[0] or p.get("width", 0) >= minsize[0] * 0.8)] or photos
+    fresh = [p for p in photos if f"px-{p['id']}" not in seen] or photos
+    if not fresh:
+        raise Fail("Pexels: no photos")
+    p = random.choice(fresh)
+    return {"id": f"px-{p['id']}", "url": p["src"]["original"], "title": p.get("alt") or "Pexels photo",
+            "copyright": f"Photo by {p.get('photographer', '')} on Pexels", "link": p.get("url", ""), "date": ""}
+
+
+def p_flickr(o, offset, seen, minsize):
+    key = secret_get("flickr")
+    if not key:
+        raise Fail("Flickr needs an API key (Settings > Wallpaper)")
+    day = dt.date.today() - dt.timedelta(days=2 + offset)
+    q = urllib.parse.urlencode({"method": "flickr.interestingness.getList", "api_key": key, "date": day.isoformat(),
+                                "extras": "url_k,url_h,url_o,owner_name,o_dims", "per_page": 100,
+                                "format": "json", "nojsoncallback": 1})
+    photos = get_json("https://api.flickr.com/services/rest/?" + q).get("photos", {}).get("photo", [])
+    best = []
+    for p in photos:
+        for k in ("url_k", "url_h", "url_o"):
+            if p.get(k) and int(p.get("width_" + k[4:], 0) or 0) > int(p.get("height_" + k[4:], 1) or 1):
+                best.append((p, p[k]))
+                break
+    fresh = [b for b in best if f"fl-{b[0]['id']}" not in seen] or best
+    if not fresh:
+        raise Fail("Flickr: no landscape photos for " + day.isoformat())
+    p, url = random.choice(fresh)
+    return {"id": f"fl-{p['id']}", "url": url, "title": p.get("title") or "Flickr photo",
+            "copyright": f"Photo by {p.get('ownername', '')} on Flickr",
+            "link": f"https://www.flickr.com/photos/{p.get('owner')}/{p['id']}", "date": day.strftime("%Y%m%d")}
+
+
+PROVIDERS = {
+    "bing": p_bing, "apod": p_apod, "wikimedia": p_wikimedia, "earthobs": p_earthobs, "noaa": p_noaa,
+    "stalenhag": p_stalenhag, "davidrevoy": p_davidrevoy, "spotlight": p_spotlight, "earthview": p_earthview,
+    "wallhaven": p_wallhaven, "reddit": p_reddit, "unsplash": p_unsplash, "pexels": p_pexels, "flickr": p_flickr,
+}
+
+
+def cmd_fetch(args):
+    source = args.pop(0)
+    opts, offset, cache, minsize = {}, 0, None, (0, 0)
+    while args:
+        a = args.pop(0)
+        if a == "--opts":
+            opts = json.loads(args.pop(0) or "{}")
+        elif a == "--offset":
+            offset = max(0, int(args.pop(0)))
+        elif a == "--dir":
+            cache = args.pop(0)
+        elif a == "--min":
+            m = re.match(r"(\d+)x(\d+)", args.pop(0))
+            if m:
+                minsize = (int(m.group(1)), int(m.group(2)))
+    if source not in PROVIDERS or not cache:
+        raise Fail("unknown source " + source)
+    d = os.path.join(cache, source)
+    os.makedirs(d, exist_ok=True)
+    hist_path = os.path.join(d, "history.json")
+    try:
+        hist = json.load(open(hist_path))
+    except (OSError, ValueError):
+        hist = []
+    seen = {h["id"] for h in hist if os.path.exists(h.get("file", ""))}
+    c = PROVIDERS[source](opts, offset, seen, minsize)
+    existing = next((h for h in hist if h["id"] == c["id"] and os.path.exists(h.get("file", ""))), None)
+    if existing:
+        existing["checked"] = dt.datetime.now().isoformat(timespec="seconds")
+        item = existing
+    else:
+        dest = os.path.join(d, safe_id(c["id"]) + ext_of(c["url"]))
+        try:
+            w, h = download(c["url"], dest, c.get("headers"))
+        except Fail:
+            if not c.get("fallback"):
+                raise
+            w, h = download(c["fallback"], dest)
+        if c.get("after"):
+            try:
+                curl(c["after"][0], c["after"][1])
+            except Fail:
+                pass
+        item = {k: c.get(k, "") for k in ("id", "title", "copyright", "link", "date")}
+        item.update({"source": source, "file": dest, "width": w, "height": h,
+                     "fetched": dt.datetime.now().isoformat(timespec="seconds")})
+        if c.get("fit"):
+            item["fit"] = c["fit"]
+        hist.insert(0, item)
+        # Daily sources browse back in time: keep the history sorted by date.
+        if source in ("bing", "apod", "wikimedia", "earthobs", "flickr"):
+            hist.sort(key=lambda x: x.get("date", ""), reverse=True)
+    # A NOAA picture every half hour would fill the disk: keep only a few.
+    limit = 6 if source == "noaa" else HISTORY_MAX
+    keep, drop = hist[:limit], hist[limit:]
+    for h in drop:
+        if h.get("file") and h is not item:
+            try:
+                os.unlink(h["file"])
+            except OSError:
+                pass
+    tmp = hist_path + ".tmp"
+    json.dump(keep, open(tmp, "w"), indent=1)
+    os.replace(tmp, hist_path)
+    out({"item": item, "history": keep})
+
+
+# ---------------------------------------------------------------- crops
+
+def cmd_crop(args):
+    """Resize and crop SRC to exactly W x H around its most interesting part
+    (libvips' attention: edges, skin tones and saturated colour)."""
+    src, w, h, dest = args[0], int(args[1]), int(args[2]), args[3]
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    part = dest + ".part.jpg"
+    p = subprocess.run(["vips", "thumbnail", src, part + "[Q=92,optimize_coding]", str(w), "--height", str(h),
+                        "--crop", "attention", "--size", "both"], capture_output=True, text=True)
+    if p.returncode != 0:
+        raise Fail("crop failed: " + p.stderr.strip())
+    os.replace(part, dest)
+    out({"file": dest, "width": w, "height": h})
+
+
+def convert_for_qt(src, cache):
+    """JPEG XL / HEIC / AVIF pictures Qt may not read: convert once with vips."""
+    if not src.lower().endswith((".jxl", ".heic", ".avif", ".tif", ".tiff")):
+        return src
+    key = hashlib.sha1((src + str(os.path.getmtime(src))).encode()).hexdigest()[:16]
+    dest = os.path.join(cache, "converted", key + ".jpg")
+    if not os.path.exists(dest):
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        p = subprocess.run(["vips", "copy", src, dest + ".part.jpg[Q=94]"], capture_output=True, text=True)
+        if p.returncode != 0:
+            raise Fail(f"can't read {os.path.basename(src)}: {p.stderr.strip()}")
+        os.replace(dest + ".part.jpg", dest)
+    return dest
+
+
+# ---------------------------------------------------------------- dynamic wallpapers
+#
+# Normalized schedule: {name, kind: "time"|"appearance", frames: [{file,
+# start (seconds after midnight when the fade to it begins), fade
+# (seconds)}], light, dark, preview}. A frame shows fully from start+fade
+# until the next frame's start.
+
+def hhmm(s):
+    m = re.match(r"(\d{1,2}):(\d{2})", str(s))
+    if not m:
+        raise Fail("bad time " + str(s))
+    return int(m.group(1)) * 3600 + int(m.group(2)) * 60
+
+
+def gnome_timed(path, root):
+    st = root.find("starttime")
+    start = 0
+    if st is not None:
+        start = int(st.findtext("hour", "0")) * 3600 + int(st.findtext("minute", "0")) * 60 + int(float(st.findtext("second", "0")))
+    t = start
+    frames = []
+    base = os.path.dirname(path)
+
+    def fix(f):
+        f = (f or "").strip()
+        return f if os.path.exists(f) else os.path.join(base, os.path.basename(f))
+    for el in root:
+        if el.tag == "static":
+            dur = float(el.findtext("duration", "0"))
+            f = el.find("file")
+            fname = fix(f.findtext("size") if f is not None and f.find("size") is not None else el.findtext("file"))
+            if not frames or frames[-1]["file"] != fname:
+                frames.append({"file": fname, "start": t % 86400, "fade": 0})
+            t += dur
+        elif el.tag == "transition":
+            dur = float(el.findtext("duration", "0"))
+            frames.append({"file": fix(el.findtext("to")), "start": t % 86400, "fade": int(dur)})
+            t += dur
+    if not frames:
+        raise Fail("no frames in " + path)
+    return {"kind": "time", "frames": frames}
+
+
+def sun_altitude(when, lat, lon):
+    """Solar elevation in degrees (NOAA's approximation)."""
+    utc = when.astimezone(dt.timezone.utc)
+    doy = utc.timetuple().tm_yday
+    hour = utc.hour + utc.minute / 60
+    g = 2 * math.pi / 365 * (doy - 1 + (hour - 12) / 24)
+    decl = 0.006918 - 0.399912 * math.cos(g) + 0.070257 * math.sin(g) - 0.006758 * math.cos(2 * g) \
+        + 0.000907 * math.sin(2 * g) - 0.002697 * math.cos(3 * g) + 0.00148 * math.sin(3 * g)
+    eqt = 229.18 * (0.000075 + 0.001868 * math.cos(g) - 0.032077 * math.sin(g) - 0.014615 * math.cos(2 * g) - 0.040849 * math.sin(2 * g))
+    tst = hour * 60 + eqt + 4 * lon
+    ha = math.radians(tst / 4 - 180)
+    la = math.radians(lat)
+    cz = math.sin(la) * math.sin(decl) + math.cos(la) * math.cos(decl) * math.cos(ha)
+    return math.degrees(math.asin(max(-1, min(1, cz))))
+
+
+def heic_dynamic(path, cache, lat, lon):
+    data = open(path, "rb").read()
+    key = hashlib.sha1((path + str(os.path.getmtime(path))).encode()).hexdigest()[:16]
+    d = os.path.join(cache, "heic", key)
+    files = sorted(glob.glob(os.path.join(d, "frame-*.jpg")), key=lambda f: int(re.findall(r"(\d+)\.jpg$", f)[0]))
+    if not files:
+        os.makedirs(d, exist_ok=True)
+        tool = shutil.which("heif-dec") or shutil.which("heif-convert")
+        if not tool:
+            raise Fail("macOS dynamic wallpapers need libheif's heif-dec")
+        # Every top-level image, numbered frame-1.jpg, frame-2.jpg ...
+        p = subprocess.run([tool, "-q", "92", path, os.path.join(d, "frame.jpg")], capture_output=True, text=True)
+        files = sorted(glob.glob(os.path.join(d, "frame*.jpg")))
+        if p.returncode != 0 and not files:
+            raise Fail("heif-dec: " + p.stderr.strip())
+        if len(files) == 1 and not re.search(r"-\d+\.jpg$", files[0]):
+            os.replace(files[0], os.path.join(d, "frame-1.jpg"))
+        files = sorted(glob.glob(os.path.join(d, "frame-*.jpg")), key=lambda f: int(re.findall(r"(\d+)\.jpg$", f)[0]))
+    if not files:
+        raise Fail("no pictures in " + os.path.basename(path))
+
+    def plist(attr):
+        m = re.search(rb"apple_desktop:" + attr + rb"=\"([A-Za-z0-9+/=]+)\"", data) \
+            or re.search(rb"<apple_desktop:" + attr + rb">([A-Za-z0-9+/=]+)</apple_desktop:" + attr + rb">", data)
+        if not m:
+            return None
+        try:
+            return plistlib.loads(base64.b64decode(m.group(1)))
+        except Exception:
+            return None
+    res = {"preview": files[0]}
+    apr = plist(b"apr")
+    if apr and "l" in apr and "d" in apr:
+        res.update({"kind": "appearance", "light": files[min(apr["l"], len(files) - 1)],
+                    "dark": files[min(apr["d"], len(files) - 1)]})
+    h24 = plist(b"h24")
+    if h24 and h24.get("ti"):
+        frames = [{"file": files[min(e["i"], len(files) - 1)], "start": int(float(e["t"]) * 86400) % 86400, "fade": 1800}
+                  for e in h24["ti"]]
+        res.update({"kind": "time", "frames": sorted(frames, key=lambda f: f["start"])})
+        if apr:
+            res["light"], res["dark"] = res.get("light"), res.get("dark")
+        return res
+    solar = plist(b"solar")
+    if solar and solar.get("si"):
+        # Pick, for each 10 minutes of today, the picture whose sun altitude
+        # is closest (rising pictures in the morning, setting ones after noon).
+        today = dt.datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
+        noon_alt = max(sun_altitude(today + dt.timedelta(minutes=m), lat, lon) for m in range(0, 1440, 10))
+        entries = solar["si"]
+        frames = []
+        for m in range(0, 1440, 10):
+            t = today + dt.timedelta(minutes=m)
+            alt = sun_altitude(t, lat, lon)
+            morning = m < 720
+            best = min(entries, key=lambda e: abs(float(e.get("a", 0)) - alt)
+                       + (0 if (float(e.get("z", 180)) < 180) == morning else 15))
+            f = files[min(int(best.get("i", 0)), len(files) - 1)]
+            if not frames or frames[-1]["file"] != f:
+                frames.append({"file": f, "start": m * 60, "fade": 1200})
+        res.update({"kind": "time", "frames": frames, "solarDay": today.strftime("%Y%m%d"), "noonAltitude": round(noon_alt, 1)})
+        return res
+    if "kind" in res:
+        return res
+    if len(files) >= 2:
+        # No metadata: spread the pictures over the day.
+        n = len(files)
+        res.update({"kind": "time", "frames": [{"file": f, "start": int(i * 86400 / n), "fade": 1800} for i, f in enumerate(files)]})
+        return res
+    return {"kind": "appearance", "light": files[0], "dark": files[0], "preview": files[0]}
+
+
+def hearth_json(path):
+    j = json.load(open(path))
+    base = os.path.dirname(path)
+    absf = lambda f: f if os.path.isabs(f) else os.path.join(base, f)
+    res = {"name": j.get("name") or os.path.basename(base)}
+    if j.get("light") or j.get("dark"):
+        res.update({"kind": "appearance", "light": absf(j.get("light") or j.get("dark")), "dark": absf(j.get("dark") or j.get("light"))})
+    if j.get("frames"):
+        frames = [{"file": absf(f["file"]), "start": hhmm(f["time"]), "fade": int(float(f.get("fade", 30)) * 60)} for f in j["frames"]]
+        res.update({"kind": "time", "frames": sorted(frames, key=lambda f: f["start"])})
+    if "kind" not in res:
+        raise Fail("dynamic.json needs \"frames\" or \"light\"/\"dark\"")
+    return res
+
+
+def load_dynamic(path, cache, index=0, lat=40.0, lon=0.0):
+    if os.path.isdir(path):
+        for n in ("dynamic.json", "hearth-dynamic.json"):
+            if os.path.exists(os.path.join(path, n)):
+                return hearth_json(os.path.join(path, n))
+        xmls = glob.glob(os.path.join(path, "*.xml"))
+        if xmls:
+            return load_dynamic(xmls[0], cache, index, lat, lon)
+        heics = glob.glob(os.path.join(path, "*.heic"))
+        if heics:
+            return load_dynamic(heics[0], cache, index, lat, lon)
+        raise Fail("no dynamic.json, XML or .heic in " + path)
+    low = path.lower()
+    if low.endswith(".json"):
+        return hearth_json(path)
+    if low.endswith((".heic", ".heif")):
+        r = heic_dynamic(path, cache, lat, lon)
+        r.setdefault("name", os.path.splitext(os.path.basename(path))[0])
+        return r
+    if low.endswith(".xml"):
+        root = ET.parse(path).getroot()
+        if root.tag == "background":
+            r = gnome_timed(path, root)
+            r["name"] = os.path.splitext(os.path.basename(path))[0].replace("-", " ").replace("_", " ").title()
+            return r
+        if root.tag == "wallpapers":
+            wps = [w for w in root.findall("wallpaper") if w.get("deleted") != "true"]
+            w = wps[min(index, len(wps) - 1)]
+            base = os.path.dirname(path)
+
+            def fix(f):
+                f = (f or "").strip()
+                if os.path.exists(f):
+                    return f
+                # nixpkgs points these at /run/current-system/sw; look next
+                # to the XML's share dir instead.
+                for cand in (os.path.join(base, "..", "backgrounds", "gnome", os.path.basename(f)),
+                             os.path.join(base, os.path.basename(f))):
+                    if os.path.exists(cand):
+                        return os.path.normpath(cand)
+                return f
+            light, dark = fix(w.findtext("filename")), fix(w.findtext("filename-dark") or w.findtext("filename"))
+            if light.lower().endswith(".xml"):
+                return load_dynamic(light, cache, 0, lat, lon)
+            return {"name": w.findtext("name") or "Wallpaper", "kind": "appearance", "light": light, "dark": dark}
+    raise Fail("not a dynamic wallpaper: " + path)
+
+
+def cmd_dynamic(args):
+    path = args.pop(0)
+    cache, index, lat, lon = None, 0, None, None
+    while args:
+        a = args.pop(0)
+        if a == "--dir":
+            cache = args.pop(0)
+        elif a == "--index":
+            index = int(args.pop(0))
+        elif a == "--lat":
+            lat = float(args.pop(0))
+        elif a == "--lon":
+            lon = float(args.pop(0))
+    if lon is None:
+        off = dt.datetime.now().astimezone().utcoffset().total_seconds() / 3600
+        lon = off * 15
+    if lat is None:
+        lat = 40.0
+    r = load_dynamic(path, cache, index, lat, lon)
+    # Qt reads JPEG/PNG/WebP/SVG; convert the rest once.
+    for f in r.get("frames", []):
+        f["file"] = convert_for_qt(f["file"], cache)
+    for k in ("light", "dark", "preview"):
+        if r.get(k):
+            r[k] = convert_for_qt(r[k], cache)
+    r.setdefault("preview", r.get("light") or (r["frames"][len(r["frames"]) // 2]["file"] if r.get("frames") else ""))
+    r["path"] = path
+    r["index"] = index
+    out(r)
+
+
+def thumb_for(src, cache, size=480):
+    """Small JPEG for the Settings grid (Qt can't read JXL/HEIC itself)."""
+    if not src or not os.path.exists(src):
+        return ""
+    if src.lower().endswith((".jpg", ".jpeg", ".png", ".webp")) or not cache:
+        return src
+    key = hashlib.sha1((src + str(os.path.getmtime(src))).encode()).hexdigest()[:16]
+    dest = os.path.join(cache, "thumbs", key + ".jpg")
+    if not os.path.exists(dest):
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        p = subprocess.run(["vips", "thumbnail", src, dest + ".part.jpg[Q=85]", str(size)], capture_output=True)
+        if p.returncode != 0:
+            return ""
+        os.replace(dest + ".part.jpg", dest)
+    return dest
+
+
+def cmd_scan_dynamic(args):
+    found = []
+    cache = None
+    if "--dir" in args:
+        i = args.index("--dir")
+        cache = args[i + 1]
+        args = args[:i] + args[i + 2:]
+    for d in args:
+        d = os.path.expanduser(d)
+        if not os.path.isdir(d):
+            continue
+        for root, dirs, files in os.walk(d):
+            if root[len(d):].count(os.sep) > 2:
+                dirs[:] = []
+            if "dynamic.json" in files:
+                try:
+                    j = json.load(open(os.path.join(root, "dynamic.json")))
+                    first = (j.get("frames") or [{}])[0].get("file") or j.get("light") or ""
+                    found.append({"path": root, "index": 0, "name": j.get("name") or os.path.basename(root),
+                                  "kind": "time" if j.get("frames") else "appearance",
+                                  "preview": first if os.path.isabs(first) else os.path.join(root, first)})
+                except (OSError, ValueError):
+                    pass
+                dirs[:] = []
+                continue
+            for f in sorted(files):
+                p = os.path.join(root, f)
+                low = f.lower()
+                if low.endswith((".heic", ".heif")):
+                    found.append({"path": p, "index": 0, "name": os.path.splitext(f)[0], "kind": "heic", "preview": ""})
+                elif low.endswith(".xml"):
+                    try:
+                        r = ET.parse(p).getroot()
+                    except ET.ParseError:
+                        continue
+                    if r.tag == "background":
+                        first = r.find(".//static/file")
+                        prev = (first.findtext("size") if first is not None and first.find("size") is not None
+                                else (first.text if first is not None else "")) or ""
+                        prev = prev.strip()
+                        if prev and not os.path.exists(prev):
+                            prev = os.path.join(root, os.path.basename(prev))
+                        found.append({"path": p, "index": 0, "kind": "time",
+                                      "name": os.path.splitext(f)[0].replace("-", " ").replace("_", " ").title(), "preview": prev})
+                    elif r.tag == "wallpapers":
+                        for i, w in enumerate(x for x in r.findall("wallpaper") if x.get("deleted") != "true"):
+                            fn = (w.findtext("filename") or "").strip()
+                            if fn.lower().endswith(".xml"):
+                                continue    # the timed XML itself is found on its own
+                            dark = w.findtext("filename-dark")
+                            prev = fn if os.path.exists(fn) else os.path.normpath(os.path.join(root, "..", "backgrounds", "gnome", os.path.basename(fn)))
+                            found.append({"path": p, "index": i, "name": w.findtext("name") or f,
+                                          "kind": "appearance" if dark else "still", "preview": prev})
+    # Dedupe by name+preview (several share dirs list the same sets).
+    seen, res = set(), []
+    for f in found:
+        k = (f["name"], os.path.basename(f["preview"] or f["path"]))
+        if k in seen:
+            continue
+        seen.add(k)
+        f["preview"] = thumb_for(f["preview"] or (f["path"] if f["kind"] == "heic" else ""), cache)
+        res.append(f)
+    out(res)
+
+
+# ---------------------------------------------------------------- Wallpaper Engine
+
+def cmd_scan_we(args):
+    res = []
+    seen = set()
+    for d in args:
+        d = os.path.expanduser(d)
+        if not os.path.isdir(d):
+            continue
+        for pj in sorted(glob.glob(os.path.join(d, "*", "project.json"))):
+            proj = os.path.dirname(pj)
+            real = os.path.realpath(proj)
+            if real in seen:
+                continue
+            seen.add(real)
+            try:
+                j = json.load(open(pj, encoding="utf-8-sig"))
+            except (OSError, ValueError):
+                continue
+            typ = (j.get("type") or "").lower()
+            if not typ:
+                f = (j.get("file") or "").lower()
+                typ = "web" if f.endswith(".html") else "video" if f.endswith(VIDEO_EXT) else "scene"
+            prev = j.get("preview") or ""
+            res.append({
+                "id": os.path.basename(proj), "path": proj, "title": j.get("title") or os.path.basename(proj),
+                "type": typ, "preview": os.path.join(proj, prev) if prev else "",
+                "file": os.path.join(proj, j["file"]) if j.get("file") else "",
+                "workshop": os.path.basename(proj).isdigit(),
+                "rating": j.get("contentrating") or "", "tags": j.get("tags") or [],
+            })
+    out(res)
+
+
+# ---------------------------------------------------------------- media
+
+def cmd_scan_media(args):
+    res = []
+    for d in args:
+        d = os.path.expanduser(d)
+        if not os.path.isdir(d):
+            continue
+        for root, dirs, files in os.walk(d):
+            if root[len(d):].count(os.sep) >= 1:
+                dirs[:] = []
+            for f in sorted(files):
+                low = f.lower()
+                if low.endswith(VIDEO_EXT):
+                    res.append({"path": os.path.join(root, f), "kind": "video", "name": os.path.splitext(f)[0]})
+                elif low.endswith((".frag", ".glsl")):
+                    res.append({"path": os.path.join(root, f), "kind": "shader", "name": os.path.splitext(f)[0]})
+    out(res)
+
+
+def cmd_scan_folder(args):
+    d = os.path.expanduser(args[0])
+    recursive = "--recursive" in args
+    files = []
+    if os.path.isdir(d):
+        for root, dirs, fs in os.walk(d):
+            dirs[:] = sorted(x for x in dirs if not x.startswith(".")) if recursive else []
+            files += [os.path.join(root, f) for f in sorted(fs) if f.lower().endswith(IMAGE_EXT) and not f.startswith(".")]
+    out({"folder": d, "files": files})
+
+
+def cmd_poster(args):
+    video, dest = args[0], args[1]
+    if os.path.exists(dest) and os.path.getmtime(dest) >= os.path.getmtime(video):
+        out({"file": dest})
+        return
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    part = dest + ".part.jpg"
+    for ss in ("1", "0"):
+        p = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-ss", ss, "-i", video, "-frames:v", "1",
+                            "-q:v", "3", part], capture_output=True, text=True)
+        if p.returncode == 0 and os.path.exists(part) and os.path.getsize(part):
+            os.replace(part, dest)
+            out({"file": dest})
+            return
+    raise Fail("ffmpeg: " + p.stderr.strip())
+
+
+# ---------------------------------------------------------------- shaders
+
+SHADER_HEAD = """#version 440
+// Generated by hearth-wallpaper from a Shadertoy-style shader.
+layout(location = 0) in vec2 qt_TexCoord0;
+layout(location = 0) out vec4 hearth_fragColor;
+layout(std140, binding = 0) uniform buf {
+    mat4 qt_Matrix;
+    float qt_Opacity;
+    float iTime;
+    vec2 res;
+    float dark;
+};
+#define iResolution vec3(res, 1.0)
+#define iMouse vec4(0.0)
+#define iFrame int(iTime * 60.0)
+#define iTimeDelta (1.0 / 60.0)
+#define iDate vec4(0.0)
+#define texture2D texture
+"""
+
+SHADER_TAIL = """
+void main() {
+    vec4 c = vec4(0.0, 0.0, 0.0, 1.0);
+    mainImage(c, vec2(qt_TexCoord0.x, 1.0 - qt_TexCoord0.y) * res);
+    hearth_fragColor = vec4(c.rgb, 1.0) * qt_Opacity;
+}
+"""
+
+
+def cmd_shader(args):
+    src, dest = args[0], args[1]
+    code = open(src, encoding="utf-8").read()
+    if "iChannel" in code:
+        raise Fail("this shader reads textures (iChannel), which hearth doesn't provide")
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    if re.search(r"^\s*#version", code, re.M) and "qt_TexCoord0" in code:
+        frag = code     # already a Qt Quick fragment shader
+    else:
+        code = re.sub(r"^\s*#version.*$", "", code, flags=re.M)
+        code = re.sub(r"^\s*precision\s+\w+\s+float\s*;", "", code, flags=re.M)
+        frag = SHADER_HEAD + code + SHADER_TAIL
+    with tempfile.TemporaryDirectory() as td:
+        f = os.path.join(td, "shader.frag")
+        open(f, "w").write(frag)
+        qsb = shutil.which("qsb") or "qsb"
+        p = subprocess.run([qsb, "--qt6", "-o", dest + ".part", f], capture_output=True, text=True)
+        if p.returncode != 0:
+            raise Fail("shader didn't compile: " + (p.stderr or p.stdout).strip()[-600:])
+    os.replace(dest + ".part", dest)
+    out({"file": dest})
+
+
+# ---------------------------------------------------------------- secrets
+#
+# API keys: the Secret Service (KWallet or GNOME Keyring) via secret-tool;
+# without one, a 0600 file in ~/.config/hearth.
+
+def secret_file():
+    return os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "hearth", "wallpaper-keys.json")
+
+
+def secret_get(name):
+    try:
+        p = subprocess.run(["secret-tool", "lookup", "application", "hearth", "key", name],
+                           capture_output=True, text=True, timeout=10)
+        if p.returncode == 0 and p.stdout.strip():
+            return p.stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    try:
+        return json.load(open(secret_file())).get(name, "")
+    except (OSError, ValueError):
+        return ""
+
+
+def cmd_secret(args):
+    op, name = args[0], args[1]
+    if op == "get":
+        out({"name": name, "set": bool(secret_get(name))})
+        return
+    path = secret_file()
+    try:
+        data = json.load(open(path))
+    except (OSError, ValueError):
+        data = {}
+    if op == "delete":
+        subprocess.run(["secret-tool", "clear", "application", "hearth", "key", name], capture_output=True)
+        data.pop(name, None)
+        where = "removed"
+    else:
+        value = sys.stdin.read().strip()
+        where = "file"
+        try:
+            p = subprocess.run(["secret-tool", "store", "--label", f"hearth wallpaper: {name} API key",
+                                "application", "hearth", "key", name], input=value, capture_output=True, text=True, timeout=20)
+            if p.returncode == 0:
+                where = "keyring"
+                data.pop(name, None)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        if where == "file":
+            data[name] = value
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fd = os.open(path + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        json.dump(data, f)
+    os.replace(path + ".tmp", path)
+    out({"name": name, "stored": where})
+
+
+# ---------------------------------------------------------------- export
+
+def cmd_export(args):
+    """Copy the current wallpaper where the lock and login screens read it.
+
+    JSONFILE is ~/.cache/hearth/wallpaper.json (already written by the
+    shell). With --system DIR (default /var/lib/hearth/wallpaper) the still
+    (and a video under 1 GB) are copied there with wallpaper.json pointing at
+    the copies, readable by the greeter user. A missing or read-only DIR is
+    reported, not an error."""
+    src = args[0]
+    sysdir = "/var/lib/hearth/wallpaper"
+    if "--system" in args:
+        sysdir = args[args.index("--system") + 1]
+    j = json.load(open(src))
+    status = {"system": "off"}
+    if j.get("lockScreen") is False:
+        out(status)
+        return
+    if not os.path.isdir(sysdir):
+        status["system"] = "missing"
+        out(status)
+        return
+    if not os.access(sysdir, os.W_OK):
+        status["system"] = "not-writable"
+        out(status)
+        return
+    os.umask(0o002)
+    res = dict(j)
+
+    def copy(path, name):
+        if not path or not os.path.isfile(path):
+            return ""
+        ext = os.path.splitext(path)[1].lower() or ".jpg"
+        dest = os.path.join(sysdir, name + ext)
+        try:
+            same = os.path.exists(dest) and os.path.getsize(dest) == os.path.getsize(path) \
+                and os.path.getmtime(dest) >= os.path.getmtime(path)
+        except OSError:
+            same = False
+        if not same:
+            shutil.copyfile(path, dest + ".part")
+            os.chmod(dest + ".part", 0o664)
+            os.replace(dest + ".part", dest)
+        # Remove stale copies with other extensions.
+        for old in glob.glob(os.path.join(sysdir, name + ".*")):
+            if old != dest and not old.endswith(".json"):
+                try:
+                    os.unlink(old)
+                except OSError:
+                    pass
+        return dest
+    res["path"] = copy(j.get("path"), "wallpaper")
+    video = j.get("video") or ""
+    if video and os.path.isfile(video) and os.path.getsize(video) < (1 << 30):
+        res["video"] = copy(video, "video")
+    else:
+        res["video"] = ""
+        for old in glob.glob(os.path.join(sysdir, "video.*")):
+            try:
+                os.unlink(old)
+            except OSError:
+                pass
+    if j.get("shader") and os.path.isfile(j["shader"]):
+        res["shader"] = copy(j["shader"], "shader")
+    tmp = os.path.join(sysdir, ".wallpaper.json.tmp")
+    with open(tmp, "w") as f:
+        json.dump(res, f, indent=2)
+    os.chmod(tmp, 0o664)
+    os.replace(tmp, os.path.join(sysdir, "wallpaper.json"))
+    status["system"] = "ok"
+    status["dir"] = sysdir
+    out(status)
+
+
+COMMANDS = {
+    "fetch": cmd_fetch, "crop": cmd_crop, "dynamic": cmd_dynamic, "scan-dynamic": cmd_scan_dynamic,
+    "scan-we": cmd_scan_we, "scan-media": cmd_scan_media, "scan-folder": cmd_scan_folder, "poster": cmd_poster,
+    "shader": cmd_shader, "secret": cmd_secret, "export": cmd_export,
+}
+
+
+def main():
+    if len(sys.argv) < 2 or sys.argv[1] not in COMMANDS:
+        sys.stderr.write(__doc__)
+        sys.exit(2)
+    try:
+        COMMANDS[sys.argv[1]](sys.argv[2:])
+    except Fail as e:
+        out({"error": str(e)})
+        sys.exit(1)
+    except Exception as e:     # keep the shell informed, never a traceback only
+        out({"error": f"{type(e).__name__}: {e}"})
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
