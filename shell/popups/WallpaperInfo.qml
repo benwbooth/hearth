@@ -7,8 +7,9 @@ import "../widgets"
 import "../services"
 import ".."
 
-// Small card about the current wallpaper (Bing's image of the day): title,
-// copyright, open the story in the browser, save a copy to ~/Pictures.
+// Small card about the current wallpaper (services/Wallpaper.qml): source,
+// title, credit, open the story in the browser, save a copy to ~/Pictures,
+// previous/next picture, Wallpaper settings.
 // Opened with `hearth-ipc call wallpaper info`; bottom-right above the bar on
 // the focused monitor, closes on Escape or a click elsewhere.
 PanelWindow {
@@ -58,7 +59,7 @@ PanelWindow {
 
             Label {
                 Layout.fillWidth: true
-                text: Wallpaper.mode === "potd" ? "Image of the day" : "Wallpaper"
+                text: Wallpaper.sourceName || "Wallpaper"
                 color: Theme.fgDim
                 font.pointSize: Theme.smallFontSize
             }
@@ -99,12 +100,25 @@ PanelWindow {
             }
             MenuItem {
                 Layout.fillWidth: true
-                icon: Wallpaper.mode === "potd" ? "view-refresh" : "preferences-desktop-wallpaper"
-                text: Wallpaper.mode === "potd" ? "Check for a new image" : "Use image of the day"
-                onTriggered: {
-                    if (Wallpaper.mode === "potd") Wallpaper.refresh(false);
-                    else { Wallpaper.setMode("potd", Wallpaper.image); Wallpaper.refresh(false); }
-                }
+                readonly property var sp: Wallpaper.primarySpec
+                visible: !!sp && (sp.type === "potd" || sp.type === "folder")
+                icon: "go-previous"
+                text: "Previous picture"
+                onTriggered: Wallpaper.previous("")
+            }
+            MenuItem {
+                Layout.fillWidth: true
+                readonly property var sp: Wallpaper.primarySpec
+                visible: !!sp && (sp.type === "potd" || sp.type === "folder")
+                icon: "go-next"
+                text: "Next picture"
+                onTriggered: Wallpaper.next("")
+            }
+            MenuItem {
+                Layout.fillWidth: true
+                icon: "preferences-desktop-wallpaper"
+                text: "Wallpaper settings…"
+                onTriggered: { Settings.openRequested("wallpaper"); win.open = false; }
             }
         }
     }

@@ -19,7 +19,8 @@ Scope {
         hotcorners: "settings/HotCornersPane.qml", displays: "settings/DisplaysPane.qml",
         keyboard: "settings/KeyboardPane.qml", shortcuts: "settings/ShortcutsPane.qml",
         windowrules: "settings/WindowRulesPane.qml", power: "settings/PowerPane.qml",
-        clipboard: "settings/ClipboardPane.qml", screenshots: "settings/ScreenshotsPane.qml"
+        clipboard: "settings/ClipboardPane.qml", screenshots: "settings/ScreenshotsPane.qml",
+        wallpaper: "settings/WallpaperPane.qml"
     })
 
     Connections {
@@ -150,7 +151,7 @@ Scope {
                             visible: !root.paneFiles[root.pane]
                             active: visible
                             sourceComponent: ({ appearance: appearancePane, menubar: menubarPane, dock: dockPane, layout: layoutPane,
-                                                wallpaper: wallpaperPane, mouse: mousePane, night: nightPane, notifications: notificationsPane })[root.pane]
+                                                mouse: mousePane, night: nightPane, notifications: notificationsPane })[root.pane]
                         }
                     }
                 }
@@ -446,56 +447,6 @@ Scope {
                     note: "Mac: menu bar on top with the app's menus, Dock at the bottom. Classic: one Plasma-style panel at the bottom with the task manager and pager."
                     key: "layout"
                     options: [{ value: "mac", label: "Mac" }, { value: "panel", label: "Classic panel" }]
-                }
-            }
-        }
-    }
-
-    Component {
-        id: wallpaperPane
-        ColumnLayout {
-            spacing: 14
-            Rectangle {
-                Layout.preferredWidth: 480
-                Layout.preferredHeight: 270
-                radius: Theme.popupRadius
-                color: Theme.bgAlt
-                clip: true
-                Image {
-                    anchors.fill: parent
-                    source: Wallpaper.file ? "file://" + Wallpaper.file : ""
-                    fillMode: Image.PreserveAspectCrop
-                    asynchronous: true
-                    sourceSize.width: 960
-                }
-            }
-            Label { text: Wallpaper.title; font.weight: Font.DemiBold; Layout.fillWidth: true }
-            Label { text: Wallpaper.copyright; color: Theme.fgDim; Layout.fillWidth: true; visible: text !== "" }
-            Group {
-                Row_ {
-                    label: "Bing picture of the day"
-                    note: "A new image every day."
-                    Toggle {
-                        checked: Wallpaper.mode === "potd"
-                        onToggled: c => { if (c) { Wallpaper.setMode("potd", Wallpaper.image); Wallpaper.refresh(false); } }
-                    }
-                }
-                Divider {}
-                Row_ {
-                    label: "Picture file"
-                    note: Wallpaper.mode === "image" ? Wallpaper.image : "Pick an image to use instead."
-                    BarButton {
-                        implicitHeight: 30
-                        text: "Choose…"
-                        onClicked: picker.running = true
-                    }
-                }
-            }
-            Process {
-                id: picker
-                command: ["sh", "-c", "kdialog --getopenfilename \"$HOME/Pictures\" 'Images (*.jpg *.jpeg *.png *.webp)' 2>/dev/null || zenity --file-selection --file-filter='*.jpg *.jpeg *.png *.webp' 2>/dev/null"]
-                stdout: StdioCollector {
-                    onStreamFinished: { const p = text.trim(); if (p) Wallpaper.setMode("image", p); }
                 }
             }
         }
