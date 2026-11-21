@@ -89,7 +89,8 @@ def write_config():
     s = spotlight_settings()
     os.makedirs(CONFDIR, exist_ok=True)
     os.makedirs(DBDIR, exist_ok=True)
-    folders = [expand(p) for p in s["folders"]]
+    # Folders that don't exist (no ~/Music yet) make recollindex complain.
+    folders = [p for p in (expand(p) for p in s["folders"]) if os.path.isdir(p)] or [HOME]
     skipped = [expand(p) for p in s["excludePaths"]] + [
         expand("~/.cache"), expand("~/.local/share/Trash"), expand("~/.local/share/Steam"),
         DBDIR, "/nix", "/proc", "/sys", "/dev", "/run", "/tmp",
@@ -110,10 +111,20 @@ def write_config():
         # big text files capped.
         "noaspell = 1",
         "loglevel = 1",
-        "idxflushmb = 20",
-        "textfilemaxmbs = 10",
-        "compressedfilemaxkbs = 50000",
+        # Light on the machine (unlike Baloo): one indexing thread, small
+        # write batches, and converters (pdftotext...) stopped after 20 s or
+        # 300 MB so one odd file can't spin or bloat.
+        "thrQSizes = -1 -1 -1",
+        "thrTCounts = 1 1 1",
+        "idxflushmb = 10",
+        "filtermaxseconds = 20",
+        "filtermaxmbytes = 300",
+        "textfilemaxmbs = 5",
+        "compressedfilemaxkbs = 20000",
         "pdfocr = 0",
+        # Watching: apply changes every 2 s (default 30), so new files show
+        # up in Spotlight almost at once.
+        "monixinterval = 2",
         # inotify: wait a little before re-indexing a file that keeps changing.
         "mondelaypatterns = *.log:20 *.part:60 *.crdownload:60",
     ]

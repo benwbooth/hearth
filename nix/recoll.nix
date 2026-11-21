@@ -5,7 +5,7 @@
 # closure. Here those filters get stubs (.lyx and .dvi files are still found
 # by name, just not by their text) and the tools are left unwrapped: every
 # filter already calls its converter (pdftotext, antiword...) by full path.
-{ lib, recoll-nox, writeShellScriptBin, libxml2, libxslt }:
+{ lib, recoll-nox, writeShellScriptBin, libxml2, libxslt, perlPackages, makeWrapper }:
 let
   stub = name: writeShellScriptBin name "exit 1";
 in
@@ -17,4 +17,10 @@ in
   # The Qt hook used to bring these in.
   buildInputs = old.buildInputs ++ [ libxml2 libxslt ];
   dontWrapQtApps = true;
+  # rclimg (EXIF and other picture metadata) also needs Perl's JSON module,
+  # which nixpkgs leaves out.
+  postInstall = old.postInstall + ''
+    wrapProgram $out/share/recoll/filters/rclimg \
+      --prefix PERL5LIB : "${perlPackages.makeFullPerlPath [ perlPackages.JSON ]}"
+  '';
 })

@@ -19,6 +19,7 @@ ColumnLayout {
     function localPath(url) { return decodeURIComponent(String(url).replace(/^file:\/\//, "")); }
 
     Component.onCompleted: Spotlight.requestStatus()
+    Component.onDestruction: Spotlight.forceIndex = false
     Timer { interval: 3000; running: true; repeat: true; onTriggered: Spotlight.requestStatus() }
     readonly property var st: Spotlight.status
 
@@ -41,12 +42,45 @@ ColumnLayout {
                     return "The indexer isn't running, so only apps and settings are found. Turn on services.hearth-ai in the NixOS config, or start it below.";
                 return "Checking…";
             }
-            tip: "hearth uses recoll to index files. It reads new and changed files at low priority and then only reacts when files change, so it costs nearly nothing while you work."
-            PushButton {
-                text: pane.st.indexer === "active" ? "Rebuild" : "Start"
-                tooltip: pane.st.indexer === "active" ? "Read every file again (takes a while for big folders)" : "Start the indexer now (hearth-indexer.service)"
-                onClicked: Spotlight.reindex()
+            tip: "hearth uses recoll to index files: one thread at the lowest priority, capped at 25% of a core and 512 MB, frozen while you work. After the first pass it only reads files that changed."
+            RowLayout {
+                PushButton {
+                    text: Spotlight.forceIndex ? "Indexing now" : "Index Now"
+                    enabled: !Spotlight.forceIndex
+                    tooltip: "Index right away, even while you use the computer (until you leave this pane)"
+                    onClicked: Spotlight.forceIndex = true
+                }
+                PushButton {
+                    text: pane.st.indexer === "active" ? "Rebuild" : "Start"
+                    tooltip: pane.st.indexer === "active" ? "Read every file again (takes a while for big folders)" : "Start the indexer now (hearth-indexer.service)"
+                    onClicked: Spotlight.reindex()
+                }
             }
+        }
+        SettingsDivider {}
+        SettingsRow {
+            label: "Only index while I'm away"
+            note: Spotlight.indexAllowed ? "Indexing is allowed right now." : "Paused: " + Spotlight.indexPausedWhy + ". New files show up after you've been away " + (pane.cfg.idleMinutes || 3) + " minutes."
+            tip: "While you use the computer the indexer is frozen (no CPU, no disk). It runs after a few minutes without keyboard or mouse input, but not while a video or game is playing or something is full screen."
+            Toggle { checked: pane.cfg.onlyWhenIdle !== false; onToggled: c => Settings.set("spotlight.onlyWhenIdle", c) }
+        }
+        SettingsDivider {}
+        SettingsRow {
+            label: "Away for"
+            note: "How long without input before indexing starts."
+            enabled: pane.cfg.onlyWhenIdle !== false
+            Dropdown {
+                implicitWidth: 160
+                options: [1, 2, 3, 5, 10, 15].map(n => ({ value: n, label: n + (n === 1 ? " minute" : " minutes") }))
+                value: Number(pane.cfg.idleMinutes) || 3
+                onPicked: v => Settings.set("spotlight.idleMinutes", v)
+            }
+        }
+        SettingsDivider {}
+        SettingsRow {
+            label: "Index on battery"
+            note: "Off: a laptop on battery never indexes."
+            Toggle { checked: !!pane.cfg.indexOnBattery; onToggled: c => Settings.set("spotlight.indexOnBattery", c) }
         }
     }
 

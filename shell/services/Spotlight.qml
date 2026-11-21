@@ -2,6 +2,8 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Wayland
+import Quickshell.Services.UPower
 
 // Spotlight (README "Spotlight"): search apps, files, folders, pictures,
 // settings and actions, calculate and convert, from one field. Super+Space
@@ -24,6 +26,9 @@ Singleton {
         hidden: false,                  // include hidden files and folders
         web: false,                     // web suggestions (asks DuckDuckGo as you type)
         ask: true,                      // "Ask hearth" row: the assistant answers (Settings > AI)
+        onlyWhenIdle: true,             // index only while nobody uses the computer
+        idleMinutes: 3,                 // ...after this long without input
+        indexOnBattery: false,
         categories: { apps: true, documents: true, folders: true, images: true, settings: true, actions: true, calculator: true, other: true }
     })
     readonly property var cfg: {
@@ -108,6 +113,36 @@ Singleton {
     readonly property string indexKey: JSON.stringify([cfg.folders, cfg.excludeNames, cfg.excludePaths, cfg.contents, cfg.hidden])
     onIndexKeyChanged: if (Settings.loaded) configureSoon.restart()
     Timer { id: configureSoon; interval: 800; onTriggered: root.send({ cmd: "configure" }) }
+
+    // --- indexing only while idle ---
+    // The indexer (hearth-indexer.service) is frozen through systemd's cgroup
+    // freezer while you use the computer: no CPU, no disk, and its memory
+    // stays as it is. It thaws after `idleMinutes` without input, unless an
+    // app holds an idle inhibitor (a video, a game), something is full
+    // screen or the laptop is on battery. "Index now" in Settings thaws it
+    // until you close the pane.
+    IdleMonitor {
+        id: idleMon
+        enabled: root.cfg.onlyWhenIdle !== false
+        timeout: Math.max(30, Number(root.cfg.idleMinutes || 3) * 60)
+        respectInhibitors: true
+    }
+    property bool forceIndex: false
+    readonly property bool onBattery: UPower.onBattery
+    readonly property bool indexAllowed: forceIndex || (cfg.onlyWhenIdle === false
+        ? !(onBattery && !cfg.indexOnBattery)
+        : idleMon.isIdle && !Wallpaper.fullscreenAny && !(onBattery && !cfg.indexOnBattery))
+    readonly property string indexPausedWhy: indexAllowed ? ""
+        : onBattery && !cfg.indexOnBattery ? "on battery"
+        : Wallpaper.fullscreenAny ? "something is full screen"
+        : "you're using the computer"
+    onIndexAllowedChanged: gate.restart()
+    Timer { id: gate; interval: 1500; running: true; onTriggered: root.applyGate() }
+    function applyGate() {
+        if (Quickshell.env("HEARTH_SEARCH_NO_SYSTEMD")) return;
+        Quickshell.execDetached(["systemctl", "--user", indexAllowed ? "thaw" : "freeze", "hearth-indexer.service"]);
+    }
+    Component.onDestruction: Quickshell.execDetached(["systemctl", "--user", "thaw", "hearth-indexer.service"])
 
     // --- in-memory matches ---
 

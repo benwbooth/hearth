@@ -435,8 +435,18 @@ Actions, Documents, Folders, Images, Other, the calculator, web suggestions
   plocate/fsearch (names only, root-run updatedb). recoll is standalone,
   reads document contents through its filters, keeps kind and dates, has a
   Python API and watches folders with inotify. `hearth-indexer.service`
-  (`nixosModules.ai`) runs `recollindex -m` at idle CPU and I/O priority:
-  one catch-up pass a minute after login, then near zero cost. Config:
+  (`nixosModules.ai`) runs `recollindex -m` with one thread at idle CPU and
+  I/O priority, capped at 25% of a core and 512 MB (the converters it runs
+  count too). It only works while you're away: hearth freezes the unit
+  (systemd's cgroup freezer: no CPU, no disk) while you use the computer and
+  thaws it after 3 idle minutes. It stays frozen while a video or game holds
+  an idle inhibitor, while anything is full screen, and on battery
+  (Settings > Spotlight: "Only index while I'm away", "Away for", "Index on
+  battery", "Index Now"). Measured on 190,000 files (103 GB of documents):
+  the first full pass with contents took 10 minutes of one core uncapped
+  (about 40 minutes of away time at the cap), peaked at 150 MB of RAM and
+  made a 2.9 GB index. After that it only reads changed files, which reach
+  the index within 2 s of being read. Config:
   `~/.config/hearth/recoll/recoll.conf`, written from Settings > Spotlight
   (folders, Privacy exclusions, contents on/off, hidden files); index in
   `~/.cache/hearth/recoll`. recollindex notices config changes by itself.

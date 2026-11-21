@@ -5,8 +5,10 @@
 #   services.hearth-ai.enable = true;
 #
 # hearth-indexer.service starts with the graphical session and runs recoll
-# at idle CPU and I/O priority: one catch-up pass a minute after login, then
-# inotify watches (no polling). Folders and exclusions come from Settings >
+# at idle CPU and I/O priority, capped at 25% of a core and 512 MB: one
+# catch-up pass, then inotify watches (no polling). hearth freezes it
+# (cgroup freezer) while you use the computer, so it only works when you're
+# away (Settings > Spotlight). Folders and exclusions come from Settings >
 # Spotlight.
 #
 # hearth-llama-server.service is not started at login: Settings > AI starts
@@ -47,10 +49,19 @@ in
         ExecStart = lib.getExe' cfg.package "hearth-indexer";
         Restart = "on-failure";
         RestartSec = 30;
+        # Never in the way: lowest CPU and I/O priority, at most a quarter
+        # of one core, memory capped (the converters it runs, like
+        # pdftotext, count too). hearth also freezes the whole unit while
+        # you use the computer (services/Spotlight.qml).
         Nice = 19;
         CPUSchedulingPolicy = "idle";
+        CPUWeight = "idle";
+        CPUQuota = "25%";
         IOSchedulingClass = "idle";
-        MemoryHigh = "1G";
+        IOWeight = 1;
+        MemoryHigh = "384M";
+        MemoryMax = "512M";
+        MemorySwapMax = 0;
       };
     };
 
