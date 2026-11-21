@@ -17,7 +17,7 @@ Item {
     property color tint: Theme.glassMenu
     property real radius: Theme.menuRadius
     property bool rimVisible: true
-    property bool shadow: true
+    property bool shadow: Theme.glassShadows
     property real shadowBlur: Theme.menuShadowBlur
     property real shadowY: Theme.menuShadowY
     property real shadowOpacity: Theme.shadowOpacity

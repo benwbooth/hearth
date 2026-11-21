@@ -372,7 +372,7 @@ PanelWindow {
         implicitHeight: body.implicitHeight + popup.padding * 2
         width: implicitWidth
         height: implicitHeight
-        readonly property real shadowPad: popup.bare ? Math.ceil(Theme.menuShadowBlur + Theme.menuShadowY) : glassPane.shadowPad
+        readonly property real shadowPad: popup.bare ? (Theme.glassShadows ? Math.ceil(Theme.menuShadowBlur + Theme.menuShadowY) : 2) : glassPane.shadowPad
         // Fade in and grow from the anchor; fade out on close.
         opacity: popup.open ? 1 : 0
         Behavior on opacity {
@@ -403,7 +403,7 @@ PanelWindow {
             id: glassPane
             anchors.fill: parent
             visible: !popup.bare
-            shadow: !popup.bare
+            shadow: !popup.bare && Theme.glassShadows
             tint: Theme.glassMenu
         }
 

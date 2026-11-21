@@ -439,6 +439,9 @@ PanelWindow {
                 // Hyprland blurs behind the dock; arbor can't for this wide
                 // surface (see arbor/hearth-layer-rules.kdl), so more tint.
                 tint: Compositor.isHyprland ? Theme.glassDock : Theme.glassDockSolid
+                // arbor doesn't blur the dock (see above), so its own shadow
+                // is fine there too.
+                shadow: true
                 shadowBlur: 30
                 shadowY: 8
                 glow: Theme.glassGlow * 1.25

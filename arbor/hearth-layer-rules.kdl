@@ -11,19 +11,36 @@
 layer-rule {
     match namespace="^hearth-(menubar|popup)$"
     match namespace="^swaync-(control-center|notification-window)$"
-    geometry-corner-radius 10
+    // hearth's menus have 12 pt (14 px) corners (macOS 26).
+    geometry-corner-radius 14
     background-effect {
         xray false
         blur true
-        noise 0.03
-        saturation 1.4
+        noise 0.02
+        // Liquid glass vibrancy: the colours behind come through brighter.
+        saturation 1.6
     }
     popups {
-        geometry-corner-radius 10
+        geometry-corner-radius 8
         background-effect {
             xray false
             blur true
+            saturation 1.6
         }
+    }
+}
+
+// Menus and popovers: a large, soft, faint shadow like macOS's (hearth
+// leaves its own shadow off on arbor, since the blur covers the layer's
+// whole rectangle).
+layer-rule {
+    match namespace="^hearth-popup$"
+    shadow {
+        on
+        softness 26
+        spread 0
+        offset x=0 y=9
+        color "#00000045"
     }
 }
 

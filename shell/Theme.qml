@@ -84,6 +84,11 @@ Singleton {
     // soft and faint like macOS's window shadows. Peak opacity stays under
     // Hyprland's ignore_alpha (0.3) so the blur never spreads into them.
     readonly property real shadowOpacity: dark ? 0.27 : 0.17
+    // hearth draws glass shadows itself where the compositor blurs only the
+    // opaque pixels (Hyprland's ignore_alpha). arbor blurs a layer's whole
+    // rectangle, so a drawn shadow would get a blurred box around it: there
+    // the compositor draws the shadow (arbor/hearth-layer-rules.kdl).
+    readonly property bool glassShadows: Compositor.isHyprland
     readonly property real menuShadowBlur: 26
     readonly property real menuShadowY: 9
 
