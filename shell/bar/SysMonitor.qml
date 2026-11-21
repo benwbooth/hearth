@@ -436,12 +436,6 @@ done`]
             value: root.pct(root.memPercent)
             history: root.hMem
         }
-        KStat {
-            visible: root.showDisk && root.diskSize > 0
-            h: root.h; label: "DISK"; kind: "disk"; color: root.palette.disk
-            value: root.pct(root.diskPercent)
-            history: root.hDisk
-        }
         Repeater {
             model: root.gpuIndexes
             RowLayout {
@@ -463,6 +457,13 @@ done`]
                     history: gpuItem.g ? gpuItem.g.vhist : []
                 }
             }
+        }
+        // After the GPUs and their VRAM, as in the treetop app.
+        KStat {
+            visible: root.showDisk && root.diskSize > 0
+            h: root.h; label: "DISK"; kind: "disk"; color: root.palette.disk
+            value: root.pct(root.diskPercent)
+            history: root.hDisk
         }
         // Network: stacked label and two stacked rates, like KStats.
         RowLayout {
@@ -617,9 +618,15 @@ done`]
         const list = topData[kind];
         const extra = kind === "gpu" ? gpuUnattributedText() : "";
         if (!list.length) return extra || c(Theme.fgDim, "Nothing is using it right now.");
+        // Memory and VRAM: each program's share of the total next to the
+        // amount (CPU and GPU are percentages already).
+        const total = kind === "mem" ? memTotal
+            : kind === "vram" ? gpus.reduce((a, g) => a + (g.vramTotal || 0), 0) : 0;
         let t = "<table cellspacing='1'>";
         for (const x of list)
-            t += "<tr><td align='right'>" + c(kindColor[kind], "<b>" + fmtTop(kind, x.v) + "</b>") + "</td><td>&nbsp;&nbsp;" + esc(x.name)
+            t += "<tr><td align='right'>" + c(kindColor[kind], "<b>" + fmtTop(kind, x.v) + "</b>") + "</td>"
+                + (total > 0 ? "<td align='right'>&nbsp;" + c(kindColor[kind], (x.v / total * 100).toFixed(x.v / total < 0.1 ? 1 : 0) + "%") + "</td>" : "")
+                + "<td>&nbsp;&nbsp;" + esc(x.name)
                 + "</td><td>&nbsp;" + c(Theme.fgDim, x.n > 1 ? "×" + x.n : "") + "</td></tr>";
         t += "</table>";
         if (kind === "net" || kind === "disk")
