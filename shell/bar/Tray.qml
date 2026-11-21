@@ -30,7 +30,6 @@ Row {
     Camera { ipcName: "camera" }
     Printers { ipcName: "printers" }
     Drives { ipcName: "drives" }
-    AiModels { ipcName: "ai" }
     Weather { ipcName: "weather" }
     Keyboard { ipcName: "keyboard" }
     Battery { ipcName: "battery" }

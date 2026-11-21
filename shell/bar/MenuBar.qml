@@ -291,7 +291,7 @@ PanelWindow {
                 HelpMenu {}
                 SpotlightButton {}
                 ControlCenter {}
-                VoiceButton {}
+                AssistantMenu {}
                 Clock {}
             }
         }

@@ -17,7 +17,7 @@ ColumnLayout {
 
     Label {
         Layout.fillWidth: true
-        text: "Press " + Voice.shortcutText + " or click the microphone in the menu bar, then just say what you want: “open the PDF I edited yesterday about taxes”, “set the volume to 50”, “what's the weather?”, “open Kog”. It stops listening when you stop talking. Speech is recognised on this computer and nothing is recorded while it isn't listening."
+        text: "Press " + Voice.shortcutText + " or click the sparkle in the menu bar and its microphone, then just say what you want: “open the PDF I edited yesterday about taxes”, “set the volume to 50”, “what's the weather?”, “open Kog”. It stops listening when you stop talking. Speech is recognised on this computer and nothing is recorded while it isn't listening."
         color: Theme.fgDim
         wrapMode: Text.Wrap
         elide: Text.ElideNone
@@ -39,7 +39,7 @@ ColumnLayout {
         SettingsDivider {}
         SettingsRow {
             label: "Show in the menu bar"
-            note: "The microphone button next to Control Center."
+            note: "The sparkle next to Control Center: ask by voice or typing, and see or unload the AI models."
             Toggle { checked: pane.cfg.menuBarButton !== false; onToggled: c => Settings.set("voice.menuBarButton", c) }
         }
         SettingsDivider {}
