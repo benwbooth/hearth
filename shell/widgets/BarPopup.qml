@@ -19,7 +19,7 @@ import ".."
 // drop shadow, which needs room around the pane, so the surface is
 // `shadowPad` larger on each side (only the pane takes input). It fades
 // and scales in from its anchor (Theme.menuInMs), fades out
-// (Theme.menuOutMs); switching between open menu bar menus is instant.
+// (Theme.menuOutMs); switching between open menu bar menus crossfades.
 PanelWindow {
     id: popup
     required property Item anchorItem
@@ -118,7 +118,7 @@ PanelWindow {
     // take longer than the whole fade, which used to end before anything was
     // on screen, so menus just popped in.
     property bool painted: false
-    readonly property bool shown: open && (painted || instant)
+    readonly property bool shown: open && painted
     Connections {
         target: popup.visible && !popup.painted ? frame.Window.window : null
         ignoreUnknownSignals: true
@@ -138,16 +138,16 @@ PanelWindow {
     // (and close it, like any click outside).
     mask: Region { item: frame }
 
-    // Shown without the open animation: switched to from another open menu
-    // bar menu (macOS swaps those instantly).
-    property bool instant: false
+    // Switched to from another open menu bar menu (dragging along the
+    // menu bar): the two crossfade, without the new one's grow. Used once,
+    // by the next fade-in.
+    property bool swapIn: false
     // Cleared again on close: the dock stays out while its menu is the
     // active popup, so a stale one kept it from ever hiding.
     onOpenChanged: {
         if (open) {
             const prev = ShellState.activePopup;
-            instant = !!prev && prev !== popup && prev.open && prev.menuBarMenu && popup.menuBarMenu;
-            if (instant) prev.instant = true;
+            swapIn = !!prev && prev !== popup && prev.open && prev.menuBarMenu && popup.menuBarMenu;
             current = null;
             ShellState.activePopup = popup;
         } else {
@@ -155,10 +155,6 @@ PanelWindow {
             current = null;
             typed = "";
         }
-        // The instant swap is for this one change only: cleared right after,
-        // or every later open and close of these menus skipped its fade
-        // (the flag used to stick after the first menu-to-menu switch).
-        if (instant) Qt.callLater(() => { popup.instant = false; });
     }
     // One popup at a time.
     Connections {
@@ -415,17 +411,15 @@ PanelWindow {
                 const s = popup.shown;
                 fadeAnim.stop();
                 growAnim.stop();
-                if (popup.instant) {
-                    frame.opacity = s ? 1 : 0;
-                    frame.grow = s ? 1 : 0;
-                    return;
-                }
                 fadeAnim.to = s ? 1 : 0;
                 fadeAnim.duration = s ? Theme.menuInMs : Theme.menuOutMs;
                 fadeAnim.easing.type = s ? Easing.OutCubic : Easing.InOutQuad;
                 fadeAnim.start();
                 // Grows on the way in only; closes at full size, like macOS.
-                if (s) { frame.grow = 0; growAnim.to = 1; growAnim.start(); }
+                // Switched to from another menu bar menu: a plain crossfade.
+                if (s && popup.swapIn) frame.grow = 1;
+                else if (s) { frame.grow = 0; growAnim.to = 1; growAnim.start(); }
+                popup.swapIn = false;
             }
         }
         transform: Scale {

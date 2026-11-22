@@ -57,7 +57,7 @@ Singleton {
         const last = root.win ? root.lastByApp[root.win.appId] : null;
         return last || own;
     }
-    readonly property string key: request ? request.key : ""
+    readonly property string key: (request && request.key) || ""
     property var menu: null
     // For tests: follow a given menu regardless of the focused window.
     property string forced: ""

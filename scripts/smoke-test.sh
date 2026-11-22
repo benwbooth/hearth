@@ -209,7 +209,11 @@ if grep -aqE "Segmentation fault|core dumped|exited with status (134|139)" "$wor
 fi
 # QML errors, minus what a bare test session can't have (no PipeWire,
 # portals, Hyprland, devloop, accessibility bus, tray watcher...).
-qml_errors=$(grep -aE "ReferenceError|TypeError|SyntaxError|is not defined|is not a function|Cannot (read|assign)|Type error|Unable to assign|QML .*: .*[Ee]rror|ERROR" "$work/hearth.log" 2>/dev/null |
+# Not the old shell's teardown when arbor restarts (exit 75: bindings
+# evaluated while the engine is being destroyed give "Unable to assign
+# [undefined]"); the shell started again after it is checked as usual.
+qml_errors=$(awk '/arbor restarted: restarting the shell/{t=1} /starting the shell again/{t=0} !t' "$work/hearth.log" 2>/dev/null |
+  grep -aE "ReferenceError|TypeError|SyntaxError|is not defined|is not a function|Cannot (read|assign)|Type error|Unable to assign|QML .*: .*[Ee]rror|ERROR" |
   grep -avE "pipewire|portal|hyprctl|devloop|atspi|StatusNotifier|sni\.host|fprint|pam|NetworkManager|nmcli|bluez|upower|ddcutil|geoclue|recoll|ollama|llama|whisper" | sort -u)
 if [[ -n $qml_errors ]]; then
   fail "QML errors:"$'\n'"$(head -10 <<<"$qml_errors")"

@@ -51,9 +51,9 @@ Singleton {
     readonly property var windows: backend ? backend.windows : []
     readonly property var workspaces: backend ? backend.workspaces : []
     readonly property var focusedWindow: windows.find(w => w.focused) || null
-    readonly property string focusedWindowId: focusedWindow ? focusedWindow.id : ""
+    readonly property string focusedWindowId: focusedWindow && focusedWindow.id !== undefined ? String(focusedWindow.id) : ""
     readonly property var focusedWorkspace: workspaces.find(w => w.focused) || null
-    readonly property string focusedOutput: backend ? backend.focusedOutput : ""
+    readonly property string focusedOutput: (backend && backend.focusedOutput) || ""
     readonly property var focusedScreen: screenFor(focusedOutput)
 
     // Minimizing goes through the foreign-toplevel handle; niri has no
