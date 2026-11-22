@@ -1,7 +1,7 @@
 #version 440
 // Menu bar tray icons from apps (bar/Tray.qml): recolour the colourless
 // pixels (white, grey, black: an app's "template" icon drawn for some other
-// panel) to the menu bar's text colour, and leave coloured pixels alone, so
+// panel) to the menu bar's text colour (dark greys to its opposite), and leave coloured pixels alone, so
 // a white icon turns black on a light bar while a colourful one stays as
 // it is. Compile: scripts/build-shaders.sh (qsb).
 layout(location = 0) in vec2 qt_TexCoord0;
@@ -22,8 +22,10 @@ void main() {
     float sat = mx > 0.0 ? (mx - mn) / mx : 0.0;
     // 0 = keep (coloured), 1 = recolour (grey).
     float w = 1.0 - smoothstep(0.12, 0.3, sat);
-    // Keep shading inside the icon: darker greys stay a little softer.
-    float shade = mix(0.75, 1.0, mx);
-    vec3 outRgb = mix(rgb, target.rgb * mix(1.0, shade, 0.3), w);
+    // Light greys take the text colour and dark greys its opposite, so an
+    // icon drawn in both (Kog's white gear on a black disc) keeps its shape
+    // instead of flattening into one blob of text colour.
+    vec3 grey = mix(vec3(1.0) - target.rgb, target.rgb, mx);
+    vec3 outRgb = mix(rgb, grey, w);
     fragColor = vec4(outRgb * c.a, c.a) * qt_Opacity;
 }

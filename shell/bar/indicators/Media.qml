@@ -31,7 +31,7 @@ Indicator {
     }
 
     shown: player !== null
-    icon: playing ? "media-playback-playing" : "media-playback-paused"
+    icon: playing ? "media-playback-start-symbolic" : "media-playback-pause-symbolic"
     iconFallback: playing ? "media-playback-start" : "media-playback-pause"
     tooltip: player ? (player.trackTitle || player.identity) : ""
     tooltipSub: player ? [player.trackArtist, player.trackAlbum].filter(s => s).join(" — ")
