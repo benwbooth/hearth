@@ -107,6 +107,14 @@ Singleton {
     property var errors: ({})         // source -> message
     property var busy: ({})           // source -> true while fetching
     property var crops: ({})          // key -> path | "pending" | "failed"
+    property var cropFailedAt: ({})   // key -> ms (failed crops are retried after a minute)
+    // Something to try again shortly (a screen without its size yet, a
+    // failed crop waiting for its retry).
+    property bool retryPending: false
+    Timer {
+        interval: 5000; repeat: true; running: root.retryPending
+        onTriggered: { root.retryPending = false; root.rebuildSoon(); }
+    }
     property var posters: ({})        // video/shader/we path -> still
     property var folders: ({})        // path+opts -> [files]
     property var dyn: ({})            // path#index -> schedule | { error }
@@ -223,11 +231,22 @@ Singleton {
         if (!file) return "";
         if (fit !== "fill" || !root.cfg.smartCrop) return file;
         const px = screenPx(s);
+        // A screen whose size isn't known yet (at startup): no crop request
+        // for a 0-pixel picture (it failed and stuck, so the screen showed a
+        // plain centre crop that cut the sky off); this runs again once the
+        // screen has its size.
+        if (!(px[0] > 0 && px[1] > 0)) { root.retryPending = true; return file; }
         if (w && h && Math.abs(w / h - px[0] / px[1]) < 0.02 && w <= px[0] * 1.3) return file;
         const key = Qt.md5(file) + "_" + px[0] + "x" + px[1];
         const c = root.crops[key];
         if (c && c !== "pending" && c !== "failed") return c;
-        if (!c) requestCrop(key, file, px[0], px[1]);
+        // A failed crop is tried again after a while (a busy disk, a
+        // half-downloaded picture), not never.
+        if (c === "failed" && Date.now() - (root.cropFailedAt[key] || 0) > 60000) {
+            delete root.crops[key];
+            requestCrop(key, file, px[0], px[1]);
+        } else if (!c) requestCrop(key, file, px[0], px[1]);
+        else if (c === "failed") root.retryPending = true;
         return file;
     }
     property var cropQueue: []
@@ -243,6 +262,7 @@ Singleton {
         root.cropping = true;
         job(["crop", c.file, String(c.w), String(c.h), `${root.cacheDir}/crops/${c.key}.jpg`], r => {
             root.cropping = false;
+            if (r.error) root.cropFailedAt[c.key] = Date.now();
             setMap("crops", c.key, r.error ? "failed" : r.file);
             if (r.error) console.warn("hearth wallpaper: crop:", r.error);
             rebuildSoon();
