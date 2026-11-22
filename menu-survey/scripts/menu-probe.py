@@ -69,14 +69,14 @@ ROOTS = os.path.expanduser("~/.cache/hearth-menu-survey/roots")
 
 
 def nix_build(attr, timeout=900, unfree=False, root=None):
-    """Substitute only (max-jobs 0) for free packages; unfree ones may build
-    their small wrappers locally (their payload comes from the vendor)."""
-    args = ["nix", "build", "--print-out-paths", "--inputs-from", "/etc/nixos"]
+    """Substitute only, always (max-jobs 0): never compile anything locally.
+    A package that isn't in the binary cache fails here and is skipped
+    (an unfree bambu-studio once built from source at -j24 and filled RAM)."""
+    args = ["nix", "build", "--print-out-paths", "--inputs-from", "/etc/nixos",
+            "--option", "max-jobs", "0", "--option", "builders", ""]
     args += ["--out-link", os.path.join(ROOTS, root)] if root else ["--no-link"]
     if unfree:
         args += ["--impure"]
-    else:
-        args += ["--option", "max-jobs", "0"]
     os.makedirs(ROOTS, exist_ok=True)
     global ENV
     old = ENV
@@ -509,7 +509,9 @@ def probe(attr):
     if attr.startswith("flathub:"):
         return probe_flatpak(attr)
     src = APPS.get(attr, {}).get("source", "nixpkgs")
-    if src == "nixpkgs-uncached":
+    # Not in the binary cache (uncached free, and every unfree package): its
+    # Flathub copy instead (a download, never a build), else skipped.
+    if src in ("nixpkgs-uncached", "nixpkgs-unfree"):
         fid = APPS[attr].get("flathub")
         if not fid:
             return [dict(attr=attr, variant="build", result="not-prebuilt")]
