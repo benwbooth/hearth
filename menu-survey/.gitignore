@@ -1,0 +1,7 @@
+# Downloads and big intermediates: scripts/fetch_sources.sh rebuilds them.
+data/raw/
+data/nixpkgs_meta.tsv
+data/classify.log
+data/shots/
+data/*.tmp
+__pycache__/

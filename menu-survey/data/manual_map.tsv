@@ -1,0 +1,22 @@
+# flathub app id	nixpkgs attr	(free packages that the automatic matching misses; name-only matches are not trusted for free packages: "Tesseract" on Flathub is a game, nixpkgs tesseract is OCR)
+org.mozilla.thunderbird	thunderbird
+org.mozilla.thunderbird_esr	thunderbird-esr
+org.chromium.Chromium	chromium
+org.onlyoffice.desktopeditors	onlyoffice-desktopeditors
+com.bitwarden.desktop	bitwarden-desktop
+org.torproject.torbrowser-launcher	tor-browser
+io.github.ungoogled_software.ungoogled_chromium	ungoogled-chromium
+me.proton.Mail	protonmail-desktop
+cc.arduino.IDE2	arduino-ide
+io.github.shiftey.Desktop	github-desktop
+io.github.ryubing.Ryujinx	ryubing
+net.cozic.joplin_desktop	joplin-desktop
+com.logseq.Logseq	logseq
+com.jgraph.drawio.desktop	drawio
+com.super_productivity.SuperProductivity	super-productivity
+dev.goats.xivlauncher	xivlauncher
+com.vscodium.codium	vscodium
+io.gitlab.librewolf-community	librewolf
+org.kde.kdenlive	kdePackages.kdenlive
+com.visualstudio.code	vscode
+us.zoom.Zoom	zoom-us

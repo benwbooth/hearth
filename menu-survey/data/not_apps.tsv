@@ -1,0 +1,41 @@
+# attr	reason (left out of the app universe; see README "Method")
+jupyter	Debian "jupyter" is a dependency metapackage; the desktop entry is a notebook launcher in a browser
+zint-qt	Arch/Debian count the zint barcode library
+freerdp	library + CLI; the desktop entry is a protocol handler
+vim	terminal editor; gvim.desktop without a GUI build
+wine	runtime, not an app (Wine apps are their own class)
+winetricks	helper script with zenity dialogs
+kdePackages.plasma-desktop	desktop shell component
+kdePackages.drkonqi	crash reporter dialog
+rofi	launcher overlay
+xfwm4	window manager
+xfce4-panel	desktop shell component
+xfce4-session	desktop shell component
+xfce4-notifyd	notification daemon
+xfdesktop	desktop shell component
+xfce4-sensors-plugin	panel plugin
+xfce4-clipman-plugin	panel plugin
+xfce4-notes-plugin	panel plugin
+xfce4-screensaver	screensaver daemon
+xscreensaver	screensaver daemon
+mate-desktop	desktop shell component
+uwsm	session manager
+rygel	media server daemon
+conky	desktop widget
+redshift	daemon
+gammastep	daemon
+x11vnc	server
+stoken	token CLI with a tiny dialog
+yad	dialog tool for scripts
+lsp-plugins	audio plugin GUIs
+fcitx5	input method daemon
+thunar-volman	Thunar settings applet
+zathuraPkgs.zathura_core	duplicate of zathura
+fltk_1_4	duplicate of fltk (fluid)
+ardour_8	duplicate of ardour
+evolutionWithPlugins	duplicate of evolution
+kdePackages.plasma-sdk	developer tools bundled with Plasma
+lxappearance	theme settings for other desktops
+thunderbird-esr	duplicate of thunderbird
+flathub:com.prusa3d.PrusaSlicer	duplicate of prusa-slicer
+flathub:io.dbeaver.DBeaverCommunity	duplicate of dbeaver-bin
