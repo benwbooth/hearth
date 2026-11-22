@@ -511,7 +511,9 @@ def probe(attr):
     src = APPS.get(attr, {}).get("source", "nixpkgs")
     # Not in the binary cache (uncached free, and every unfree package): its
     # Flathub copy instead (a download, never a build), else skipped.
-    if src in ("nixpkgs-uncached", "nixpkgs-unfree"):
+    if src == "nixpkgs-unfree":
+        return [dict(attr=attr, variant="build", result="not-prebuilt", error="unfree: never in the binary cache")]
+    if src == "nixpkgs-uncached":
         fid = APPS[attr].get("flathub")
         if not fid:
             return [dict(attr=attr, variant="build", result="not-prebuilt")]
@@ -593,7 +595,9 @@ def main():
             for line in f:
                 r = dict(zip(hdr, line.rstrip("\n").split("\t")))
                 APPS[r["attr"]] = r
-                want = ("flathub",) if a.flathub else tuple(a.sources.split(","))
+                # Prebuilt only: nixpkgs from the binary cache, Flathub. Unfree
+                # nixpkgs packages are never in the cache: not a source.
+                want = ("flathub",) if a.flathub else tuple(x for x in a.sources.split(",") if x != "nixpkgs-unfree")
                 if r["include"] != "1" or r["source"] not in want or int(r["rank"]) < a.start:
                     continue
                 todo.append(r["attr"])
