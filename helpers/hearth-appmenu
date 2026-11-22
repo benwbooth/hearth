@@ -638,6 +638,15 @@ def x11_props(xid):
     return props
 
 
+def x11_pid(xid):
+    """_NET_WM_PID of an X11 window, 0 if unknown."""
+    o = xprop(["-id", hex(xid), "-notype", "_NET_WM_PID"])
+    try:
+        return int(o.split("=", 1)[1].strip())
+    except (IndexError, ValueError):
+        return 0
+
+
 def is_satellite(pid):
     """Whether the Wayland client `pid` is xwayland-satellite (X11 windows)."""
     try:
@@ -721,6 +730,14 @@ class X11Window:
             elif registrar and xid in registrar.windows:
                 s, p = registrar.windows[xid]
                 new = DbusMenu(self.key, s, p)
+            elif registrar and xid:
+                # Another window of the same X11 client registered (VLC
+                # registers its main window; the active one can be another).
+                pid = x11_pid(xid)
+                for wid, (s, p) in sorted(registrar.windows.items(), reverse=True):
+                    if pid and x11_pid(wid) == pid and has_menu(s, p):
+                        new = DbusMenu(self.key, s, p)
+                        break
         except dbus.DBusException as e:
             err(e)
         if self.inner and new and self.inner.same(new):
@@ -1040,12 +1057,37 @@ def handle(line):
 class Registrar(dbus.service.Object):
     """Minimal com.canonical.AppMenu.Registrar (X11 window id -> menu)."""
 
+    # Kept across restarts of this helper (every hearth restart, every
+    # deploy): apps call RegisterWindow once, when their window opens, and
+    # would lose their global menu until reopened.
+    STATE = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "hearth-appmenu-registrar.json")
+
     def __init__(self, conn):
         super().__init__(conn, REGISTRAR_PATH)
         self.windows = {}
         # Forget windows whose app left the bus.
         conn.add_signal_receiver(self.owner_changed, signal_name="NameOwnerChanged",
                                  dbus_interface="org.freedesktop.DBus")
+        try:
+            with open(self.STATE) as f:
+                saved = json.load(f)
+            dbus_obj = conn.get_object("org.freedesktop.DBus", "/org/freedesktop/DBus")
+            for wid, (service, path) in saved.items():
+                # Unique names are never reused: one still on the bus is the
+                # same app.
+                if dbus_obj.NameHasOwner(service, dbus_interface="org.freedesktop.DBus"):
+                    self.windows[int(wid)] = (service, path)
+        except (OSError, ValueError, dbus.DBusException):
+            pass
+
+    def save(self):
+        try:
+            tmp = self.STATE + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump({str(k): v for k, v in self.windows.items()}, f)
+            os.replace(tmp, self.STATE)
+        except OSError:
+            pass
 
     def owner_changed(self, name, old, new):
         if old and not new:
@@ -1055,6 +1097,7 @@ class Registrar(dbus.service.Object):
     @dbus.service.method(REGISTRAR, in_signature="uo", sender_keyword="sender")
     def RegisterWindow(self, window_id, menu_path, sender=None):
         self.windows[int(window_id)] = (str(sender), str(menu_path))
+        self.save()
         self.WindowRegistered(window_id, sender, menu_path)
         if isinstance(current, X11Window):
             current.registered(int(window_id))
@@ -1062,6 +1105,7 @@ class Registrar(dbus.service.Object):
     @dbus.service.method(REGISTRAR, in_signature="u")
     def UnregisterWindow(self, window_id):
         if self.windows.pop(int(window_id), None):
+            self.save()
             self.WindowUnregistered(window_id)
             if isinstance(current, X11Window):
                 current.registered(int(window_id))
