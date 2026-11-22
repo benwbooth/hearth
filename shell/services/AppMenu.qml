@@ -90,11 +90,18 @@ Singleton {
     // last one this app had, so the bar doesn't flash the app name and
     // Window alone first. `resolving` is that wait (up to 500 ms).
     property var treeByApp: ({})
-    readonly property bool resolving: wanted !== "" && !current && resolveTimer.running
-    onWantedChanged: if (!current) resolveTimer.restart()
-    Timer { id: resolveTimer; interval: 500 }
+    // The key the bar has settled on: the menu came, or 500 ms passed.
+    // Compared with `wanted` (not a running timer), so a switch counts as
+    // resolving from its first frame, whatever order bindings update in.
+    property string settledKey: ""
+    readonly property bool resolving: wanted !== "" && !current && settledKey !== wanted
+    onWantedChanged: resolveTimer.restart()
+    onCurrentChanged: if (current) settledKey = wanted
+    Timer { id: resolveTimer; interval: 500; onTriggered: root.settledKey = root.wanted }
+    // While the app's menu isn't here: the last one it had (a dialog of
+    // the app keeps it too, as on macOS).
     readonly property var tree: current ? menu
-        : (resolving && win ? (treeByApp[win.appId] || null) : null)
+        : (win ? (treeByApp[win.appId] || null) : null)
     readonly property var topLevel: tree
         ? tree.children.filter(i => i.visible && i.type !== "separator" && i.label !== "") : []
     // A GTK app's GNOME 3 style app menu (helper: root child id -2); the
