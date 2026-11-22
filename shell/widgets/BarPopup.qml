@@ -144,6 +144,10 @@ PanelWindow {
             current = null;
             typed = "";
         }
+        // The instant swap is for this one change only: cleared right after,
+        // or every later open and close of these menus skipped its fade
+        // (the flag used to stick after the first menu-to-menu switch).
+        if (instant) Qt.callLater(() => { popup.instant = false; });
     }
     // One popup at a time.
     Connections {
