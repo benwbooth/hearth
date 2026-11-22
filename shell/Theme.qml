@@ -130,6 +130,9 @@ Singleton {
     // instant, like macOS.
     readonly property int menuInMs: 160
     readonly property int menuOutMs: 180
+    // Moving between menu bar menus: the old one fades out in this, then
+    // the new one fades in in this (never two menus at once).
+    readonly property int menuSwapMs: 90
     readonly property int submenuDelayMs: 120     // hover before a submenu opens
     readonly property int tooltipDelayMs: 800      // macOS help tags: ~1 s
     readonly property int labelFadeMs: 120

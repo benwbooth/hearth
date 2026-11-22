@@ -19,7 +19,8 @@ import ".."
 // drop shadow, which needs room around the pane, so the surface is
 // `shadowPad` larger on each side (only the pane takes input). It fades
 // and scales in from its anchor (Theme.menuInMs), fades out
-// (Theme.menuOutMs); switching between open menu bar menus crossfades.
+// (Theme.menuOutMs); switching between open menu bar menus fades the old
+// one out, then the new one in (Theme.menuSwapMs each).
 PanelWindow {
     id: popup
     required property Item anchorItem
@@ -118,7 +119,9 @@ PanelWindow {
     // take longer than the whole fade, which used to end before anything was
     // on screen, so menus just popped in.
     property bool painted: false
-    readonly property bool shown: open && painted
+    // On a switch from another menu bar menu, after that one is gone.
+    readonly property bool shown: open && painted && !(waitFor && waitFor.visible)
+    property var waitFor: null
     Connections {
         target: popup.visible && !popup.painted ? frame.Window.window : null
         ignoreUnknownSignals: true
@@ -138,20 +141,25 @@ PanelWindow {
     // (and close it, like any click outside).
     mask: Region { item: frame }
 
-    // Switched to from another open menu bar menu (dragging along the
-    // menu bar): the two crossfade, without the new one's grow. Used once,
-    // by the next fade-in.
+    // Switched to from another open menu bar menu (dragging along the menu
+    // bar): the old one fades out quickly, then this one fades in quickly,
+    // without the grow; never two menus on screen at once. Used once.
     property bool swapIn: false
+    property bool swapOut: false
     // Cleared again on close: the dock stays out while its menu is the
     // active popup, so a stale one kept it from ever hiding.
     onOpenChanged: {
         if (open) {
             const prev = ShellState.activePopup;
             swapIn = !!prev && prev !== popup && prev.open && prev.menuBarMenu && popup.menuBarMenu;
+            waitFor = swapIn ? prev : null;
+            if (swapIn) prev.swapOut = true;
             current = null;
             ShellState.activePopup = popup;
         } else {
             if (ShellState.activePopup === popup) ShellState.activePopup = null;
+            swapIn = false;
+            waitFor = null;
             current = null;
             typed = "";
         }
@@ -412,14 +420,16 @@ PanelWindow {
                 fadeAnim.stop();
                 growAnim.stop();
                 fadeAnim.to = s ? 1 : 0;
-                fadeAnim.duration = s ? Theme.menuInMs : Theme.menuOutMs;
+                fadeAnim.duration = s ? (popup.swapIn ? Theme.menuSwapMs : Theme.menuInMs)
+                                      : (popup.swapOut ? Theme.menuSwapMs : Theme.menuOutMs);
                 fadeAnim.easing.type = s ? Easing.OutCubic : Easing.InOutQuad;
                 fadeAnim.start();
                 // Grows on the way in only; closes at full size, like macOS.
                 // Switched to from another menu bar menu: a plain crossfade.
                 if (s && popup.swapIn) frame.grow = 1;
                 else if (s) { frame.grow = 0; growAnim.to = 1; growAnim.start(); }
-                popup.swapIn = false;
+                if (s) { popup.swapIn = false; popup.waitFor = null; }
+                else popup.swapOut = false;
             }
         }
         transform: Scale {
