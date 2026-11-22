@@ -583,9 +583,12 @@ class AtspiMenu:
             return False
         try:
             e = o.get_component_iface().get_extents(Atspi.CoordType.WINDOW)
+            showing = o.get_state_set().contains(Atspi.StateType.SHOWING)
         except Exception:
             return False
-        if e.width <= 0 or e.height <= 0:
+        # Never a click on something not on screen: it would land on what is
+        # (Cursor's menu bar is in the tree behind its sign-in page).
+        if e.width <= 0 or e.height <= 0 or not showing:
             return False
         x, y = self.to_surface(o, e.x + e.width / 2, e.y + e.height / 2)
         return arbor("click-window", "--id", str(self.window), "--x", f"{x:.2f}", "--y", f"{y:.2f}")

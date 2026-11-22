@@ -849,6 +849,7 @@ def has_menu(service, path):
 class AtspiWorker:
     proc = None
     buf = b""
+    owner = None  # the AtspiMenu whose window the worker watches
 
     @classmethod
     def send(cls, obj):
@@ -925,6 +926,7 @@ class AtspiMenu:
         out(m)
 
     def watch_cmd(self):
+        AtspiWorker.owner = self
         return {"cmd": "watch", "key": self.key, "title": self.title, "pid": self.pid,
                 "window": self.window}
 
@@ -935,7 +937,9 @@ class AtspiMenu:
         self.alive = False
         if self.tray is not None:
             self.tray.stop()
-        AtspiWorker.send({"cmd": "unwatch"})
+        if AtspiWorker.owner is self:  # not another window's watch
+            AtspiWorker.owner = None
+            AtspiWorker.send({"cmd": "unwatch"})
 
     def open(self, nid):
         if self.tray is not None:
@@ -973,6 +977,11 @@ def watch(c):
         new = GtkMenu(key, c["bus"], c.get("menubar", ""), c.get("appmenu", ""),
                       c.get("app", ""), c.get("win", ""))
     elif kind == "x11":
+        # The same window again: look again, without a throwaway copy (its
+        # AT-SPI proxy would unwatch the worker the current one uses).
+        if isinstance(current, X11Window) and current.key == key and current.alive:
+            current.resolve()
+            return
         new = X11Window(key, c.get("title", ""), c.get("pid", 0), c.get("window", 0))
     else:
         return
