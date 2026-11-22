@@ -212,6 +212,7 @@ class AtspiMenu:
         self.kind = None
         self.burger = None  # {"flat": bool, "labels": [...]} once known
         self.reset_burger = self.burger_open = False
+        self.tree_read = False  # burger: the whole ☰ is in self.cache
         self.ids, self.paths = {}, {}
         self.cache = {}  # container path -> [item dicts] from the last look
         self.find()
@@ -319,6 +320,7 @@ class AtspiMenu:
                     pass
                 if kind == "burger":
                     self.burger = load_cache().get(self.burger_key())
+                    self.load_tree()
                 return True
         return False
 
@@ -701,6 +703,20 @@ class AtspiMenu:
                 self.act(o)
             self.emit()
             return
+        if self.kind == "burger":
+            if path in self.cache:
+                self.emit()  # from the cache: the app's ☰ isn't touched
+                return
+            if not self.tree_read:
+                # Once: the whole ☰ in one look (titles, every submenu),
+                # kept on disk; later opens come from the cache.
+                self.busy = True
+                try:
+                    self.learn_burger()
+                finally:
+                    self.busy = False
+                self.emit()
+                return
         self.busy = True
         try:
             if path == (-2,):
@@ -715,8 +731,11 @@ class AtspiMenu:
         self.emit()
 
     def learn_burger(self):
-        """First look at a ☰: are its items submenus (they become the menu
-        bar's menus) or commands (one menu)? Kept per app."""
+        """Read the whole ☰ in one look: are its items submenus (they
+        become the menu bar's menus) or commands (one menu), and every
+        submenu's items (three levels), kept in the cache file with the
+        app's binary, so the menu bar shows them without opening the ☰ again
+        (Claude Desktop: each look flashes its menu and takes a second)."""
         menus = self.open_burger()
         if not menus:
             return
@@ -732,13 +751,97 @@ class AtspiMenu:
                 labels.append("")
         named = [l for l in labels if l]
         flat = subs < max(1, len(named) // 2)
-        if flat:
-            self.read(root, (-1,))
+        self.cache = {}
+        try:
+            self.read_open(root, (-1,) if flat else (), 0)
+        except Exception as e:
+            err(f"AT-SPI: reading the ☰: {e}")
         self.close_all((-1,))
-        self.burger = {"flat": flat, "labels": labels}
+        self.tree_read = True
+        self.burger = {"flat": flat, "labels": labels, "exe": self.exe(),
+                       "tree": {",".join(map(str, p)): [self.saved(it) for it in items]
+                                for p, items in self.cache.items()}}
         c = load_cache()
         c[self.burger_key()] = self.burger
         save_cache(c)
+
+    def read_open(self, menu, path, level, seen=None):
+        """Read an open menu and, through it, its submenus (opened one after
+        the other: opening a sibling closes the one before). A submenu counts
+        as opened once a popup shows that wasn't read yet, by object and by
+        its first items (Chromium may reuse one, and two submenus can have
+        the same items: Claude's Go and View > Split View)."""
+        seen = [] if seen is None else seen
+
+        def sig(m):
+            try:
+                return tuple((m.get_child_at_index(i).get_name() or "")
+                             for i in range(min(m.get_child_count(), 4)))
+            except Exception:
+                return ()
+
+        seen.append((menu, sig(menu)))
+        kids = self.read(menu, path)
+        if level >= 2:
+            return
+        for it in kids:
+            if not it["submenu"]:
+                continue
+            cpath = self.paths[it["id"]]
+            c = menu.get_child_at_index(cpath[-1])
+            if c is None:
+                continue
+            before = [(m, sig(m)) for m in self.popups()]
+
+            def test():
+                for m in reversed(self.popups()):
+                    if m is menu:
+                        continue
+                    s_ = sig(m)
+                    if not any(m is o and s_ == os_ for o, os_ in before):
+                        return m
+                return None
+
+            sub = None
+            for _ in range(2):  # once more: it can be slow to open
+                if not self.act(c):
+                    break
+                sub = self.wait(test, 25)
+                if sub is not None:
+                    break
+            if sub is not None:
+                self.read_open(sub, cpath, level + 1, seen)
+
+    def saved(self, it):
+        it = dict(it, path=list(self.paths.get(it["id"], ())))
+        it.pop("id", None)
+        it["children"] = []
+        return it
+
+    def load_tree(self):
+        """The cached ☰ tree, if it was read from this same app binary."""
+        b = self.burger or {}
+        if not b.get("tree") or b.get("exe") != self.exe():
+            return
+        for key, items in b["tree"].items():
+            path = tuple(int(x) for x in key.split(",")) if key else ()
+            self.cache[path] = [dict(it, id=self.nid(it.get("path", []))) for it in items]
+        self.tree_read = True
+
+    def forget_tree(self):
+        """A click found the cache out of date: read again next time."""
+        self.tree_read = False
+        if self.burger:
+            self.burger.pop("tree", None)
+            c = load_cache()
+            c[self.burger_key()] = self.burger
+            save_cache(c)
+
+    def exe(self):
+        try:
+            return os.readlink(f"/proc/{self.pid}/exe")
+        except OSError:
+            return ""
 
     def close(self, nid):
         pass
@@ -765,6 +868,8 @@ class AtspiMenu:
             name = split_shortcut((c.get_name() or "") if c else "")[0]
             if c is None or (want is not None and name != want):
                 self.close_all(path)  # the menu changed since: don't guess
+                if self.kind == "burger":
+                    self.forget_tree()
                 return
             if self.kind == "web":
                 self.press(c)
