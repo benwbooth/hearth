@@ -40,7 +40,11 @@ PanelWindow {
     readonly property bool revealed: !autohide || hover.hovered || popupOpen
 
     anchors { left: true; right: true; top: true }
-    implicitHeight: barHeight
+    // Room below the bar for the glass style's soft shadow (transparent;
+    // windows still only make room for barHeight, and only the bar itself
+    // takes the pointer: see mask). Fixed, so the surface never resizes.
+    readonly property int shadowRoom: 10
+    implicitHeight: barHeight + shadowRoom
     exclusiveZone: autohide ? 0 : barHeight
     color: "transparent"
     WlrLayershell.namespace: "hearth-menubar"
@@ -251,8 +255,39 @@ PanelWindow {
             visible: content.style === "glass"
             radius: 0
             shadow: false
+            // The shader's rim is made for rounded panes; along a full-width
+            // square bar it drew a flat white line. The edge is drawn below.
+            rimVisible: false
             tint: Theme.menuBarTint
-            glow: Theme.glassGlow * 0.6
+        }
+        // The glass bar's bottom edge, macOS 26 style: light caught inside the
+        // glass, a dark hairline where it ends, and a soft shadow falling onto
+        // the windows below, so the bar reads as a raised pane.
+        Item {
+            visible: content.style === "glass"
+            anchors.fill: parent
+            Rectangle {
+                y: parent.height - 2
+                width: parent.width
+                height: 1
+                color: Theme.dark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.55)
+            }
+            Rectangle {
+                y: parent.height - 1
+                width: parent.width
+                height: 1
+                color: Theme.dark ? Qt.rgba(0, 0, 0, 0.55) : Qt.rgba(0, 0, 0, 0.16)
+            }
+            Rectangle {
+                y: parent.height
+                width: parent.width
+                height: bar.shadowRoom
+                gradient: Gradient {
+                    GradientStop { position: 0; color: Qt.rgba(0, 0, 0, Theme.dark ? 0.28 : 0.12) }
+                    GradientStop { position: 0.45; color: Qt.rgba(0, 0, 0, Theme.dark ? 0.08 : 0.04) }
+                    GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0) }
+                }
+            }
         }
 
         // Soft shadow under every item on the transparent bar (macOS lifts
