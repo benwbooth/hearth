@@ -17,7 +17,8 @@ from DuckDuckGo's suggestion endpoint.
          {"type": "status", ...}
 
 A newer query makes older ones stop emitting. One-shot use (the voice
-assistant): hearth-search --once '{"q": "taxes", "kind": "pdf", "after": "2026-11-20"}'
+assistant, grove's search bar with "dir" = the folder searched):
+hearth-search --once '{"q": "taxes", "kind": "pdf", "after": "2026-11-20", "dir": "/home/me/Documents"}'
 Config: hearth-search --write-config (hearth-indexer runs it at start).
 """
 
@@ -232,7 +233,7 @@ def date_range(word, today=None):
         return None
 
 
-def build_query(text, kind=None, after=None, before=None):
+def build_query(text, kind=None, after=None, before=None, folder=None):
     """Spotlight-ish text -> (recoll query string, words for ranking).
 
     kind:pdf / kind:image / kind:folder ..., date:today / date:yesterday /
@@ -259,6 +260,9 @@ def build_query(text, kind=None, after=None, before=None):
         a = after or "1970-01-01"
         b = before or dt.date.today().isoformat()
         filters.append("date:%s/%s" % (a, b))
+    if folder:
+        # Only below this folder (grove's search bar searches where you are).
+        filters.append('dir:"%s"' % folder.rstrip("/").replace('"', ""))
     parts = []
     for i, w in enumerate(words):
         last = i == len(words) - 1
@@ -348,8 +352,8 @@ class Searcher:
     def stale(self, qid):
         return qid != 0 and qid < self.latest
 
-    def files(self, qid, text, limit=60, kind=None, after=None, before=None, stream=True):
-        qs, words = build_query(text, kind, after, before)
+    def files(self, qid, text, limit=60, kind=None, after=None, before=None, stream=True, folder=None):
+        qs, words = build_query(text, kind, after, before, folder)
         if not qs:
             return []
         results = []
@@ -538,7 +542,7 @@ def main():
         req = json.loads(sys.argv[2])
         s = Searcher()
         items = s.files(0, req.get("q", ""), int(req.get("limit", 10)), req.get("kind"),
-                        req.get("after"), req.get("before"), stream=False)
+                        req.get("after"), req.get("before"), stream=False, folder=req.get("dir"))
         items.sort(key=lambda i: -i["score"])
         print(json.dumps(items))
         return
