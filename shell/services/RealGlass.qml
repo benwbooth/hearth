@@ -160,7 +160,18 @@ layer-rule {
         const keep = [];
         for (const e of wins) {
             const t = target(e.win);
-            if (!t) { keep.push(e); continue; }
+            if (!t) {
+                // The window is gone (a destroyed tooltip, a menu's window,
+                // a bar recreated for its screen): clear what it last sent,
+                // or arbor keeps drawing those panes on the next surface of
+                // that namespace until the shell restarts.
+                if (!e.win && e.target) {
+                    backend.setGlass(Object.assign({}, e.target, { shapes: [] }));
+                    continue;
+                }
+                if (e.win) keep.push(e);
+                continue;
+            }
             const req = {
                 namespace: t.namespace,
                 output: t.output,
@@ -171,7 +182,10 @@ layer-rule {
             };
             const json = JSON.stringify(req);
             if (json !== e.sent) {
-                if (backend.setGlass(req)) e.sent = json;
+                if (backend.setGlass(req)) {
+                    e.sent = json;
+                    e.target = { namespace: req.namespace, output: req.output, popup: req.popup, key: req.key };
+                }
             }
             // Forget windows without panes once they're cleared.
             if (e.frames.length > 0 || e.sent !== json) keep.push(e);
