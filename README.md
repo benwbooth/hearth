@@ -250,6 +250,17 @@ mac layout). Pieces:
   - A native menu that stays empty (appmenu-gtk-module exports one for
     Firefox and Thunderbird, whose XUL menus it can't see) goes on to
     AT-SPI for that window.
+  - Flatpak apps: a sandboxed app reaches the session and accessibility
+    buses through its sandbox's `xdg-dbus-proxy`, so the buses report the
+    proxy's pid (no ancestor of the window's). The proxy whose listening
+    sockets the window's sandbox mounts (`/proc/PID/mountinfo` against
+    `/proc/net/unix`) counts as the app, for AT-SPI, registrations and tray
+    menus.
+  - A GTK window without menus (libadwaita apps: a ☰) still exports its
+    `app.`/`win.` actions; arbor keeps its gtk_shell1 address for them.
+    Settings…, Keyboard Shortcuts and Help among them go at the top of the
+    bold app-name menu (as a GNOME 3 app menu would), activated over
+    `org.gtk.Actions`; the ☰ itself still comes over AT-SPI.
 - The bold app-name title: an app's own first menu named after it (our
   apps' macOS-style Almanac/Grove/Tessera/Earshot/Kog/treetop menus) is the
   bold menu, as on macOS, and isn't shown twice; hearth adds Hide <App> /

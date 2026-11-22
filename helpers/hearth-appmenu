@@ -21,7 +21,8 @@ stdin (one command per line):
   {"cmd": "watch", "key": K, "kind": "dbusmenu", "service": S, "path": P}
   {"cmd": "watch", "key": K, "kind": "gtk", "bus": B, "menubar": P,
    "appmenu": P, "app": P, "win": P}
-  {"cmd": "watch", "key": K, "kind": "x11", "title": T, "pid": N, "window": ID}
+  {"cmd": "watch", "key": K, "kind": "x11", "title": T, "pid": N, "window": ID,
+   "gbus": B, "gapp": P, "gwin": P}   (g*: a GTK window's actions, no menus)
       (any window without an address: "none" unless pid is the satellite)
   {"cmd": "unwatch"}
   {"cmd": "open", "id": N}     a (sub)menu is about to show
@@ -37,6 +38,9 @@ stdout:
       Labels have their mnemonic underscores removed. A GTK app menu (GNOME 3
       style) comes as a root child with id -2 and an empty label.
   {"type": "none", "key": K}   the window has no exported menu (x11)
+  {"type": "appactions", "key": K, "menu": ITEM|null}  a GTK window's app
+      actions without menus (Settings…, Keyboard Shortcuts, Help), as an
+      app menu (id -2); clicks go through the x11 watch
   {"type": "resolved", "key": K, "request": R}  the x11 window's menu, as a
       dbusmenu/gtk watch command (hearth keeps it for the app's other windows)
   {"type": "error", "message": str}
@@ -657,12 +661,72 @@ def is_satellite(pid):
         return False
 
 
+class AppActions:
+    """A GTK window without menus (libadwaita apps: a ☰ instead) still
+    exports its actions (org.gtk.Actions at the app and window object paths
+    arbor reports). The ones every user expects in an app menu and that have
+    no hearth equivalent become a GNOME 3 style app menu (root child -2,
+    shown at the top of the bold app-name menu): Settings…, Keyboard
+    Shortcuts, Help. Activated over D-Bus, not by clicking the app.
+    About, New Window and Quit are hearth's own items already."""
+
+    KNOWN = [("app", "preferences", "Settings…"), ("app", "settings", "Settings…"),
+             ("app", "prefs", "Settings…"), ("app", "shortcuts", "Keyboard Shortcuts"),
+             ("win", "show-help-overlay", "Keyboard Shortcuts"),
+             ("app", "show-help-overlay", "Keyboard Shortcuts"), ("app", "help", "Help")]
+    FIRST_ID = -3000
+
+    def __init__(self, key, busname, app="", win=""):
+        self.key, self.bus, self.alive, self.ids, self.sent = key, busname, True, {}, None
+        self.groups = {}
+        for prefix, path in (("app", app), ("win", win)):
+            if path:
+                try:
+                    self.groups[prefix] = ActionGroup(self, path)
+                except dbus.DBusException as e:
+                    err(e)
+
+    def rebuild(self):
+        if not self.alive or not all(g.ready for g in self.groups.values()):
+            return
+        items, seen, self.ids = [], set(), {}
+        for prefix, name, label in self.KNOWN:
+            g = self.groups.get(prefix)
+            a = g.actions.get(name) if g else None
+            if not a or a[1] != "" or label in seen:  # parameterless only
+                continue
+            nid = self.FIRST_ID - len(items)
+            self.ids[nid] = (prefix, name)
+            seen.add(label)
+            items.append(item(nid, label, enabled=a[0]))
+        menu = item(-2, submenu=True, children=items) if items else None
+        if menu != self.sent:
+            self.sent = menu
+            out({"type": "appactions", "key": self.key, "menu": menu})
+
+    def click(self, nid):
+        prefix, name = self.ids.get(nid, (None, None))
+        g = self.groups.get(prefix)
+        if g:
+            g.iface.Activate(name, dbus.Array([], signature="v"), dbus.Dictionary({}, signature="sv"),
+                             reply_handler=lambda *a: None, error_handler=err)
+
+    def stop(self):
+        self.alive = False
+        for g in self.groups.values():
+            g.stop()
+
+
 class X11Window:
     """The focused X11 window (xwayland-satellite): resolve, then delegate."""
 
-    def __init__(self, key, title, pid=0, window=0):
+    def __init__(self, key, title, pid=0, window=0, gtk=None):
         self.key, self.title = key, title
         self.inner, self.xid, self.alive, self.tries = None, 0, True, 0
+        # A GTK window with actions but no menus (arbor's gtk_menu without
+        # a menu bar): its app actions, besides whatever is found below.
+        gbus, gapp, gwin = gtk or ("", "", "")
+        self.actions = AppActions(key, gbus, gapp, gwin) if gbus and (gapp or gwin) else None
         self.wayland = bool(pid) and not is_satellite(pid)
         self.pid, self.window = pid, window
         if self.wayland:
@@ -764,6 +828,8 @@ class X11Window:
         self.alive = False
         if self.inner:
             self.inner.stop()
+        if self.actions:
+            self.actions.stop()
 
     def open(self, nid):
         if self.inner:
@@ -774,7 +840,9 @@ class X11Window:
             self.inner.close(nid)
 
     def click(self, nid):
-        if self.inner:
+        if self.actions and nid in self.actions.ids:
+            self.actions.click(nid)
+        elif self.inner:
             self.inner.click(nid)
 
 
@@ -797,13 +865,56 @@ def ancestors(pid):
         pass
     return seen
 
+def flatpak_proxies(pid):
+    """Pids of the xdg-dbus-proxy serving the Flatpak sandbox that process
+    `pid` runs in. A sandboxed app reaches the session and accessibility
+    buses through that proxy, so the buses report the proxy's pid for its
+    connections (not the app's, and the two share no ancestor). The proxy
+    listens on $XDG_RUNTIME_DIR/.dbus-proxy/*-bus-proxy-XXXXXX, and the
+    sandbox bind-mounts exactly those sockets: match the window's mounts
+    against each proxy's listening sockets. Empty outside Flatpak."""
+    try:
+        with open(f"/proc/{pid}/mountinfo") as f:
+            names = {os.path.basename(l.split()[3]) for l in f
+                     if len(l.split()) > 4 and "/.dbus-proxy/" in l.split()[3]}
+    except OSError:
+        return set()
+    if not names:
+        return set()
+    inodes = set()
+    try:
+        with open("/proc/net/unix") as f:
+            next(f, None)
+            for l in f:
+                p = l.split()
+                if len(p) >= 8 and "/.dbus-proxy/" in p[7] and os.path.basename(p[7]) in names:
+                    inodes.add(p[6])
+    except OSError:
+        return set()
+    found = set()
+    for p in os.listdir("/proc"):
+        if not p.isdigit():
+            continue
+        try:
+            with open(f"/proc/{p}/comm") as f:
+                if f.read().strip() != "xdg-dbus-proxy":
+                    continue
+            for fd in os.listdir(f"/proc/{p}/fd"):
+                link = os.readlink(f"/proc/{p}/fd/{fd}")
+                if link.startswith("socket:[") and link[8:-1] in inodes:
+                    found.add(int(p))
+                    break
+        except OSError:
+            continue
+    return found
+
 
 def registered_for_pid(pid):
     """(service, path) of the newest RegisterWindow from process `pid` (or
     its parent or child), or None."""
     if not registrar or not pid:
         return None
-    mine = set(ancestors(pid))
+    mine = set(ancestors(pid)) | flatpak_proxies(pid)
     found = []
     for wid, (service, path) in registrar.windows.items():
         p = pid_of(service)
@@ -829,7 +940,7 @@ def tray_menu_for_pid(pid):
                               dbus_interface="org.freedesktop.DBus.Properties", timeout=2)
     except dbus.DBusException:
         return None
-    mine = set(ancestors(pid))
+    mine = set(ancestors(pid)) | flatpak_proxies(pid)
     for entry in entries:
         service, _, path = str(entry).partition("/")
         path = "/" + path if path else "/StatusNotifierItem"
@@ -999,7 +1110,8 @@ def watch(c):
         if isinstance(current, X11Window) and current.key == key and current.alive:
             current.resolve()
             return
-        new = X11Window(key, c.get("title", ""), c.get("pid", 0), c.get("window", 0))
+        new = X11Window(key, c.get("title", ""), c.get("pid", 0), c.get("window", 0),
+                        (c.get("gbus", ""), c.get("gapp", ""), c.get("gwin", "")))
     else:
         return
     if current and current.same(new) and getattr(current, "key", None) == key:

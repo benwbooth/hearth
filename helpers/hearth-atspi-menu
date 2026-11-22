@@ -146,6 +146,50 @@ def ancestors(pid):
     return seen
 
 
+def flatpak_proxies(pid):
+    """Pids of the xdg-dbus-proxy serving the Flatpak sandbox that process
+    `pid` runs in. A sandboxed app reaches the session and accessibility
+    buses through that proxy, so the buses report the proxy's pid for its
+    connections (not the app's, and the two share no ancestor). The proxy
+    listens on $XDG_RUNTIME_DIR/.dbus-proxy/*-bus-proxy-XXXXXX, and the
+    sandbox bind-mounts exactly those sockets: match the window's mounts
+    against each proxy's listening sockets. Empty outside Flatpak."""
+    try:
+        with open(f"/proc/{pid}/mountinfo") as f:
+            names = {os.path.basename(l.split()[3]) for l in f
+                     if len(l.split()) > 4 and "/.dbus-proxy/" in l.split()[3]}
+    except OSError:
+        return set()
+    if not names:
+        return set()
+    inodes = set()
+    try:
+        with open("/proc/net/unix") as f:
+            next(f, None)
+            for l in f:
+                p = l.split()
+                if len(p) >= 8 and "/.dbus-proxy/" in p[7] and os.path.basename(p[7]) in names:
+                    inodes.add(p[6])
+    except OSError:
+        return set()
+    found = set()
+    for p in os.listdir("/proc"):
+        if not p.isdigit():
+            continue
+        try:
+            with open(f"/proc/{p}/comm") as f:
+                if f.read().strip() != "xdg-dbus-proxy":
+                    continue
+            for fd in os.listdir(f"/proc/{p}/fd"):
+                link = os.readlink(f"/proc/{p}/fd/{fd}")
+                if link.startswith("socket:[") and link[8:-1] in inodes:
+                    found.add(int(p))
+                    break
+        except OSError:
+            continue
+    return found
+
+
 SHORTCUT_RE = None
 
 
@@ -264,7 +308,8 @@ class AtspiMenu:
 
     def apps(self, A):
         desk = A.get_desktop(0)
-        chain = ancestors(self.pid)
+        # A Flatpak app's AT-SPI connection is its sandbox's D-Bus proxy.
+        chain = ancestors(self.pid) + sorted(flatpak_proxies(self.pid))
         apps = []
         for i in range(desk.get_child_count()):
             a = desk.get_child_at_index(i)

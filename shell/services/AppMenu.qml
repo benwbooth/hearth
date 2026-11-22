@@ -61,8 +61,12 @@ Singleton {
                         win: g.window_object_path || "" };
             if (!root.emptyKeys[r.key]) return r;
         }
+        // gbus/gapp/gwin: a GTK window with actions but no menus (libadwaita;
+        // arbor keeps its address): the helper adds its app actions.
         if (Compositor.isArbor && w.pid)
-            return { key: "x\n" + w.id, kind: "x11", pid: w.pid, title: w.title, window: Number(w.id) };
+            return { key: "x\n" + w.id, kind: "x11", pid: w.pid, title: w.title, window: Number(w.id),
+                     gbus: (g && g.unique_bus_name) || "", gapp: (g && g.application_object_path) || "",
+                     gwin: (g && g.window_object_path) || "" };
         return null;
     }
     // Like macOS, an app's menu bar stays while one of its windows without
@@ -106,7 +110,11 @@ Singleton {
         ? tree.children.filter(i => i.visible && i.type !== "separator" && i.label !== "") : []
     // A GTK app's GNOME 3 style app menu (helper: root child id -2); the
     // menu bar shows it at the top of the bold app-name menu.
-    readonly property var gtkAppMenu: tree ? (tree.children.find(i => i.id === -2) || null) : null
+    // Or, for a GTK window without menus, its app actions (Settings…,
+    // Keyboard Shortcuts, Help) from the helper's "appactions".
+    property var appActions: null
+    readonly property var gtkAppMenu: (tree ? (tree.children.find(i => i.id === -2) || null) : null)
+        || (appActions && appActions.key === wanted ? appActions.menu : null)
     readonly property bool available: topLevel.length > 0
 
     // Only where hearth draws the menus: arbor with the mac layout.
@@ -160,7 +168,7 @@ Singleton {
             root.openRequested(label);
             return "ok";
         }
-        function dump(): string { return JSON.stringify({ key: root.key, request: root.request, own: root.ownRequest, forced: root.forced, registrar: root.registrarOwned, menu: root.menu }); }
+        function dump(): string { return JSON.stringify({ key: root.key, request: root.request, own: root.ownRequest, forced: root.forced, registrar: root.registrarOwned, menu: root.menu, appMenu: root.gtkAppMenu }); }
     }
 
     Process {
@@ -191,6 +199,8 @@ Singleton {
                     if (!m.menu.children.length) emptyTimer.restart();
                 } else if (m.type === "none") {
                     if (m.key === root.wanted) { root.menuKey = ""; root.menu = null; root.noneKey = m.key; }
+                } else if (m.type === "appactions") {
+                    root.appActions = m;
                 } else if (m.type === "resolved") {
                     const r = Object.assign({}, root.resolved);
                     r[m.key] = m.request;
