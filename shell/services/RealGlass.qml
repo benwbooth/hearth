@@ -178,6 +178,13 @@ layer-rule {
                 popup: t.popup,
                 key: "hearth-" + e.key,
                 surface_size: [round(e.win.width), round(e.win.height)],
+                // arbor applies the shapes with the surface's next commit, the
+                // frame these shapes were measured for (sent from
+                // afterAnimating, before that frame is drawn), so the glass
+                // and the content over it change in the same frame. Applied
+                // on arrival, a magnifying Dock's glass ran a frame ahead of
+                // or behind its slab. (Older arbor ignores the field.)
+                on_commit: !t.popup,
                 shapes: e.frames.map(f => f.shape)
             };
             const json = JSON.stringify(req);

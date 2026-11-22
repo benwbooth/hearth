@@ -135,6 +135,8 @@ MouseArea {
     // once at the largest size and only scaled. (Sizing the image itself by
     // zoom made it reload, asynchronously, on every frame of the magnify
     // animation, so icons blanked out while hovering.)
+    // The drawn icon (tests: Dock's HEARTH_DOCK_TRACE logs where it lands).
+    readonly property Item iconItem: iconImage
     Item {
         id: icon
         readonly property real size: task.iconSize * task.zoom
@@ -142,9 +144,15 @@ MouseArea {
         height: size
         opacity: task.dragging ? 0.25 : task.pressed ? 0.7 : 1
         Icon {
+            id: iconImage
             readonly property real full: Math.ceil(task.iconSize * Math.max(1, task.maxZoom))
             implicitSize: full
-            anchors.centerIn: parent
+            // Centred exactly, not with anchors.centerIn: that puts the
+            // image on a whole logical pixel (even with alignWhenCentered
+            // off), so during the zoom each icon jumped up to half a pixel
+            // (2/3 of a device pixel at 4/3) back and forth against its box.
+            x: (parent.width - width) / 2
+            y: (parent.height - height) / 2
             scale: icon.size / full
             smooth: true
             mipmap: true

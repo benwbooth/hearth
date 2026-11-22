@@ -398,7 +398,12 @@ PanelWindow {
                        (dockWin.vertical ? frame.y : frame.x).toFixed(2), (dockWin.vertical ? frame.height : frame.width).toFixed(2)];
             for (let k = 0; k < rep.count; k++) {
                 const it = rep.itemAt(k);
-                if (it) o.push((dockWin.vertical ? it.y : it.x).toFixed(2) + ":" + (dockWin.vertical ? it.height : it.width).toFixed(2));
+                if (!it) continue;
+                let s = (dockWin.vertical ? it.y : it.x).toFixed(2) + ":" + (dockWin.vertical ? it.height : it.width).toFixed(2);
+                // Where the icon image itself lands (centre along the dock).
+                const im = it.task && it.task.iconItem;
+                if (im) { const c = im.mapToItem(null, im.width / 2, im.height / 2); s += ":" + (dockWin.vertical ? c.y : c.x).toFixed(2); }
+                o.push(s);
             }
             console.log("docktrace " + o.join(" "));
         }
@@ -736,7 +741,10 @@ PanelWindow {
         // Built at the largest size and scaled, so magnifying doesn't
         // re-capture the snapshot or reload the icon every frame.
         Rectangle {
-            anchors.centerIn: parent
+            // Centred exactly (anchors.centerIn rounds to whole pixels, so
+            // the tile jittered while zooming).
+            x: (parent.width - width) / 2
+            y: (parent.height - height) / 2
             width: Math.ceil(dockWin.iconSize * Math.max(1, dockWin.maxZoom))
             height: width * 0.75
             scale: dockWin.iconSize * tile.zoom / width
