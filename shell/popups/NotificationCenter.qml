@@ -31,7 +31,9 @@ Scope {
         margins.top: barGap
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "hearth-notifications"
-        WlrLayershell.keyboardFocus: root.open ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        // On demand: it takes the keyboard only when clicked into (a reply,
+        // Esc); never exclusive, which kept typing from every window.
+        WlrLayershell.keyboardFocus: root.open ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
         color: "transparent"
         implicitWidth: Theme.notificationWidth + root.shadowPad + Math.round(16 * Theme.pt)
         visible: Notifications.wanted && (root.open || slide.running || pane.opacity > 0.01)
