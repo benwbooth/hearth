@@ -49,8 +49,9 @@ BarButton {
     BarPopup {
         id: pop
         anchorItem: root
+        // Kept while the popup fades out (visible outlasts open).
         Loader {
-            active: pop.open
+            active: pop.visible
             sourceComponent: root.popupContent
         }
     }

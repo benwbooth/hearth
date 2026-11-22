@@ -112,7 +112,18 @@ PanelWindow {
     // which Qt never shows hover in it until the pointer leaves again.
     WlrLayershell.keyboardFocus: open && keyboardReady ? popup.keyboardFocus : WlrKeyboardFocus.None
     property bool keyboardReady: false
-    onVisibleChanged: { keyboardReady = false; if (visible) keyboardTimer.restart(); }
+    onVisibleChanged: { keyboardReady = false; painted = false; if (visible) keyboardTimer.restart(); }
+    // The fade starts with the surface's first frame, not when `open` flips:
+    // mapping a layer surface (configure round trip) and building its content
+    // take longer than the whole fade, which used to end before anything was
+    // on screen, so menus just popped in.
+    property bool painted: false
+    readonly property bool shown: open && (painted || instant)
+    Connections {
+        target: popup.visible && !popup.painted ? frame.Window.window : null
+        ignoreUnknownSignals: true
+        function onAfterAnimating() { popup.painted = true; }
+    }
     Timer {
         id: keyboardTimer
         interval: 120
@@ -379,16 +390,43 @@ PanelWindow {
         width: implicitWidth
         height: implicitHeight
         readonly property real shadowPad: popup.bare ? (Theme.glassShadows ? Math.ceil(Theme.menuShadowBlur + Theme.menuShadowY) : 2) : glassPane.shadowPad
-        // Fade in and grow from the anchor; fade out on close.
-        opacity: popup.open ? 1 : 0
-        Behavior on opacity {
-            enabled: !popup.instant
-            NumberAnimation { duration: popup.open ? Theme.menuInMs : Theme.menuOutMs; easing.type: popup.open ? Easing.OutCubic : Easing.InOutQuad }
+        // Fade in and grow from the anchor; fade out on close. Started by
+        // hand on each change: a Behavior read its easing and duration
+        // before they followed `open`, so closing ran the opening's steep
+        // curve and was mostly gone in its first few frames.
+        opacity: 0
+        property real grow: 0
+        NumberAnimation {
+            id: fadeAnim
+            target: frame
+            property: "opacity"
         }
-        property real grow: popup.open ? 1 : 0
-        Behavior on grow {
-            enabled: !popup.instant && popup.open
-            NumberAnimation { duration: Theme.menuInMs + 60; easing.type: Easing.OutBack; easing.overshoot: 1.1 }
+        NumberAnimation {
+            id: growAnim
+            target: frame
+            property: "grow"
+            duration: Theme.menuInMs + 60
+            easing.type: Easing.OutBack
+            easing.overshoot: 1.1
+        }
+        Connections {
+            target: popup
+            function onShownChanged() {
+                const s = popup.shown;
+                fadeAnim.stop();
+                growAnim.stop();
+                if (popup.instant) {
+                    frame.opacity = s ? 1 : 0;
+                    frame.grow = s ? 1 : 0;
+                    return;
+                }
+                fadeAnim.to = s ? 1 : 0;
+                fadeAnim.duration = s ? Theme.menuInMs : Theme.menuOutMs;
+                fadeAnim.easing.type = s ? Easing.OutCubic : Easing.InOutQuad;
+                fadeAnim.start();
+                // Grows on the way in only; closes at full size, like macOS.
+                if (s) { frame.grow = 0; growAnim.to = 1; growAnim.start(); }
+            }
         }
         transform: Scale {
             readonly property real s: 0.94 + 0.06 * frame.grow

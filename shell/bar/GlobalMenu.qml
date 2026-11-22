@@ -217,7 +217,8 @@ Row {
                 padding: 0
                 bare: true
                 Loader {
-                    active: pop.open
+                    // Kept while the menu fades out.
+                    active: pop.visible
                     sourceComponent: DBusMenuList {
                         itemId: topItem.modelData.id
                         hostPopup: pop
