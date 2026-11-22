@@ -74,23 +74,31 @@ PanelWindow {
     }
     HoverHandler { id: hover }
 
-    // How bright the wallpaper is under the bar (its top 4%), so the
-    // transparent bar's items can be white or black like macOS 26's. The
-    // small Image gives the aspect; the canvas draws the picture scaled down
-    // and averages its top rows.
+    // How bright the wallpaper is under the bar, so the transparent bar's
+    // items can be white or black like macOS 26's: the top 4% of the
+    // picture *as shown on this screen*: the file this screen's wallpaper
+    // view shows, covering the screen's shape around its centre like Qt
+    // draws it. Sampling the original's own top edge read
+    // a bright sky that the ultrawide crop cuts off, and turned the items
+    // black over dark rooftops.
     Image {
         id: wallSample
         visible: false
-        readonly property string url: Wallpaper.file ? "file://" + Wallpaper.file : ""
+        // The exact file this screen's wallpaper shows (services/Wallpaper.qml
+        // views: the smart-cropped copy when there is one).
+        readonly property var view: bar.screen ? (Wallpaper.views[bar.screen.name] || null) : null
+        readonly property string shown: view && view.file ? view.file : (Wallpaper.file || "")
+        readonly property string url: shown ? (shown.startsWith("/") ? "file://" + shown : shown) : ""
         source: url
-        sourceSize.width: 96
+        sourceSize.width: 192
         asynchronous: true
         onStatusChanged: if (status === Image.Ready) sampler.loadImage(url)
     }
     Canvas {
         id: sampler
+        // The screen's shape, 96 px wide.
         width: 96
-        height: Math.max(8, Math.round(96 * wallSample.implicitHeight / Math.max(1, wallSample.implicitWidth)))
+        height: Math.max(8, Math.round(96 * (bar.screen ? bar.screen.height / Math.max(1, bar.screen.width) : 9 / 16)))
         visible: false
         renderTarget: Canvas.Image
         renderStrategy: Canvas.Immediate
@@ -99,7 +107,11 @@ PanelWindow {
             const url = wallSample.url;
             if (!url || !isImageLoaded(url)) return;
             const ctx = getContext("2d");
-            ctx.drawImage(url, 0, 0, width, height);
+            ctx.reset();
+            // Cover the canvas like the wallpaper covers the screen.
+            const iw = Math.max(1, wallSample.implicitWidth), ih = Math.max(1, wallSample.implicitHeight);
+            const k = Math.max(width / iw, height / ih);
+            ctx.drawImage(url, (width - iw * k) / 2, (height - ih * k) / 2, iw * k, ih * k);
             const rows = Math.max(1, Math.round(height * 0.04));
             const d = ctx.getImageData(0, 0, width, rows).data;
             let sum = 0, n = 0;
