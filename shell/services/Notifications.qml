@@ -211,6 +211,14 @@ Singleton {
             "Notifications work", "This is how a notification looks. Click it, or use the buttons."]);
     }
 
+    // A swaync left over from an older hearth (orphaned, it outlives the
+    // shell) would keep the notification name: stop it and its old
+    // swaync-client watchers, but only those on this session's bus (test rigs run their own on private buses).
+    Process {
+        running: root.wanted
+        command: ["sh", "-c", 'for p in $(pgrep -f "bin/[.]?swaync(-client)?(-wrapped)?( |$)"); do tr "\\0" "\\n" < /proc/$p/environ 2>/dev/null | grep -qxF "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" && kill "$p"; done; true']
+    }
+
     LazyLoader {
         id: server
         active: root.wanted
