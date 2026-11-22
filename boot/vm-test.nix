@@ -67,6 +67,14 @@ pkgs.testers.runNixOSTest {
     machine.succeed("plymouth show-splash")
     time.sleep(2)
     machine.screenshot("splash-running")
+    # Esc twice: plymouth's details view and back, which redraws the whole
+    # screen, as a display being added does on the real machine (amdgpu,
+    # then the iGPU). Sprites that never moved are drawn only then.
+    machine.send_key("esc")
+    time.sleep(1)
+    machine.send_key("esc")
+    time.sleep(1)
+    machine.screenshot("splash-redrawn")
     machine.succeed("(plymouth ask-for-password --prompt='Please enter passphrase for disk cryptroot' > /tmp/pw &) ")
     time.sleep(2)
     machine.screenshot("password-empty")
@@ -86,6 +94,6 @@ pkgs.testers.runNixOSTest {
     time.sleep(2)
     machine.screenshot("shutdown-splash")
     machine.succeed("plymouth quit")
-    print(machine.succeed("grep -iv 'ply-terminal\\|keyboard' /tmp/plymouth-debug.log | head -150"))
+    print(machine.execute("grep -iv 'ply-terminal\\|keyboard' /tmp/plymouth-debug.log | head -150")[1])
   '';
 }
