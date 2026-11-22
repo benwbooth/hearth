@@ -318,6 +318,9 @@ done`]
     readonly property font capFont: Qt.font({ family: Theme.fontFamily, pixelSize: Math.max(7, Math.round(root.h * 0.34)), weight: Font.DemiBold, letterSpacing: 0.3, features: { "tnum": 1 } })
     readonly property font valFont: Qt.font({ family: Theme.fontFamily, pixelSize: Math.max(9, Math.round(root.h * 0.48)), weight: Font.Medium, features: { "tnum": 1 } })
     function tempColor(t) { return t >= 80 ? "#e05a4f" : (t >= 60 ? "#e3c25a" : blend ? Theme.barFg : "#43c96b"); }
+    // In the tooltip: the bar's foreground (black over a bright wallpaper)
+    // is unreadable on the tooltip's glass, which follows the theme.
+    function tipTempColor(t) { return t >= 80 ? "#e05a4f" : (t >= 60 ? "#e3c25a" : blend ? Theme.fg : "#43c96b"); }
     function pct(v) { return (Number(v) || 0).toFixed(0) + "%"; }
 
     // ---- KStats-style pieces ---------------------------------------------
@@ -604,8 +607,8 @@ done`]
         const list = topData && topData.sensors ? topData.sensors : null;
         if (!list || !list.length) {
             let t = "<table cellspacing='1'>";
-            if (cpuTempC > 0) t += "<tr><td><b>CPU</b></td><td align='right'>&nbsp;&nbsp;" + c(tempColor(cpuTempC), "<b>" + cpuTempC.toFixed(0) + "°C</b>") + "</td></tr>";
-            if (gpuTempC > 0) t += "<tr><td><b>GPU</b></td><td align='right'>&nbsp;&nbsp;" + c(tempColor(gpuTempC), "<b>" + gpuTempC.toFixed(0) + "°C</b>") + "</td></tr>";
+            if (cpuTempC > 0) t += "<tr><td><b>CPU</b></td><td align='right'>&nbsp;&nbsp;" + c(tipTempColor(cpuTempC), "<b>" + cpuTempC.toFixed(0) + "°C</b>") + "</td></tr>";
+            if (gpuTempC > 0) t += "<tr><td><b>GPU</b></td><td align='right'>&nbsp;&nbsp;" + c(tipTempColor(gpuTempC), "<b>" + gpuTempC.toFixed(0) + "°C</b>") + "</td></tr>";
             return t + "</table><br>" + c(Theme.fgDim, "Open treetop for every sensor and fan.");
         }
         let t = "<table cellspacing='1'>";
@@ -613,7 +616,7 @@ done`]
         for (const x of list) {
             const v = x.kind === "fan"
                 ? c(tipPalette.net, "<b>" + x.value.toFixed(0) + " rpm</b>")
-                : c(tempColor(x.value), "<b>" + x.value.toFixed(0) + "°C</b>");
+                : c(tipTempColor(x.value), "<b>" + x.value.toFixed(0) + "°C</b>");
             t += "<tr><td>" + (x.dev !== last ? "<b>" + esc(x.dev) + "</b>" : "") + "</td><td>&nbsp;&nbsp;"
                 + c(Theme.fgDim, esc(x.label)) + "</td><td align='right'>&nbsp;&nbsp;" + v + "</td></tr>";
             last = x.dev;
