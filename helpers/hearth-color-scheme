@@ -179,25 +179,29 @@ def apply_settings_ini():
 
 
 def apply_gsettings():
-    try:
-        from gi.repository import Gio
-        src = Gio.SettingsSchemaSource.get_default()
-        if not src or not src.lookup("org.gnome.desktop.interface", True):
-            return
-        s = Gio.Settings.new("org.gnome.desktop.interface")
-        want = {
-            "color-scheme": "prefer-dark" if DARK else "prefer-light",
-            "gtk-theme": GTK_THEME,
-            "icon-theme": ICONS,
-        }
-        keys = s.props.settings_schema.list_keys()
-        for k, v in want.items():
-            if k in keys and s.get_string(k) != v:
-                s.set_string(k, v)
-                changed.append("gsettings " + k)
-        Gio.Settings.sync()
-    except Exception as e:
-        print(f"hearth-color-scheme: gsettings: {e}", file=sys.stderr)
+    """GSettings keys GTK and the GTK portal read, written straight to dconf
+    (as services/Mouse.qml does): no schemas needed, which hearth's
+    environment doesn't carry."""
+    import shutil
+    import subprocess
+    dconf = shutil.which("dconf")
+    if not dconf:
+        return
+    want = {
+        "color-scheme": "prefer-dark" if DARK else "prefer-light",
+        "gtk-theme": GTK_THEME,
+        "icon-theme": ICONS,
+    }
+    for k, v in want.items():
+        key = "/org/gnome/desktop/interface/" + k
+        try:
+            cur = subprocess.run([dconf, "read", key], capture_output=True, text=True, timeout=5).stdout.strip()
+            if cur == f"'{v}'":
+                continue
+            subprocess.run([dconf, "write", key, f"'{v}'"], check=True, timeout=5)
+            changed.append("gsettings " + k)
+        except Exception as e:
+            print(f"hearth-color-scheme: dconf {k}: {e}", file=sys.stderr)
 
 
 if apply_kdeglobals():
