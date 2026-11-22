@@ -232,8 +232,23 @@ PanelWindow {
     readonly property bool tracking: hover.hovered && cfg.magnify && dragKey === ""
     readonly property real livePointer: hover.hovered
         ? (vertical ? hover.point.position.y : hover.point.position.x) - baseStart : NaN
+    // The lens follows the pointer once per rendered frame, at the moment
+    // the frame starts (like macOS): a 1000 Hz mouse moved it six times per
+    // 165 Hz frame, each time re-laying out every icon (~0.45 ms each).
     property real pointer: 0
-    onLivePointerChanged: if (!isNaN(livePointer)) pointer = livePointer
+    property bool pointerPending: false
+    onLivePointerChanged: if (!isNaN(livePointer) && !pointerPending) {
+        pointerPending = true;
+        body.Window.window?.update();
+    }
+    Connections {
+        target: body.Window.window
+        function onAfterAnimating() {
+            if (!dockWin.pointerPending) return;
+            dockWin.pointerPending = false;
+            if (!isNaN(dockWin.livePointer)) dockWin.pointer = dockWin.livePointer;
+        }
+    }
     property real magLevel: 0
     // Slots ease to new places (reorder, drag gap, apps coming and going)
     // only while magnification is at rest: the magnify easing already moves
@@ -422,7 +437,6 @@ PanelWindow {
             // does (beginner friendly, like the old per-icon tooltips).
             property string sub: ""
             property real cx: 0
-            property real ext: 0
             onIdxChanged: if (idx >= 0) {
                 const sl = dockWin.slots[idx];
                 const g = sl && sl.group;
@@ -430,11 +444,9 @@ PanelWindow {
                 const open = g && g.windows && g.windows.length > 0;
                 sub = !g || open ? "" : (g.entry && g.entry.comment ? g.entry.comment : "Click to open · right-click for options");
             }
-            // Follow the hot icon's centre and its magnified size.
+            // Follow the hot icon's centre.
             readonly property real tcx: idx >= 0 ? (dockWin.geo.pos[idx] ?? 0) + (dockWin.geo.len[idx] ?? 0) / 2 : cx
-            readonly property real text_ext: idx >= 0 ? dockWin.iconSize * ((dockWin.geo.zoom[idx] ?? 1) - 1) : ext
             onTcxChanged: cx = tcx
-            onText_extChanged: ext = text_ext
             // macOS moves the label straight to the next icon; a very short
             // glide keeps it from flickering between neighbours.
             Behavior on cx { enabled: nameLabel.opacity > 0.01; NumberAnimation { duration: 70; easing.type: Easing.OutCubic } }
@@ -446,11 +458,18 @@ PanelWindow {
             // rounded box (6 pt corners) of dense glass.
             width: labelCol.implicitWidth + 2 * Math.round(10 * Theme.pt)
             height: labelCol.implicitHeight + Math.round(8 * Theme.pt)
-            readonly property real inner: dockWin.margin + dockWin.thickness + ext + Math.round(8 * Theme.pt)
-            x: Math.round(!dockWin.vertical ? Math.max(4, Math.min(dockWin.width - width - 4, cx - width / 2))
-                          : dockWin.edge === "left" ? inner : dockWin.width - inner - width)
-            y: Math.round(dockWin.vertical ? Math.max(4, Math.min(dockWin.height - height - 4, cx - height / 2))
-                          : dockWin.height - inner - height)
+            // A steady height above the magnified icons, as on macOS: it
+            // followed the hot icon's own zoom, which dips ~2 px between two
+            // icons, so the label bobbed as the pointer swept the dock.
+            readonly property real inner: dockWin.margin + dockWin.thickness + dockWin.extra * dockWin.magLevel + Math.round(8 * Theme.pt)
+            // Whole device pixels (crisp text), not whole logical ones: at 4/3
+            // those are 1.33 device px, so the label moved in uneven steps.
+            readonly property real dpr: dockWin.devicePixelRatio || 1
+            function snap(v) { return Math.round(v * dpr) / dpr; }
+            x: snap(!dockWin.vertical ? Math.max(4, Math.min(dockWin.width - width - 4, cx - width / 2))
+                    : dockWin.edge === "left" ? inner : dockWin.width - inner - width)
+            y: snap(dockWin.vertical ? Math.max(4, Math.min(dockWin.height - height - 4, cx - height / 2))
+                    : dockWin.height - inner - height)
             GlassFrame {
                 anchors.fill: parent
                 radius: Math.round(6 * Theme.pt)
