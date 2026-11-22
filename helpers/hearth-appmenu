@@ -778,13 +778,28 @@ def registered_for_pid(pid):
     if not registrar or not pid:
         return None
     mine = set(ancestors(pid))
-    best = None
+    found = []
     for wid, (service, path) in registrar.windows.items():
         p = pid_of(service)
         if p and (p in mine or pid in ancestors(p)):
-            if best is None or wid > best[0]:
-                best = (wid, service, path)
-    return best[1:] if best else None
+            found.append((wid, service, path))
+    # Newest first, and only one that has a menu: Electron registers every
+    # window, also when the app set no menu (Claude Desktop: the objects
+    # don't exist), and such a window goes on to AT-SPI (its ☰).
+    for wid, service, path in sorted(found, reverse=True):
+        if has_menu(service, path):
+            return service, path
+    return None
+
+
+def has_menu(service, path):
+    try:
+        obj = bus.get_object(service, path, introspect=False)
+        _rev, layout = dbus.Interface(obj, DBUSMENU).GetLayout(
+            0, 1, dbus.Array([], signature="s"), timeout=1.5)
+        return len(layout[2]) > 0
+    except dbus.DBusException:
+        return False
 
 
 # ---------------------------------------------------------------- AT-SPI
