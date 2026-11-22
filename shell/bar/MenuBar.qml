@@ -340,6 +340,13 @@ PanelWindow {
                 spacing: 0
                 transform: Translate { x: 0.001; y: 0.001 }
 
+                // A map of the workspaces: click one to go there.
+                Workspaces {
+                    visible: Settings.menubar.showWorkspaces !== false
+                    screen: bar.screen
+                    menuBarItem: true
+                    Layout.rightMargin: Math.round(8 * Theme.pt)
+                }
                 SysMonitor { visible: Settings.menubar.showSysMonitor }
                 DevApps { iconSize: Theme.menuBarIconSize; implicitWidth: Theme.menuBarItemWidth }
                 Tray {}

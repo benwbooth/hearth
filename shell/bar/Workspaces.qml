@@ -7,14 +7,20 @@ import ".."
 // Pager: one miniature per workspace with its windows drawn to scale, like
 // Plasma's pager. Click to switch, scroll to move between workspaces, and
 // drop a window's mini-rect on another workspace to move it there.
+// `menuBarItem`: the macOS-style menu bar's look (outlines in the bar's text
+// colour, which follows the wallpaper and bar style).
 Row {
     id: root
     required property var screen
-    spacing: 4
+    property bool menuBarItem: false
+    spacing: menuBarItem ? Math.round(3 * Theme.pt) : 4
 
     readonly property real monW: screen ? screen.width : 1920
     readonly property real monH: screen ? screen.height : 1080
-    readonly property real boxH: Theme.barHeight - 12
+    readonly property real itemH: menuBarItem ? Theme.menuBarHeight : Theme.barHeight
+    readonly property real boxH: menuBarItem ? Theme.menuBarHeight - Math.round(6 * Theme.pt) : Theme.barHeight - 12
+    readonly property color fg: Theme.barFg
+    function tint(a) { return Qt.rgba(fg.r, fg.g, fg.b, a); }
     readonly property real boxW: Math.round(boxH * monW / monH)
 
     readonly property var workspaces: Compositor.workspacesOn(screen ? screen.name : "")
@@ -30,7 +36,7 @@ Row {
             id: ws
             required property var modelData
             width: root.boxW
-            height: Theme.barHeight
+            height: root.itemH
             hoverEnabled: true
             onClicked: Compositor.focusWorkspace(modelData.id)
 
@@ -46,8 +52,13 @@ Row {
                 width: root.boxW
                 height: root.boxH
                 radius: 3
-                color: ws.modelData.active ? Theme.accentDim : ws.containsMouse ? Theme.bgRaised : Theme.bgAlt
-                border.color: ws.modelData.active ? Theme.accent : Theme.border
+                color: root.menuBarItem
+                    ? root.tint(ws.modelData.active ? 0.22 : ws.containsMouse ? 0.14 : 0.06)
+                    : ws.modelData.active ? Theme.accentDim : ws.containsMouse ? Theme.bgRaised : Theme.bgAlt
+                border.color: root.menuBarItem
+                    ? root.tint(ws.modelData.active ? 0.95 : 0.45)
+                    : ws.modelData.active ? Theme.accent : Theme.border
+                border.width: root.menuBarItem && ws.modelData.active ? 1.5 : 1
                 clip: true
 
                 Repeater {
@@ -70,8 +81,10 @@ Row {
                         width: ipc.size ? Math.max(4, ipc.size[0] * sx) : 0
                         height: ipc.size ? Math.max(4, ipc.size[1] * sy) : 0
                         radius: 2
-                        color: modelData.focused ? Qt.rgba(1, 1, 1, 0.35) : Qt.rgba(1, 1, 1, 0.16)
-                        border.color: Qt.rgba(1, 1, 1, 0.4)
+                        color: root.menuBarItem
+                            ? root.tint(modelData.focused ? 0.5 : 0.28)
+                            : modelData.focused ? Qt.rgba(1, 1, 1, 0.35) : Qt.rgba(1, 1, 1, 0.16)
+                        border.color: root.menuBarItem ? root.tint(0.6) : Qt.rgba(1, 1, 1, 0.4)
                         border.width: 1
 
                         Drag.active: dragArea.drag.active
@@ -108,8 +121,9 @@ Row {
 
             Tooltip {
                 anchorItem: ws
-                text: `Workspace ${ws.modelData.name}`
+                text: `Workspace ${ws.modelData.name}` + (Compositor.windowsOn(ws.modelData.id).length ? "" : " (empty)")
                 subtext: Compositor.windowsOn(ws.modelData.id).map(t => t.title).join("\n")
+                    || "Click to go there, or drag a window's box here to move it"
                 hovered: ws.containsMouse
             }
         }

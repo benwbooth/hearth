@@ -46,6 +46,7 @@ Singleton {
         { group: "Workspaces & Overview", title: "Go to workspace 1 … 4", keys: "Ctrl+F1 … F4" },
         { group: "Workspaces & Overview", title: "Previous / next workspace", keys: "Super+Ctrl+Left / Right" },
         { group: "Workspaces & Overview", title: "Move window to previous / next workspace", keys: "Super+Ctrl+Shift+Left / Right" },
+        { group: "Workspaces & Overview", title: "Workspace map in the menu bar: click a workspace to go there, drag a window onto another", keys: "Click / drag" },
         { group: "Workspaces & Overview", title: "Zoom in / out / reset", keys: "Super+= / Super+- / Super+0" },
         { group: "Screenshots", title: "Screenshot tool: pick a region, window or screen; it is copied to the clipboard, then save or mark it up", keys: "Print" },
         { group: "Screenshots", title: "Screenshot a region", keys: "Super+Shift+S" },

@@ -327,6 +327,7 @@ Scope {
                     enabled: Theme.menuBarStyle === "glass"
                 }
                 Divider {}
+                SwitchRow { label: "Show the workspace map"; note: "A small map of each workspace and its windows. Click one to go there; drag a window's box onto another to move it."; key: "menubar.showWorkspaces" }
                 SwitchRow { label: "Show the system monitor"; note: "treetop's CPU, memory and GPU graphs in the menu bar. Click them to open treetop."; key: "menubar.showSysMonitor" }
                 Divider {}
                 SwitchRow { label: "Monochrome icons"; note: "Menu bar icons in the text colour, like macOS's symbols. Apps' full-colour tray pictures keep their colours."; key: "menubar.monochromeIcons" }
