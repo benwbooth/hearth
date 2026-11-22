@@ -77,12 +77,16 @@ PanelWindow {
     // The slab's resting geometry out to the screen edge (so the pointer
     // can rest on the edge), outside the sliding (transformed) body:
     // Region doesn't follow transforms.
+    // While magnified it also takes in the band the grown icons reach into,
+    // as on macOS: moving up onto a magnified icon kept it magnified there,
+    // but here the pointer left the input region and the zoom fell away.
     Item {
         id: frameMask
-        x: dockWin.edge === "left" ? 0 : frame.x
-        y: frame.y
-        width: dockWin.vertical ? dockWin.width - (dockWin.edge === "left" ? 0 : frame.x) : frame.width
-        height: dockWin.vertical ? frame.height : dockWin.height - frame.y
+        readonly property real band: dockWin.extra * dockWin.magLevel
+        x: dockWin.edge === "left" ? 0 : frame.x - (dockWin.edge === "right" ? band : 0)
+        y: frame.y - (dockWin.vertical ? 0 : band)
+        width: dockWin.vertical ? dockWin.width - (dockWin.edge === "left" ? 0 : frame.x - band) : frame.width
+        height: dockWin.vertical ? frame.height : dockWin.height - frame.y + band
     }
 
     // --- show / hide ---
@@ -213,17 +217,24 @@ PanelWindow {
     readonly property real axisLength: vertical ? height : width
     readonly property real baseStart: Math.round((axisLength - baseLength) / 2)
 
-    // Magnification: each slot's zoom from its distance to the pointer (in
-    // the un-magnified layout, so nothing feeds back), and how far the
-    // growth pushes neighbours: slots before the pointer grow toward the
-    // start, slots after it toward the end. `magLevel` eases the whole
-    // effect in and out, so nothing snaps when the pointer arrives or leaves.
+    // Magnification, as on macOS: one smooth lens along the dock. Every
+    // point x of the resting layout is drawn at F(x) = x + A·G(x − pointer),
+    // G being the integral of a cosine bump (zoom 1 + A·bump), so F(pointer)
+    // = pointer: the spot under the pointer never moves, and each slot's
+    // drawn start and end, and so its size, come from the same curve.
+    // Neighbours move together, nothing feeds back (the pointer is read
+    // in resting coordinates), and the ends of the dock stay put while the
+    // pointer sweeps across it (zooming slots one by one, the sum of their
+    // growth rose and fell with the pointer's place inside a cell, so the
+    // whole dock breathed by a fraction of a pixel per frame: the wobble).
+    // `magLevel` eases the whole effect in and out, so nothing snaps when
+    // the pointer arrives or leaves.
     readonly property bool tracking: hover.hovered && cfg.magnify && dragKey === ""
     readonly property real livePointer: hover.hovered
         ? (vertical ? hover.point.position.y : hover.point.position.x) - baseStart : NaN
     property real pointer: 0
     onLivePointerChanged: if (!isNaN(livePointer)) pointer = livePointer
-    property real magLevel: tracking ? 1 : 0
+    property real magLevel: 0
     // Slots ease to new places (reorder, drag gap, apps coming and going)
     // only while magnification is at rest: the magnify easing already moves
     // them every frame, and a 260 ms slide chasing that moving target made
@@ -232,41 +243,50 @@ PanelWindow {
     // macOS grows the icons quickly when the pointer arrives and settles
     // them a little slower when it leaves; in between they follow the
     // pointer with no lag.
-    Behavior on magLevel { NumberAnimation { duration: dockWin.tracking ? 150 : 230; easing.type: Easing.OutQuad } }
+    // (Two animations started from onTrackingChanged: a Behavior read its
+    // duration before `tracking` had changed, so the zoom left in the
+    // arrival's 150 ms and dropped a fifth of the way in the first frame.)
+    // Both ease in and out: an OutQuad start jumped 20% in one frame.
+    onTrackingChanged: {
+        magOut.stop(); magIn.stop();
+        (tracking ? magIn : magOut).start();
+    }
+    NumberAnimation { id: magIn; target: dockWin; property: "magLevel"; to: 1; duration: 160; easing.type: Easing.InOutQuad }
+    NumberAnimation { id: magOut; target: dockWin; property: "magLevel"; to: 0; duration: 260; easing.type: Easing.InOutQuad }
+    // Half-width of the lens: about 2.6 icons each side, like macOS.
+    readonly property real lensRange: cell * 2.6
+    // G(x) = ∫0..x of the bump (cos(πu/R) + 1) / 2; odd, ±R/2 beyond R.
+    function lensG(x) {
+        const R = lensRange, a = Math.min(Math.abs(x), R);
+        const g = (a + R / Math.PI * Math.sin(Math.PI * a / R)) / 2;
+        return x < 0 ? -g : g;
+    }
+    // A is chosen so a slot centred under the pointer is drawn at exactly
+    // magnifySize (its length is the lens's average over the slot).
+    readonly property real lensGain: (maxZoom - 1) * cell / (2 * lensG(cell / 2))
     readonly property var geo: {
         const z = [], pos = [], lens = [];
-        const range = cell * 2.6;
-        let before = 0;
+        const A = magLevel > 0 ? lensGain * magLevel : 0;
+        const p = pointer;
+        const F = x => A > 0 ? x + A * lensG(x - p) : x;
         // Drag preview: collapse the dragged slot, open a gap at dragIndex
-        // among the other pins.
+        // among the other pins (in the resting layout; magnification is
+        // off while dragging).
         const gapAt = dragKey && !dragOut && dragIndex >= 0 ? dragIndex : -1;
         const collapse = dragKey && (gapAt >= 0 || (dragOut && dragWasPinned)) ? dragKey : "";
-        for (const s of slots) {
-            const c = s.base + s.len / 2;
-            let k = 1;
-            if (magLevel > 0 && (s.kind === "app" || s.kind === "min")) {
-                const d = Math.abs(pointer - c);
-                if (d < range) k = 1 + (maxZoom - 1) * magLevel * (Math.cos(Math.PI * d / range) + 1) / 2;
-            }
-            z.push(k);
-            const ext = s.len * (k - 1);
-            if (magLevel > 0) {
-                if (s.base + s.len <= pointer) before += ext;
-                else if (s.base < pointer) before += ext * (pointer - s.base) / s.len;
-            }
-        }
         let acc = 0, pinIdx = 0, gapDone = gapAt < 0;
         for (let i = 0; i < slots.length; i++) {
             const s = slots[i];
             const isPin = s.kind === "app" && s.pinned;
             if (!gapDone && (!isPin || (s.key !== collapse && pinIdx === gapAt))) { acc += cell; gapDone = true; }
-            pos.push(baseStart + s.base + acc - before);
-            const len = s.key === collapse ? 0 : s.len * z[i];
-            lens.push(len);
+            const len = s.key === collapse ? 0 : s.len;
+            const a = F(s.base + acc), b = F(s.base + acc + len);
+            pos.push(baseStart + a);
+            lens.push(b - a);
+            z.push(len > 0 ? (b - a) / len : 1);
             acc += len - s.len;
             if (isPin && s.key !== collapse) pinIdx++;
         }
-        if (!gapDone) acc += cell;
         const start = pos.length ? pos[0] : baseStart;
         const end = pos.length ? pos[pos.length - 1] + lens[lens.length - 1] : baseStart + cell;
         return { zoom: z, pos: pos, len: lens, start: start, end: Math.max(end, start + cell) };
@@ -351,6 +371,22 @@ PanelWindow {
         dragOut = false;
         if (settleKey) settleTimer.restart();
         if (key && out && dragWasPinned) { Pins.unpin(key); poof.at(p); }
+    }
+
+    // Tests: HEARTH_DOCK_TRACE=1 logs the drawn layout every frame
+    // ("docktrace" lines: ms, pointer, magLevel, slab start/width, then
+    // each slot's start and length) for measuring magnification smoothness.
+    FrameAnimation {
+        running: !!Quickshell.env("HEARTH_DOCK_TRACE")
+        onTriggered: {
+            const o = [Date.now(), dockWin.pointer.toFixed(2), dockWin.magLevel.toFixed(4),
+                       (dockWin.vertical ? frame.y : frame.x).toFixed(2), (dockWin.vertical ? frame.height : frame.width).toFixed(2)];
+            for (let k = 0; k < rep.count; k++) {
+                const it = rep.itemAt(k);
+                if (it) o.push((dockWin.vertical ? it.y : it.x).toFixed(2) + ":" + (dockWin.vertical ? it.height : it.width).toFixed(2));
+            }
+            console.log("docktrace " + o.join(" "));
+        }
     }
 
     // --- drawing ---
@@ -461,10 +497,10 @@ PanelWindow {
             height: dockWin.vertical ? e - s : dockWin.thickness
             // Slide with the icons when apps come and go (not while the
             // pointer drives magnification: that has to follow it at once).
-            Behavior on x { enabled: !dockWin.tracking && !dockWin.vertical; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
-            Behavior on width { enabled: !dockWin.tracking && !dockWin.vertical; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
-            Behavior on y { enabled: !dockWin.tracking && dockWin.vertical; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
-            Behavior on height { enabled: !dockWin.tracking && dockWin.vertical; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+            Behavior on x { enabled: dockWin.slide && !dockWin.vertical; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+            Behavior on width { enabled: dockWin.slide && !dockWin.vertical; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+            Behavior on y { enabled: dockWin.slide && dockWin.vertical; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+            Behavior on height { enabled: dockWin.slide && dockWin.vertical; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
 
             // The liquid-glass slab (GlassFrame): clearer than menus, with
             // the specular rim, edge lensing and a wide soft shadow.
