@@ -56,7 +56,9 @@ Scope {
                     color: Theme.bgAlt
                     Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: Theme.border }
 
+                    ScrollAssist { flickable: sideFlick }
                     Flickable {
+                        id: sideFlick
                         anchors.fill: parent
                         contentHeight: navCol.implicitHeight + 28
                         clip: true
@@ -122,6 +124,7 @@ Scope {
                     }
                 }
 
+                ScrollAssist { flickable: flick }
                 Flickable {
                     id: flick
                     anchors.left: side.right

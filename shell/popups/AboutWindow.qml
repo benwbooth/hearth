@@ -225,7 +225,9 @@ Scope {
                     }
                 }
 
+                ScrollAssist { flickable: aboutFlick }
                 Flickable {
+                    id: aboutFlick
                     anchors.left: side.right
                     anchors.right: parent.right
                     anchors.top: parent.top

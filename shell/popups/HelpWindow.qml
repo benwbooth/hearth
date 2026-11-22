@@ -190,9 +190,13 @@ Scope {
                 text: root.query
                 onTextChanged: root.query = text
             }
-            Flickable {
+            Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+            ScrollAssist { flickable: helpFlick }
+            Flickable {
+                id: helpFlick
+                anchors.fill: parent
                 contentHeight: list.implicitHeight
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
@@ -231,6 +235,7 @@ Scope {
                         text: "Nothing matches \"" + root.query + "\". Try a simpler word, like \"window\", \"close\" or \"workspace\" — or clear the search to see everything."
                     }
                 }
+            }
             }
         }
     }
