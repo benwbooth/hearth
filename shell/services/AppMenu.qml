@@ -125,6 +125,7 @@ Singleton {
         // `hearth-ipc call appmenu openMenu File`: open that menu of the
         // menu bar, as a click on its title would (tests).
         function openMenu(label: string): string {
+            // (The app's own app menu too, which the bold title opens.)
             if (!root.topLevel.some(i => i.label === label)) return "no menu " + label;
             root.openRequested(label);
             return "ok";

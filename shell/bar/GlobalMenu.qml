@@ -49,6 +49,40 @@ Row {
     // The app's own menus already have a Window menu (macOS apps do).
     readonly property bool appHasWindowMenu: AppMenu.topLevel.some(i => i.label === "Window")
     readonly property bool hasWindow: root.win !== null || root.activeTop !== null
+    // macOS's Hide / Hide Others / Show All for the app's own app menu
+    // (only the compositor can do them), less any the app already has.
+    function windowItems(menu) {
+        const has = re => !!menu && (menu.children || []).some(i => re.test(i.label || ""));
+        const it = (id, label, enabled, run) => ({ id: id, label: label, enabled: enabled, visible: true,
+            type: "standard", toggleType: "", toggleState: -1, icon: "", shortcut: "",
+            submenu: false, children: [], run: run });
+        const out = [];
+        if (!has(/^hide\b(?! others)/i) && root.appWindows.length > 0)
+            out.push(it(-3001, "Hide " + root.appName, true,
+                        () => { for (const t of root.appWindows) Compositor.minimizeToplevel(t); }));
+        if (!has(/^hide others/i) && Compositor.isArbor)
+            out.push(it(-3002, "Hide Others", Compositor.windows.some(w => w.appId !== root.appId && !w.minimized),
+                        () => { for (const w of Compositor.windows)
+                                    if (w.appId !== root.appId && !w.minimized) Compositor.minimize(w.id); }));
+        if (!has(/^show all/i) && Compositor.isArbor)
+            out.push(it(-3003, "Show All", Compositor.windows.some(w => w.minimized),
+                        () => { const keep = root.win;
+                                for (const w of Compositor.windows) if (w.minimized) Compositor.focusWindow(w.id);
+                                if (keep) Compositor.focusWindow(keep.id); }));
+        return out;
+    }
+    // The app's own app menu (macOS style: its first menu, named after the
+    // app, with About, Settings…, Hide, Quit): the bold title opens it, and
+    // it isn't shown a second time among the app's menus. Apps without one
+    // get hearth's (appMenu below).
+    readonly property var ownAppMenu: {
+        const t = AppMenu.topLevel;
+        if (!t.length) return null;
+        const n = x => String(x || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const l = n(t[0].label);
+        return l !== "" && (l === n(root.appName) || (root.entry && l === n(root.entry.name))
+                            || l === n(root.appId.split(".").pop())) ? t[0] : null;
+    }
 
     MenuTitle {
         id: appTitle
@@ -56,7 +90,31 @@ Row {
         bold: true
         tip: "Commands for " + root.appName + ": about, hide, quit"
         visible: Settings.menubar.showAppName
-        popup: appMenu
+        popup: root.ownAppMenu ? ownAppPop : appMenu
+    }
+    Connections {
+        target: AppMenu
+        function onOpenRequested(label) {
+            if (root.ownAppMenu && label === root.ownAppMenu.label && !ownAppPop.open) ownAppPop.toggle();
+        }
+    }
+    BarPopup {
+        id: ownAppPop
+        menuBarMenu: true
+        align: "start"
+        anchorItem: appTitle
+        padding: 0
+        bare: true
+        Loader {
+            // Kept while the menu fades out.
+            active: ownAppPop.visible && !!root.ownAppMenu
+            sourceComponent: DBusMenuList {
+                itemId: root.ownAppMenu ? root.ownAppMenu.id : 0
+                hostPopup: ownAppPop
+                onDone: ownAppPop.close()
+                extraItems: root.windowItems(root.ownAppMenu)
+            }
+        }
     }
     // The app-name menu, like macOS's: About, the app's own GNOME-style
     // app menu if it has one (GTK), new window, hide, quit.
@@ -192,7 +250,7 @@ Row {
         // Keyed by item id: a layout refresh (every time a menu opens) must
         // not recreate the titles, or the open dropdown would go with them.
         model: ScriptModel {
-            values: AppMenu.topLevel
+            values: AppMenu.topLevel.filter(i => !root.ownAppMenu || i.id !== root.ownAppMenu.id)
             objectProp: "id"
         }
         delegate: Item {

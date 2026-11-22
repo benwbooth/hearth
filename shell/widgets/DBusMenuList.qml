@@ -22,7 +22,23 @@ Item {
     property Item ownerItem: null
     signal done()
     readonly property var node: { void AppMenu.menu; return AppMenu.find(root.itemId); }
-    readonly property var items: node ? (node.children || []).filter(i => i.visible) : []
+    // Items hearth adds (each with `run`, done here, not by the app): the
+    // bold app menu's Hide / Hide Others / Show All, put before the app's
+    // last "Quit…" item (with a separator), else at the end.
+    property var extraItems: []
+    readonly property var items: {
+        const base = node ? (node.children || []).filter(i => i.visible) : [];
+        if (!extraItems.length) return base;
+        let at = base.length;
+        for (let i = base.length - 1; i >= 0; i--)
+            if (/^quit\b/i.test(base[i].label)) { at = i; break; }
+        const sep = { id: -2999, label: "", type: "separator", visible: true, enabled: true,
+                      toggleType: "", toggleState: -1, icon: "", shortcut: "", submenu: false, children: [] };
+        const before = base.slice(0, at), after = base.slice(at);
+        const pre = before.length && before[before.length - 1].type !== "separator" ? [sep] : [];
+        const post = after.length ? [Object.assign({}, sep, { id: -2998 })] : [];
+        return before.concat(pre, extraItems, post, after);
+    }
     readonly property bool anyGutter: items.some(i => i.toggleType !== "" || (i.icon && i.icon !== ""))
     // The open submenu: its id and the row that owns it.
     property int openSub: -1
@@ -158,7 +174,8 @@ Item {
                         onCloseSubmenu: if (root.openSub === row.modelData.id) root.showSub(null)
                         onContainsMouseChanged: if (containsMouse) root.rowHovered(row)
                         onTriggered: {
-                            AppMenu.click(row.modelData.id);
+                            if (row.modelData.run) row.modelData.run();
+                            else AppMenu.click(row.modelData.id);
                             root.done();
                         }
                     }
