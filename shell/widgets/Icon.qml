@@ -11,6 +11,10 @@ IconImage {
     property string fallback: "application-x-executable"
     implicitSize: 22
     asynchronous: true
+    // Device pixels to rasterise a scalable icon at (0: the shown size,
+    // which Qt then scales again at a fractional scale). See BarButton.
+    property real rasterSize: 0
+    Binding { target: root.backer; property: "sourceSize"; when: root.rasterSize > 0; value: Qt.size(root.rasterSize, root.rasterSize) }
     source: {
         const n = root.name;
         if (!n) return Quickshell.iconPath(root.fallback, true);

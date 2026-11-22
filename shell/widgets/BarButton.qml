@@ -120,6 +120,13 @@ MouseArea {
             name: root.icon
             fallback: root.iconFallback
             implicitSize: root.crispSize(root.iconSize)
+            // Rasterised at exactly its device pixels: Image takes
+            // sourceSize as device pixels here (a 1 px stripe test at 4/3:
+            // only this size came out sharp; the logical size or twice it
+            // were scaled again and smeared).
+            rasterSize: root.menuBarItem ? Math.round(implicitSize * root.dpr) : 0
+            layer.textureSize: root.menuBarItem ? Qt.size(rasterSize, rasterSize) : Qt.size(0, 0)
+            layer.smooth: false
             transform: Translate { id: iconSnap }
             onXChanged: Qt.callLater(root.snapIcon)
             onYChanged: Qt.callLater(root.snapIcon)
