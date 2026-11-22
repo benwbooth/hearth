@@ -255,6 +255,13 @@ mac layout). Pieces:
   bold menu, as on macOS, and isn't shown twice; hearth adds Hide <App> /
   Hide Others / Show All before its Quit unless it has them. Apps without
   one get hearth's bold menu.
+- Tray icon menus: a window with no menu of its own and none over AT-SPI
+  whose process has a tray icon (StatusNotifierItem) with a dbusmenu gets
+  that menu as its bold app menu (Teams); a real menu found later replaces
+  it.
+- The registrar keeps its registrations in
+  `$XDG_RUNTIME_DIR/hearth-appmenu-registrar.json` across hearth restarts
+  (apps register once, when their window opens).
 - Switching apps: while the new app's menu is on its way, the bar shows the
   last menu that app had (and holds back the Window fallback for 500 ms), so
   it never flashes the app name and Window alone.
@@ -295,7 +302,14 @@ Coverage on arbor (tested in a nested arbor on a private session bus,
 | Electron on X11 (VS Code/Cursor with `"window.titleBarStyle": "native"`, Slack, Teams, Spotify, ChatGPT app) | no | yes | RegisterWindow; Electron hides its in-window bar |
 | Electron on Wayland with a menu bar (VS Code, native or custom title bar) | fallback | yes (2026-11-22) | Electron's own dbusmenu registration, matched by pid |
 | Electron on Wayland with a ☰ (Claude Desktop) | fallback | yes (2026-11-22) | AT-SPI ☰ + arbor ClickWindow, whole tree cached; needs `--force-renderer-accessibility=basic` |
-| Electron with an auto-hidden menu bar (Slack, Heroic) | fallback | titles (2026-11-22) | AT-SPI with `--force-renderer-accessibility=basic`; items: in progress |
+| Electron with an auto-hidden menu bar (Slack, Heroic) | fallback | yes (2026-11-22) | AT-SPI with `--force-renderer-accessibility=basic` (added to their /etc/nixos wrappers); Slack's Edit tested |
+| Electron with only a tray icon menu (Teams) | fallback | yes (2026-11-22) | the tray icon's dbusmenu (same process) as the bold app menu |
+| Electron with a menu bar drawn in the page (Cursor, Antigravity) | fallback | titles (2026-11-22) | AT-SPI "web" kind + ClickWindow; items untested (needs a signed-in window) |
+| GNOME/libadwaita ☰ (Papers) | fallback | yes (2026-11-22) | AT-SPI: GTK 4 popover read under the ☰, items clicked through ClickWindow --geometry (their accessible click does nothing) |
+| GTK 3 menu button (Remmina's Actions) | fallback | yes (2026-11-22) | AT-SPI: the button's own menu items, read without opening |
+| Qt on X11 with a dialog in front (VLC's first-run dialog) | main window only | yes (2026-11-22) | the registration of another window of the same X11 client (_NET_WM_PID) |
+| Inkscape 1.4 (GTK 3) | | yes (2026-11-22) | GMenuModel via gtk_shell1 |
+| Freelens, Mailspring, Anki | fallback | fallback | no menu reachable (Mailspring/Anki untested past their first-run windows) |
 | Firefox, Thunderbird | fallback | yes (2026-11-22) | AT-SPI: the (hidden) XUL menu bar, also under appmenu-gtk-module (empty export → AT-SPI); Firefox 160, Thunderbird tested |
 | JetBrains IDEs (X11 by default) | no | expected yes, untested | IntelliJ's own dbusmenu + RegisterWindow on X11 |
 | Java Swing/AWT | fallback | fallback | no export without jayatana (not packaged) |
