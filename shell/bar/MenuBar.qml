@@ -114,9 +114,17 @@ PanelWindow {
             ctx.drawImage(url, (width - iw * k) / 2, (height - ih * k) / 2, iw * k, ih * k);
             const rows = Math.max(1, Math.round(height * 0.04));
             const d = ctx.getImageData(0, 0, width, rows).data;
-            let sum = 0, n = 0;
-            for (let i = 0; i < d.length; i += 4) { sum += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]; n++; }
-            if (n) Theme.wallpaperLight = sum / n / 255 > 0.62;
+            // Black items only where black reads everywhere: the strip has to
+            // be light nearly all the way across. As soon as a real part of
+            // it is dark (houses at one end, a dark sky band), the items go
+            // white, which the bar's shade keeps readable over light parts.
+            let dark = 0, n = 0;
+            for (let i = 0; i < d.length; i += 4) {
+                const l = (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255;
+                if (l < 0.6) dark++;
+                n++;
+            }
+            if (n) Theme.wallpaperLight = dark / n < 0.12;
             unloadImage(url);
         }
     }
