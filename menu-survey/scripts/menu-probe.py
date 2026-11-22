@@ -29,6 +29,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -173,6 +174,9 @@ def core_pids():
 SCOPE = {"n": 0, "unit": ""}
 
 
+APPDIRS = []
+
+
 def cleanup():
     if SCOPE["unit"]:
         sh(["systemctl", "--user", "kill", "-s", "KILL", SCOPE["unit"]], timeout=20)
@@ -193,6 +197,8 @@ def cleanup():
         if not [w for w in windows() if w.get("app_id") != "org.quickshell"]:
             break
         time.sleep(0.25)
+    while APPDIRS:
+        shutil.rmtree(APPDIRS.pop(), ignore_errors=True)
     # Single-instance locks of killed apps (Chromium/Electron, Firefox).
     for pat in ("**/Singleton*", "**/lock", "**/.parentlock"):
         for fn in glob.glob(os.path.join(RIGDIR, "home", pat), recursive=True):
@@ -273,6 +279,18 @@ def attempt(attr, argv, variant, extra_env, extra_args, wait_win=35, wait_menu=1
     # The arbor session has X11 too (xwayland-satellite): VLC 3 and other
     # X11-only apps need DISPLAY even when they run "natively".
     env = dict(SESSION_ENV, DISPLAY=arbor_display())
+    # Every attempt gets fresh home, runtime and temp dirs: a killed app's
+    # single-instance lock or socket ("Strawberry is already running") must
+    # not stop the next app, and no first-run state carries over.
+    base = os.path.join(RIGDIR, "apps", str(SCOPE["n"] + 1))
+    shutil.rmtree(base, ignore_errors=True)
+    dirs = {"HOME": "home", "XDG_CONFIG_HOME": "home/.config", "XDG_CACHE_HOME": "home/.cache",
+            "XDG_DATA_HOME": "home/.local/share", "XDG_STATE_HOME": "home/.local/state",
+            "XDG_RUNTIME_DIR": "run", "TMPDIR": "tmp"}
+    for k, d in dirs.items():
+        os.makedirs(os.path.join(base, d), mode=0o700, exist_ok=True)
+        env[k] = os.path.join(base, d)
+    APPDIRS.append(base)
     env.update(extra_env)
     envargs = [f"{k}={v}" for k, v in env.items()]
     log = open(os.path.join(RIGDIR, "app.log"), "w")
