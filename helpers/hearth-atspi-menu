@@ -80,6 +80,17 @@ GTK_MODS = {"primary": "Ctrl", "control": "Ctrl", "ctrl": "Ctrl", "shift": "Shif
 
 
 def gtk_accel_text(accel):
+    """'<Primary><Shift>z' -> 'Ctrl+Shift+Z'; GTK 4's 'Control+?' -> 'Ctrl+?'."""
+    if "<" not in accel and "+" in accel[:-1]:
+        names = {"control": "Ctrl", "ctrl": "Ctrl", "primary": "Ctrl", "super": "Meta",
+                 "meta": "Meta", "shift": "Shift", "alt": "Alt"}
+        mods, key = accel.rsplit("+", 1) if not accel.endswith("++") else (accel[:-2], "+")
+        return "+".join([names.get(m.lower(), m) for m in mods.split("+") if m]
+                        + [GTK_KEYS.get(key, key.upper() if len(key) == 1 else key)])
+    return gtk_accel_text_angle(accel)
+
+
+def gtk_accel_text_angle(accel):
     """'<Primary><Shift>z' -> 'Ctrl+Shift+Z' (the dbusmenu style above)."""
     mods, rest = [], accel
     while rest.startswith("<") and ">" in rest:
@@ -209,6 +220,8 @@ class AtspiMenu:
         self.window = int(window or 0)  # arbor's id, for ClickWindow / ClosePopups
         self.alive, self.busy, self.lazy = True, False, False
         self.app = self.mb = self.frame = self.trigger = None
+        self.toolkit = ""
+        self.gtk4 = False
         self.kind = None
         self.burger = None  # {"flat": bool, "labels": [...]} once known
         self.reset_burger = self.burger_open = False
@@ -312,6 +325,11 @@ class AtspiMenu:
                         continue
                     kind = "burger"
                 self.app, self.frame, self.mb, self.trigger, self.kind = app, f, mb, trigger, kind
+                self.toolkit = toolkit(app)
+                try:
+                    self.gtk4 = self.toolkit == "GTK" and (app.get_toolkit_version() or "").startswith("4")
+                except Exception:
+                    self.gtk4 = False
                 # Under a main loop libatspi caches children and would never
                 # see a popup appear: ask the app every time.
                 try:
@@ -395,6 +413,108 @@ class AtspiMenu:
             o = o.get_child_at_index(i) if o else None
         return o
 
+    def items_of(self, menu):
+        """A menu's items in order. Usually its children; GTK 4 puts them
+        some ten levels down (boxes and stack pages), so there they're its
+        item descendants (without going into an item)."""
+        A = Atspi
+        roles = (A.Role.MENU_ITEM, A.Role.CHECK_MENU_ITEM, A.Role.RADIO_MENU_ITEM, A.Role.MENU)
+        try:
+            kids = [menu.get_child_at_index(i) for i in range(min(menu.get_child_count(), 300))]
+        except Exception:
+            return []
+        kids = [k for k in kids if k]
+        if not kids or any(k.get_role() in roles + (A.Role.SEPARATOR,) for k in kids):
+            return kids
+        out, todo = [], [(k, 1) for k in reversed(kids)]
+        while todo and len(out) < 300:
+            o, d = todo.pop()
+            try:
+                r = o.get_role()
+            except Exception:
+                continue
+            if r in roles or r == A.Role.SEPARATOR:
+                if r == A.Role.SEPARATOR or o.get_state_set().contains(A.StateType.SHOWING):
+                    out.append(o)
+                continue
+            if d < 20:
+                for i in reversed(range(min(o.get_child_count(), 100))):
+                    c = o.get_child_at_index(i)
+                    if c:
+                        todo.append((c, d + 1))
+        return out
+
+    def item_child(self, menu, idx):
+        items = self.items_of(menu)
+        return items[idx] if 0 <= idx < len(items) else None
+
+    def item_label(self, o):
+        """An item's label as convert() reads it."""
+        try:
+            label = split_shortcut(o.get_name() or "")[0]
+        except Exception:
+            return ""
+        return label or self.labelled_by(o) or (self.label_texts(o) or [""])[0]
+
+    @staticmethod
+    def labelled_by(o):
+        """The text of the label an item names as its own (GTK 4 menu items
+        have no name, only a labelled-by relation)."""
+        try:
+            for r in o.get_relation_set():
+                if r.get_relation_type() != Atspi.RelationType.LABELLED_BY:
+                    continue
+                for k in range(r.get_n_targets()):
+                    t = r.get_target(k)
+                    n = t.get_name() or ""
+                    if not n:
+                        try:
+                            n = Atspi.Text.get_text(t, 0, -1) or ""
+                        except Exception:
+                            n = ""
+                    if n:
+                        return n
+        except Exception:
+            pass
+        return ""
+
+    @staticmethod
+    def key_shortcut(o):
+        """The ARIA-style keyshortcuts attribute (GTK 4: "Control+? Alt+k"):
+        the first one that isn't the Alt+letter mnemonic."""
+        try:
+            ks = (o.get_attributes() or {}).get("keyshortcuts", "")
+        except Exception:
+            return ""
+        names = {"Control": "Ctrl", "Super": "Meta", "Meta": "Meta"}
+        for k in ks.split():
+            parts = k.split("+")
+            if len(parts) == 2 and parts[0] == "Alt" and len(parts[1]) == 1:
+                continue  # the mnemonic
+            return "+".join(names.get(x, x.upper() if len(x) == 1 else x) for x in parts)
+        return ""
+
+    @staticmethod
+    def label_texts(o):
+        """An item's own text, from its labels when it has no name (GTK 4:
+        the label, then the shortcut)."""
+        texts, todo = [], [(o, 0)]
+        while todo and len(texts) < 4:
+            x, d = todo.pop(0)
+            try:
+                n = x.get_name() or "" if x is not o else ""
+                if n and x.get_role() in (Atspi.Role.LABEL, Atspi.Role.STATIC, Atspi.Role.TEXT,
+                                          Atspi.Role.ACCELERATOR_LABEL):
+                    texts.append(n)
+                if d < 4:
+                    for i in range(min(x.get_child_count(), 10)):
+                        c = x.get_child_at_index(i)
+                        if c:
+                            todo.append((c, d + 1))
+            except Exception:
+                continue
+        return texts
+
     def convert(self, o, path, depth=0, deep=False):
         """An accessible menu item as an item dict; `deep`: its submenu's
         items too (kept menus, whose items exist while closed)."""
@@ -410,6 +530,16 @@ class AtspiMenu:
         if not st.contains(A.StateType.SHOWING) and not st.contains(A.StateType.VISIBLE):
             return None
         label, shortcut = split_shortcut(name)
+        if not label:
+            label = self.labelled_by(o)
+        if not label:
+            texts = self.label_texts(o)
+            if texts:
+                label = texts[0]
+                if len(texts) > 1 and texts[-1] != label:
+                    shortcut = texts[-1]
+        if not shortcut:
+            shortcut = self.key_shortcut(o)
         try:
             a = o.get_action_iface()
             kb = a.get_key_binding(0) if a and a.get_n_actions() else ""
@@ -439,9 +569,8 @@ class AtspiMenu:
     def read(self, menu, path):
         """The items of an open `menu`, the container at `path`."""
         kids = []
-        for i in range(min(menu.get_child_count(), 300)):
-            c = menu.get_child_at_index(i)
-            k = c and self.convert(c, list(path) + [i])
+        for i, c in enumerate(self.items_of(menu)):
+            k = self.convert(c, list(path) + [i])
             if k:
                 kids.append(k)
         self.cache[tuple(path)] = kids
@@ -524,6 +653,19 @@ class AtspiMenu:
                                 todo.append((c, d + 1))
         except Exception:
             pass
+        if not found and self.frame is not None and self.toolkit.startswith("GTK"):
+            # GTK 4 popovers are in the window's own tree, under the button
+            # that opened them.
+            A = Atspi
+            test = (lambda o, r: r in (A.Role.MENU, A.Role.POPUP_MENU) and o.get_child_count() > 0
+                    and o.get_state_set().contains(A.StateType.SHOWING))
+            m = None
+            if self.trigger is not None:
+                m = self.search(A, self.trigger, test, web=True)
+            if m is None:
+                m = self.search(A, self.frame, test, web=True)
+            if m is not None:
+                found.append(m)
         return found
 
     def page_menu(self, near):
@@ -577,8 +719,13 @@ class AtspiMenu:
         """Open/activate `o`: a click through arbor for page elements (they
         ignore the accessible press: they open on pointer-down), the
         accessible action for native widgets."""
-        if self.document(o) is None:
-            return self.act(o)
+        native = self.document(o) is None
+        # GTK 4's buttons and menu items take the accessible action and do
+        # nothing (it reports success): they always get a real click.
+        if native and not self.gtk4 and self.act(o):
+            return True
+        # A page element, or a native one without an accessible action
+        # (GTK 4's buttons have none): a click through arbor.
         if not self.window:
             return False
         try:
@@ -591,7 +738,17 @@ class AtspiMenu:
         if e.width <= 0 or e.height <= 0 or not showing:
             return False
         x, y = self.to_surface(o, e.x + e.width / 2, e.y + e.height / 2)
-        return arbor("click-window", "--id", str(self.window), "--x", f"{x:.2f}", "--y", f"{y:.2f}")
+        # GTK measures from the window's frame (without its client-side
+        # shadow), Chromium and Qt from its surface.
+        geo = ["--geometry"] if native and self.toolkit.startswith("GTK") else []
+        return arbor("click-window", "--id", str(self.window), "--x", f"{x:.2f}", "--y", f"{y:.2f}", *geo)
+
+    @staticmethod
+    def role(o):
+        try:
+            return o.get_role()
+        except Exception:
+            return None
 
     def act(self, o):
         try:
@@ -657,7 +814,7 @@ class AtspiMenu:
         for idx in rest:
             if menu is None:
                 return None
-            c = menu.get_child_at_index(idx)
+            c = self.item_child(menu, idx)
             if c is None:
                 return None
             if self.kind == "web":
@@ -744,10 +901,10 @@ class AtspiMenu:
             return
         root = menus[0]
         labels, subs = [], 0
-        for i in range(min(root.get_child_count(), 60)):
-            c = root.get_child_at_index(i)
+        for c in self.items_of(root)[:60]:
             try:
-                labels.append(split_shortcut(c.get_name() or "")[0])
+                labels.append(split_shortcut(c.get_name() or "")[0] or self.labelled_by(c)
+                              or (self.label_texts(c) or [""])[0])
                 if c.get_role() == Atspi.Role.MENU or c.get_state_set().contains(Atspi.StateType.HAS_POPUP):
                     subs += 1
             except Exception:
@@ -778,8 +935,7 @@ class AtspiMenu:
 
         def sig(m):
             try:
-                return tuple((m.get_child_at_index(i).get_name() or "")
-                             for i in range(min(m.get_child_count(), 4)))
+                return tuple((c.get_name() or "") for c in self.items_of(m)[:4])
             except Exception:
                 return ()
 
@@ -791,7 +947,7 @@ class AtspiMenu:
             if not it["submenu"]:
                 continue
             cpath = self.paths[it["id"]]
-            c = menu.get_child_at_index(cpath[-1])
+            c = self.item_child(menu, cpath[-1])
             if c is None:
                 continue
             before = [(m, sig(m)) for m in self.popups()]
@@ -867,17 +1023,14 @@ class AtspiMenu:
                 if k["id"] == nid:
                     want = k["label"]
             menu = self.open_chain(path[:-1])
-            c = menu.get_child_at_index(path[-1]) if menu is not None else None
-            name = split_shortcut((c.get_name() or "") if c else "")[0]
+            c = self.item_child(menu, path[-1]) if menu is not None else None
+            name = self.item_label(c) if c else ""
             if c is None or (want is not None and name != want):
                 self.close_all(path)  # the menu changed since: don't guess
                 if self.kind == "burger":
                     self.forget_tree()
                 return
-            if self.kind == "web":
-                self.press(c)
-            else:
-                self.act(c)
+            self.press(c)
             self.burger_open = False  # choosing an item closes the menu
         finally:
             self.busy = False
