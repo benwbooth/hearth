@@ -310,7 +310,9 @@ Row {
         id: winTitle
         text: "Window"
         tip: "Minimize, zoom, full screen or move " + root.appName + "'s window"
-        visible: root.hasWindow && !root.appHasWindowMenu && root.fits(topRep.count + 1)
+        // Not while the app's own menus are still on their way (they may
+        // bring a Window menu): no "app name + Window" flash on a switch.
+        visible: root.hasWindow && !root.appHasWindowMenu && !AppMenu.resolving && root.fits(topRep.count + 1)
         popup: winMenu
     }
     BarPopup {

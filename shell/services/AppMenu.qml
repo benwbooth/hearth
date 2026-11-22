@@ -85,11 +85,21 @@ Singleton {
     property bool registrarOwned: false
     readonly property string wanted: forced || key
     readonly property bool current: !!menu && wanted !== "" && menuKey === wanted
-    readonly property var topLevel: current
-        ? menu.children.filter(i => i.visible && i.type !== "separator" && i.label !== "") : []
+    // What the menu bar shows: the menu once it's here, and while it's still
+    // on its way after a switch (AT-SPI apps, Electron: some hundred ms), the
+    // last one this app had, so the bar doesn't flash the app name and
+    // Window alone first. `resolving` is that wait (up to 500 ms).
+    property var treeByApp: ({})
+    readonly property bool resolving: wanted !== "" && !current && resolveTimer.running
+    onWantedChanged: if (!current) resolveTimer.restart()
+    Timer { id: resolveTimer; interval: 500 }
+    readonly property var tree: current ? menu
+        : (resolving && win ? (treeByApp[win.appId] || null) : null)
+    readonly property var topLevel: tree
+        ? tree.children.filter(i => i.visible && i.type !== "separator" && i.label !== "") : []
     // A GTK app's GNOME 3 style app menu (helper: root child id -2); the
     // menu bar shows it at the top of the bold app-name menu.
-    readonly property var gtkAppMenu: current ? (menu.children.find(i => i.id === -2) || null) : null
+    readonly property var gtkAppMenu: tree ? (tree.children.find(i => i.id === -2) || null) : null
     readonly property bool available: topLevel.length > 0
 
     // Only where hearth draws the menus: arbor with the mac layout.
@@ -108,7 +118,7 @@ Singleton {
     function click(id) { send({ cmd: "click", id: id }); }
 
     function find(id, node) {
-        node = node === undefined ? root.menu : node;
+        node = node === undefined ? root.tree : node;
         if (!node) return null;
         if (node.id === id) return node;
         for (const c of node.children || []) {
@@ -158,6 +168,11 @@ Singleton {
                 if (m.type === "menu") {
                     root.menuKey = m.key;
                     root.menu = m.menu;
+                    if (m.key === root.wanted && root.win && m.menu.children.length) {
+                        const t = Object.assign({}, root.treeByApp);
+                        t[root.win.appId] = m.menu;
+                        root.treeByApp = t;
+                    }
                     if (root.request && m.key === root.request.key && root.win && m.menu.children.length) {
                         const l = Object.assign({}, root.lastByApp);
                         l[root.win.appId] = root.resolved[m.key] || root.request;

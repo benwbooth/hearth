@@ -21,7 +21,7 @@ Item {
     // The row whose submenu this is (keyboard Left goes back to it).
     property Item ownerItem: null
     signal done()
-    readonly property var node: { void AppMenu.menu; return AppMenu.find(root.itemId); }
+    readonly property var node: { void AppMenu.tree; return AppMenu.find(root.itemId); }
     // Items hearth adds (each with `run`, done here, not by the app): the
     // bold app menu's Hide / Hide Others / Show All, put before the app's
     // last "Quit…" item (with a separator), else at the end.
