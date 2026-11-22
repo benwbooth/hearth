@@ -50,7 +50,7 @@
       ddcutil hyprsunset gammastep
       udisks networkmanager
       curl jq libnotify xdg-utils pciutils cups
-      wlogout hyprpaper swaynotificationcenter grim satty
+      wlogout hyprpaper grim satty
       wf-recorder vips
       pipewire wireplumber
       systemd procps coreutils gnugrep gawk util-linux iproute2
@@ -109,7 +109,7 @@
         mkdir -p $out/share/hearth $out/bin
         # arbor/: the arbor config devloop installs live into
         # ~/.config/hearth/arbor/ with each new hearth (no nixos-rebuild).
-        cp -r shell helpers hypr vicinae swaync arbor $out/share/hearth/
+        cp -r shell helpers hypr vicinae arbor $out/share/hearth/
         # Built-in user pictures (avatars/CREDITS.md), for Settings > Users &
         # Accounts and the login screen: $out/share/hearth/avatars.
         cp -r avatars $out/share/hearth/

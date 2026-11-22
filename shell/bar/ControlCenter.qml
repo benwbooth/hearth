@@ -61,16 +61,7 @@ Indicator {
     readonly property var bt: Bluetooth.defaultAdapter
     readonly property var btConnected: bt ? bt.devices.values.filter(d => d.connected) : []
     readonly property var player: Mpris.players.values.find(p => p.isPlaying) ?? Mpris.players.values[0] ?? null
-    property bool dnd: false
-    Process {
-        id: dndProbe
-        command: ["swaync-client", "-D"]
-        stdout: StdioCollector { onStreamFinished: root.dnd = text.trim() === "true" }
-    }
-    Connections {
-        target: root.popup
-        function onOpenChanged() { if (root.popup.open) dndProbe.running = true; }
-    }
+    readonly property bool dnd: Notifications.dnd
 
     function more(name) { root.popup.close(); ShellState.openIndicator(name); }
 
@@ -134,7 +125,7 @@ Indicator {
                         title: "Focus"
                         detail: root.dnd ? "Do Not Disturb" : "Off"
                         on: root.dnd
-                        onToggle: { root.dnd = !root.dnd; Swaync.setDnd(root.dnd); }
+                        onToggle: Notifications.toggleDnd()
                         showMore: false
                         tip: "Do Not Disturb: notifications stay quiet"
                     }

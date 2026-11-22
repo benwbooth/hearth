@@ -20,10 +20,11 @@
 // The menu bar is left out too: its default style is transparent (macOS 26),
 // which must not be blurred; its Glass style gets real glass.
 
-// Notifications (swaync) get no compositor blur: its windows are tall,
-// mostly transparent columns, and arbor's layer-rule blur covers a layer's
-// whole rectangle, so a notification blurred a full-height strip of the
-// screen. The notifications themselves are near-opaque (swaync/breeze.css).
+// Notifications (hearth-notifications) get no layer-rule blur: banners and
+// Notification Center are tall, mostly transparent columns, and the
+// layer-rule blur covers a layer's whole rectangle. With real glass their
+// cards register as glass panes; without it they are near-opaque
+// (Theme.glassNotification).
 
 // The menu bar is square-cornered and not blurred (see above).
 layer-rule {

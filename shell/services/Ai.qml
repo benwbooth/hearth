@@ -196,8 +196,8 @@ Singleton {
             case "sleep": Session.run("suspend"); return "Going to sleep.";
             case "dark_mode_on": Settings.set("appearance.mode", "dark"); return "Dark mode is on.";
             case "dark_mode_off": Settings.set("appearance.mode", "light"); return "Light mode is on.";
-            case "do_not_disturb_on": Swaync.setDnd(true); return "Do Not Disturb is on.";
-            case "do_not_disturb_off": Swaync.setDnd(false); return "Do Not Disturb is off.";
+            case "do_not_disturb_on": Notifications.setDnd(true); return "Do Not Disturb is on.";
+            case "do_not_disturb_off": Notifications.setDnd(false); return "Do Not Disturb is off.";
             case "screenshot": Screenshots.overlayRequested(""); return "Screenshot tool opened.";
             case "show_desktop": Compositor.focusEmptyWorkspace(); return "Showing the desktop.";
             case "show_all_windows": ShellState.overviewRequested(); return "Showing all windows.";

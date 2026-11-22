@@ -59,8 +59,11 @@ Singleton {
             minimizeIntoApp: false
         },
         notifications: {
-            timeout: 6,
-            showOnTop: true             // position follows the bar
+            timeout: 6,                 // s a banner stays
+            showOnTop: true,            // position follows the bar
+            dnd: false,                 // Do Not Disturb: no banners
+            urgentInDnd: true,          // urgent ones still show in Do Not Disturb
+            group: true                 // stack Notification Center by app
         },
         // Hot corners (services/HotCorners.qml): "none" | "overview" |
         // "desktop" | "lock" | "launcher" | "notifications" | "displayoff"

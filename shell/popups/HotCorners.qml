@@ -37,7 +37,7 @@ Scope {
         case "desktop": showDesktop(); break;
         case "lock": Session.run("lock"); break;
         case "launcher": Quickshell.execDetached(["vicinae", "toggle"]); break;
-        case "notifications": Quickshell.execDetached(["swaync-client", "-t", "-sw"]); break;
+        case "notifications": Notifications.toggleCenter(); break;
         case "displayoff":
             if (Compositor.isArbor) Compositor.arborAction("PowerOffMonitors", {});
             else Quickshell.execDetached(["hyprctl", "dispatch", "hl.dsp.dpms({ action = \"off\" })"]);

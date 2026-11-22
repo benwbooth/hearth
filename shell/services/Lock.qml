@@ -94,7 +94,7 @@ Singleton {
         return parts.length > 1 ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
                                 : (parts[0] || "?").slice(0, 2).toUpperCase();
     }
-    property int notificationCount: 0
+    readonly property int notificationCount: Notifications.count
 
     // Which PAM services exist (a missing one would fall to `other`, which
     // denies everything on NixOS).
@@ -420,18 +420,6 @@ printf '%s\\n%s\\n%s\\n%s\\n' "$pw" "$fp" "$name" "$av"`, "sh", root.pamDir]
         stdout: StdioCollector { onStreamFinished: root.capsLock = /[1-9]/.test(text) }
     }
 
-    Timer {
-        interval: 10000
-        repeat: true
-        triggeredOnStart: true
-        running: root.locked && !!root.cfg.showNotifications
-        onTriggered: notif.running = true
-    }
-    Process {
-        id: notif
-        command: ["swaync-client", "-c"]
-        stdout: StdioCollector { onStreamFinished: root.notificationCount = parseInt(text) || 0 }
-    }
 
     // Screens off after a while without input (arbor wakes them on input).
     Timer {

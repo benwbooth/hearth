@@ -71,6 +71,26 @@ Singleton {
     readonly property color glassDock: glassColor(dark ? Qt.rgba(0.21, 0.22, 0.25, 1) : Qt.rgba(0.98, 0.98, 0.99, 1), 0.26)
     readonly property color glassDockSolid: glassColor(dark ? Qt.rgba(0.16, 0.17, 0.19, 1) : Qt.rgba(0.97, 0.97, 0.98, 1), 0.85)
     readonly property color glassTip: glassColor(dark ? Qt.rgba(0.16, 0.165, 0.18, 1) : Qt.rgba(0.98, 0.98, 0.985, 1), 0.78)
+    // Notification banners and Notification Center cards: a little clearer
+    // than menus over real glass (macOS 26), near-opaque where nothing
+    // blurs behind them (arbor without real glass: its layer-rule blur
+    // covers a whole layer, so notifications get none).
+    readonly property color glassNotification: (RealGlass.active || Compositor.isHyprland)
+        ? glassColor(dark ? Qt.rgba(0.17, 0.175, 0.19, 1) : Qt.rgba(0.985, 0.985, 0.99, 1), dark ? 0.46 : 0.86)
+        : glassColor(dark ? Qt.rgba(0.17, 0.175, 0.19, 1) : Qt.rgba(0.975, 0.975, 0.98, 1), 0.93)
+    // Buttons on notifications: subtle glass pills.
+    // Over real glass: light cards need a whiter frost than menus to stay
+    // readable over a dark wallpaper (macOS's light notifications are near white).
+    readonly property real notificationRealTint: dark ? realGlassTint : 0.82
+    readonly property color glassPill: dark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.055)
+    readonly property color glassPillHover: dark ? Qt.rgba(1, 1, 1, 0.17) : Qt.rgba(0, 0, 0, 0.10)
+    readonly property color glassPillPressed: dark ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(0, 0, 0, 0.15)
+    readonly property color glassPillRim: dark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.7)
+    readonly property int notificationWidth: Math.round(344 * pt)
+    readonly property int notificationRadius: Math.round(18 * pt)
+    // Banners: slide in from the right, fade out (macOS ~0.35 s / 0.25 s).
+    readonly property int bannerInMs: 340
+    readonly property int bannerOutMs: 260
     // The thin bright rim and darker outline that make glass read as a pane.
     readonly property color glassRim: dark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.75)
     readonly property color glassEdge: dark ? Qt.rgba(0, 0, 0, 0.55) : Qt.rgba(0, 0, 0, 0.16)

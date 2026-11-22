@@ -13,10 +13,9 @@ import "popups"
 import "services"
 
 ShellRoot {
-    // Touch the singleton so swaync starts with the shell.
     // Touch singletons that own IPC targets (or start daemons): singletons
     // are created on first use, so e.g. `session` (Super+L) wouldn't exist.
-    Component.onCompleted: { void Swaync; void Session; void AppMenu; void Help; void Mouse; void Power; void Keyboard; void Lock; void Displays; void WindowRules; void Binds; void Clipboard; void Spotlight; void Voice; void Ai; void About; void ColorScheme; void TrayWindows; }
+    Component.onCompleted: { void Notifications; void Session; void AppMenu; void Help; void Mouse; void Power; void Keyboard; void Lock; void Displays; void WindowRules; void Binds; void Clipboard; void Spotlight; void Voice; void Ai; void About; void ColorScheme; void TrayWindows; }
     // The wallpaper (services/Wallpaper.qml): hearth's own background
     // surface on every screen.
     Variants {
@@ -59,4 +58,6 @@ ShellRoot {
     VoiceOverlay {}
     AboutWindow {}
     PolkitDialog {}
+    NotificationBanners {}
+    NotificationCenter {}
 }

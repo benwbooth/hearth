@@ -364,7 +364,7 @@ hl.bind("XF86AudioStop",  hl.dsp.exec_cmd("playerctl stop"), { locked = true })
 -- 0.3 (Theme.shadowOpacity). Without blur the tints are opaque enough.
 hl.layer_rule({
     name         = "hearth-glass",
-    match        = { namespace = "^(hearth-(menubar|dock|popup)|swaync-control-center|swaync-notification-window)$" },
+    match        = { namespace = "^(hearth-(menubar|dock|popup|notifications))$" },
     blur         = true,
     blur_popups  = true,
     ignore_alpha = 0.3,

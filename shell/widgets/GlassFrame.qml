@@ -32,6 +32,8 @@ Item {
     property real rim: Theme.specular
     property real glow: Theme.glassGlow
     property real sheen: Theme.glassSheen
+    // How much of `tint` is still drawn over arbor's real glass.
+    property real realGlassTint: Theme.realGlassTint
     // Real glass: report this pane to the compositor (arbor).
     property bool compositorGlass: true
     // "Regular" (frosted: menus, popovers, the Dock) or "Clear" (media).
@@ -57,7 +59,7 @@ Item {
         // The compositor's glass already tints, saturates and lights the
         // backdrop: only a lighter tint for legibility on top.
         readonly property color tint: root.realGlass
-            ? Qt.rgba(root.tint.r, root.tint.g, root.tint.b, root.tint.a * Theme.realGlassTint)
+            ? Qt.rgba(root.tint.r, root.tint.g, root.tint.b, root.tint.a * root.realGlassTint)
             : root.tint
         readonly property color shadowColor: Qt.rgba(0, 0, 0, root.shadow ? root.shadowOpacity : 0)
         readonly property real shadowBlur: Math.max(1, root.shadowBlur)

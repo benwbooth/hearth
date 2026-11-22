@@ -548,28 +548,47 @@ Scope {
         ColumnLayout {
             spacing: 14
             Group {
-                Row_ {
+                SwitchRow {
                     label: "Do Not Disturb"
-                    Toggle {
-                        id: dnd
-                        checked: false
-                        onToggled: c => { checked = c; Swaync.setDnd(c); }
-                        Process {
-                            running: true
-                            command: ["swaync-client", "-D", "-sw"]
-                            stdout: StdioCollector { onStreamFinished: dnd.checked = text.trim() === "true" }
-                        }
-                    }
+                    note: "No banners pop up; notifications still collect in Notification Center. Middle-click the bell to switch it."
+                    key: "notifications.dnd"
+                }
+                Divider {}
+                SwitchRow {
+                    label: "Let urgent notifications through"
+                    note: "Urgent ones (low battery, a failed backup…) still show a banner during Do Not Disturb."
+                    key: "notifications.urgentInDnd"
                 }
                 Divider {}
                 SliderRow {
-                    label: "Show notifications for"
+                    label: "Show banners for"
+                    note: "How long a banner stays before it slides away. Hovering one keeps it; urgent ones stay until you clear them."
                     key: "notifications.timeout"; from: 2; to: 30; step: 1; suffix: " s"
+                }
+                Divider {}
+                SwitchRow {
+                    label: "Group by app"
+                    note: "Notification Center stacks each app's notifications; click a stack to see them all."
+                    key: "notifications.group"
+                }
+            }
+            Group {
+                Row_ {
+                    label: "Notification Center"
+                    note: "Click the bell in the menu bar, or use a hot corner. Click a notification to open it, ✕ clears it."
+                    PushButton { text: "Open"; onClicked: Notifications.openCenter() }
+                }
+                Divider {}
+                Row_ {
+                    label: "Try it"
+                    note: "Sends a notification so you can see how banners look."
+                    PushButton { text: "Send a Test"; onClicked: Notifications.sendTest() }
                 }
             }
             Label {
                 Layout.fillWidth: true
-                text: Settings.mac ? "Notifications appear at the top right, under the menu bar." : "Notifications appear at the bottom right, above the panel."
+                text: (Settings.mac ? "Banners appear at the top right, under the menu bar." : "Banners appear at the bottom right, above the panel.")
+                    + " Drag a banner to the right to put it away."
                 color: Theme.fgDim
                 wrapMode: Text.Wrap
                 elide: Text.ElideNone
