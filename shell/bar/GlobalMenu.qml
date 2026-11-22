@@ -18,11 +18,22 @@ Row {
     readonly property var activeTop: win && win.toplevel ? win.toplevel
         : Compositor.isArbor ? null : ToplevelManager.activeToplevel
     readonly property string appId: win ? win.appId : activeTop ? activeTop.appId : ""
-    readonly property var entry: appId ? DesktopEntries.heuristicLookup(appId) : null
+    // Looked up again whenever the desktop entries reload (a dev build
+    // rewriting its .desktop file reloaded them, and the old entry went
+    // away: the title fell back from "Grove" to the raw id "grove").
+    readonly property var entry: {
+        void DesktopEntries.applications.values;
+        return appId ? DesktopEntries.heuristicLookup(appId) : null;
+    }
     // Without a desktop entry: the last part of a reverse-DNS id
-    // (org.example.Foo -> Foo), else the id as is (foo.py stays foo.py).
-    readonly property string appName: entry ? entry.name
-        : appId ? (appId.split(".").length >= 3 ? appId.split(".").pop() : appId) : "Desktop"
+    // (org.example.Foo -> Foo), else the id; a plain lowercase word is
+    // capitalised (grove -> Grove), a file-like id stays as is (foo.py).
+    readonly property string appName: {
+        if (entry && entry.name) return entry.name;
+        if (!appId) return "Desktop";
+        const last = appId.split(".").length >= 3 ? appId.split(".").pop() : appId;
+        return /^[a-z][a-z0-9-]*$/.test(last) ? last.charAt(0).toUpperCase() + last.slice(1) : last;
+    }
     // Every open window of the focused app.
     readonly property var appWindows: {
         if (!appId) return [];
