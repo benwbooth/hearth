@@ -79,7 +79,9 @@ Row {
         onClicked: mouse => {
             if (mouse.button === Qt.LeftButton) {
                 if (modelData.onlyMenu && modelData.hasMenu) showMenu();
-                else modelData.activate();
+                // Like a dock icon: to the front, or minimized when it
+                // already is (services/TrayWindows.qml).
+                else TrayWindows.toggle(modelData);
             } else if (mouse.button === Qt.MiddleButton) {
                 modelData.secondaryActivate();
             } else if (modelData.hasMenu) {
