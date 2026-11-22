@@ -50,13 +50,12 @@ Singleton {
     // The compositor refused or never confirmed the lock (an older hearth
     // still holding it, say, as when devloop swaps shells): ask again after
     // retryDelays[n] ms, then give up (compositorEnded's fallback).
-    // Under the hearth wrapper (HEARTH_RESTARTER) each new try is a new
-    // shell process: arbor (smithay) remembers every output a client put a
-    // lock surface on, refused locks included, and kills the connection
-    // when that client asks for the same output again. The flag file
-    // carries the try count over to the next process.
+    // Each try is asked from this process. arbor before a9fc1bba (its
+    // smithay kept one list of locked outputs for every lock) kills the
+    // connection of a client that asks again; the hearth wrapper then
+    // starts a new shell, which finds the flag file and goes on with the
+    // try count saved there, so the tries still end after the last one.
     readonly property var retryDelays: [1000, 2000, 4000]
-    readonly property bool restarter: Quickshell.env("HEARTH_RESTARTER") === "1"
     property int lockAttempt: 0
     property bool retrying: false      // between two lock requests
     property string reason: ""         // manual | idle | sleep | restore
@@ -222,13 +221,8 @@ Singleton {
             console.warn("hearth lock: lock not confirmed; asking again in " + d / 1000 + " s (try "
                          + (root.lockAttempt + 1) + " of " + (root.retryDelays.length + 1) + ")");
             root.retrying = true;
-            if (root.restarter) {
-                Quickshell.execDetached(["sh", "-c", 'umask 077; printf "%s\\n" "$2" > "$1"', "sh",
-                                         root.flagFile, String(root.lockAttempt)]);
-                restartForLock.interval = d;
-                restartForLock.restart();
-                return;
-            }
+            Quickshell.execDetached(["sh", "-c", 'umask 077; printf "%s\\n" "$2" > "$1"', "sh",
+                                     root.flagFile, String(root.lockAttempt)]);
             // Drop the refused lock object first; locked=true makes a new one.
             root.locked = false;
             lockRetry.interval = d;
@@ -266,15 +260,6 @@ Singleton {
             secureWatch.interval = 3000;
             secureWatch.restart();
             console.info("hearth lock: asking the compositor to lock again (" + root.reason + ")");
-        }
-    }
-    // The wrapper starts the shell again on exit status 75; the new one
-    // finds the flag file and locks (restoreCheck).
-    Timer {
-        id: restartForLock
-        onTriggered: {
-            console.warn("hearth lock: restarting the shell to ask for the lock again");
-            Qt.exit(75);
         }
     }
     onSecureChanged: if (secure) {
@@ -468,8 +453,8 @@ printf '%s\\n%s\\n%s\\n%s\\n' "$pw" "$fp" "$name" "$av"`, "sh", root.pamDir]
         probe.running = true;
         restoreCheck.running = true;
     }
-    // The file holds the number of failed tries when a shell restarted to
-    // try again (see restarter).
+    // The file holds the number of failed tries when a shell was cut off
+    // while asking again (see retryDelays).
     Process {
         id: restoreCheck
         command: ["sh", "-c", '[ -e "$1" ] && printf "locked %s\\n" "$(cat "$1")"', "sh", root.flagFile]
