@@ -132,9 +132,12 @@ def item(nid, label="", **kw):
 class DbusMenu:
     """com.canonical.dbusmenu at (service, path)."""
 
-    def __init__(self, key, service, path):
+    WRAP = -50  # tray menus: the whole menu under one item, the bold app menu
+
+    def __init__(self, key, service, path, wrap=False):
         self.key, self.service, self.path = key, service, path
         self.matches, self.pending, self.alive = [], False, True
+        self.wrap = wrap
         obj = bus.get_object(service, path, introspect=False)
         self.iface = dbus.Interface(obj, DBUSMENU)
         for sig in ("LayoutUpdated", "ItemsPropertiesUpdated", "ItemActivationRequested"):
@@ -194,8 +197,12 @@ class DbusMenu:
 
             def ok(revision, layout):
                 if self.alive:
-                    out({"type": "menu", "key": self.key, "source": "dbusmenu",
-                         "menu": self.convert(layout)})
+                    menu = self.convert(layout)
+                    if self.wrap:
+                        menu = item(0, children=[item(DbusMenu.WRAP, "", submenu=True,
+                                                      children=menu["children"])])
+                    out({"type": "menu", "key": self.key,
+                         "source": "tray" if self.wrap else "dbusmenu", "menu": menu})
 
             self.iface.GetLayout(0, -1, dbus.Array([], signature="s"),
                                  reply_handler=ok, error_handler=lambda e: self.alive and err(e))
@@ -219,13 +226,15 @@ class DbusMenu:
             self.iface.AboutToShow(dbus.Int32(i), reply_handler=done, error_handler=done)
 
     def event(self, nid, name):
+        if nid == DbusMenu.WRAP:
+            nid = 0
         self.iface.Event(dbus.Int32(nid), name, dbus.Int32(0, variant_level=1),
                          dbus.UInt32(int(time.time()) & 0xFFFFFFFF),
                          reply_handler=lambda *a: None, error_handler=err)
 
     def open(self, nid):
         self.event(nid, "opened")
-        self.about_to_show([nid], self.fetch)
+        self.about_to_show([0 if nid == DbusMenu.WRAP else nid], self.fetch)
 
     def close(self, nid):
         self.event(nid, "closed")
@@ -792,6 +801,35 @@ def registered_for_pid(pid):
     return None
 
 
+def tray_menu_for_pid(pid):
+    """(service, menu path) of a tray icon (StatusNotifierItem) of process
+    `pid` (or a parent/child) whose menu has items, or None."""
+    if not pid:
+        return None
+    try:
+        watcher = bus.get_object("org.kde.StatusNotifierWatcher", "/StatusNotifierWatcher")
+        entries = watcher.Get("org.kde.StatusNotifierWatcher", "RegisteredStatusNotifierItems",
+                              dbus_interface="org.freedesktop.DBus.Properties", timeout=2)
+    except dbus.DBusException:
+        return None
+    mine = set(ancestors(pid))
+    for entry in entries:
+        service, _, path = str(entry).partition("/")
+        path = "/" + path if path else "/StatusNotifierItem"
+        p = pid_of(service)
+        if not p or not (p in mine or pid in ancestors(p)):
+            continue
+        try:
+            menu = str(bus.get_object(service, path, introspect=False).Get(
+                "org.kde.StatusNotifierItem", "Menu",
+                dbus_interface="org.freedesktop.DBus.Properties", timeout=2))
+        except dbus.DBusException:
+            continue
+        if menu and menu != "/NO_DBUSMENU" and has_menu(service, menu):
+            return service, menu
+    return None
+
+
 def has_menu(service, path):
     try:
         obj = bus.get_object(service, path, introspect=False)
@@ -846,9 +884,10 @@ class AtspiWorker:
                 continue
             # Only for the window still watched.
             inner = getattr(current, "inner", None)
-            if m.get("type") == "error" or (isinstance(inner, AtspiMenu) and inner.alive
-                                           and m.get("key") == inner.key):
+            if m.get("type") == "error":
                 out(m)
+            elif isinstance(inner, AtspiMenu) and inner.alive and m.get("key") == inner.key:
+                inner.from_worker(m)
         return True
 
 
@@ -857,11 +896,33 @@ class AtspiMenu:
 
     def __init__(self, key, title, pid, window=0):
         self.key, self.title, self.pid, self.window, self.alive = key, title, pid, window, True
+        self.tray = None  # the app's tray icon menu, while AT-SPI has none
         if not AtspiWorker.send(self.watch_cmd()):
             out({"type": "none", "key": key})
 
     def same(self, other):
         return isinstance(other, AtspiMenu) and other.key == self.key
+
+    def from_worker(self, m):
+        """A message from the worker for this window. With no menu over
+        AT-SPI either, the app's tray icon menu (same process) stands in as
+        its app menu (Teams, Insync...); a real menu found later (Electron
+        builds its tree late) replaces it."""
+        if m.get("type") == "none":
+            if self.tray is None:
+                found = tray_menu_for_pid(self.pid)
+                if found:
+                    try:
+                        self.tray = DbusMenu(self.key, *found, wrap=True)
+                        return
+                    except dbus.DBusException as e:
+                        err(e)
+            if self.tray is not None:
+                return
+        elif m.get("type") == "menu" and self.tray is not None:
+            self.tray.stop()
+            self.tray = None
+        out(m)
 
     def watch_cmd(self):
         return {"cmd": "watch", "key": self.key, "title": self.title, "pid": self.pid,
@@ -872,16 +933,25 @@ class AtspiMenu:
 
     def stop(self):
         self.alive = False
+        if self.tray is not None:
+            self.tray.stop()
         AtspiWorker.send({"cmd": "unwatch"})
 
     def open(self, nid):
-        AtspiWorker.send({"cmd": "open", "id": nid})
+        if self.tray is not None:
+            self.tray.open(nid)
+        else:
+            AtspiWorker.send({"cmd": "open", "id": nid})
 
     def close(self, nid):
-        pass
+        if self.tray is not None:
+            self.tray.close(nid)
 
     def click(self, nid):
-        AtspiWorker.send({"cmd": "click", "id": nid})
+        if self.tray is not None:
+            self.tray.click(nid)
+        else:
+            AtspiWorker.send({"cmd": "click", "id": nid})
 
 
 # ---------------------------------------------------------------- commands

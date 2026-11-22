@@ -155,7 +155,8 @@ Singleton {
         // menu bar, as a click on its title would (tests).
         function openMenu(label: string): string {
             // (The app's own app menu too, which the bold title opens.)
-            if (!root.topLevel.some(i => i.label === label)) return "no menu " + label;
+            // "app": the bold app-name menu (the app's own, e.g. a tray menu).
+            if (label !== "app" && !root.topLevel.some(i => i.label === label)) return "no menu " + label;
             root.openRequested(label);
             return "ok";
         }

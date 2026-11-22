@@ -87,6 +87,10 @@ Row {
     // it isn't shown a second time among the app's menus. Apps without one
     // get hearth's (appMenu below).
     readonly property var ownAppMenu: {
+        // An app whose only menu is its tray icon's (hearth-appmenu wraps it
+        // as item -50): that menu is its app menu.
+        const tray = AppMenu.tree ? (AppMenu.tree.children || []).find(i => i.id === -50) : null;
+        if (tray) return tray;
         const t = AppMenu.topLevel;
         if (!t.length) return null;
         const n = x => String(x || "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -106,7 +110,8 @@ Row {
     Connections {
         target: AppMenu
         function onOpenRequested(label) {
-            if (root.ownAppMenu && label === root.ownAppMenu.label && !ownAppPop.open) ownAppPop.toggle();
+            if (root.ownAppMenu && (label === root.ownAppMenu.label || label === "app") && !ownAppPop.open)
+                ownAppPop.toggle();
         }
     }
     BarPopup {
