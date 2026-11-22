@@ -336,15 +336,27 @@ class AtspiMenu:
                     app.set_cache_mask(A.Cache.NONE)
                 except Exception:
                     pass
-                if kind == "burger":
+                if kind == "burger" and self.holds_items(trigger):
+                    # Readable while closed (GTK 3): read now, nothing cached.
+                    self.burger = {"flat": True, "labels": [(trigger.get_name() or "Menu").strip().title()]}
+                    self.read(trigger, (-1,))
+                    self.tree_read = True
+                elif kind == "burger":
                     self.burger = load_cache().get(self.burger_key())
                     self.load_tree()
                 return True
         return False
 
+    @staticmethod
+    def is_title(name):
+        """A real menu title: GTK 3 parks its widgets' popup menus in an
+        invisible menu bar, named "Popup menu", "Menu Popup HeaderBar"...
+        (Remmina): never a title."""
+        return bool(name) and "popup" not in name.lower()
+
     def has_titles(self, mb):
         try:
-            return any((mb.get_child_at_index(i).get_name() or "")
+            return any(self.is_title(mb.get_child_at_index(i).get_name() or "")
                        for i in range(min(mb.get_child_count(), 30)))
         except Exception:
             return False
@@ -354,7 +366,7 @@ class AtspiMenu:
         if r not in (A.Role.PUSH_BUTTON, A.Role.TOGGLE_BUTTON):
             return False
         name = (o.get_name() or "").strip().lower()
-        if name not in BURGER_NAMES:
+        if name not in BURGER_NAMES and not self.holds_items(o):
             return False
         # In the top of the window: a title bar's button, not a list's.
         try:
@@ -362,6 +374,19 @@ class AtspiMenu:
             return self.to_surface(o, e.x, e.y)[1] < 120
         except Exception:
             return True
+
+    @staticmethod
+    def holds_items(o):
+        """A GTK 3 menu button keeps its menu's items as its own children,
+        built while closed (Remmina's "Actions")."""
+        try:
+            n = o.get_child_count()
+            return n >= 2 and sum(1 for i in range(min(n, 40))
+                                  if o.get_child_at_index(i).get_role() in (
+                                      Atspi.Role.MENU_ITEM, Atspi.Role.CHECK_MENU_ITEM,
+                                      Atspi.Role.RADIO_MENU_ITEM)) >= 2
+        except Exception:
+            return False
 
     def search(self, A, root, test, web):
         """Breadth-first search under `root` for test(o, role); `web`: also
@@ -602,7 +627,7 @@ class AtspiMenu:
         res = []
         for i in range(self.mb.get_child_count()):
             c = self.mb.get_child_at_index(i)
-            if c and (c.get_name() or ""):
+            if c and self.is_title(c.get_name() or ""):
                 res.append(((i,), split_shortcut(c.get_name())[0], c if self.kind == "kept" else None))
         return res
 
@@ -863,6 +888,14 @@ class AtspiMenu:
                 self.act(o)
             self.emit()
             return
+        if self.kind == "burger" and self.holds_items(self.trigger):
+            # Its items are there while closed: read them, open nothing.
+            self.burger = {"flat": True,
+                           "labels": [(self.trigger.get_name() or "Menu").strip().title()]}
+            self.tree_read = True
+            self.read(self.trigger, (-1,))
+            self.emit()
+            return
         if self.kind == "burger":
             if path in self.cache:
                 self.emit()  # from the cache: the app's ☰ isn't touched
@@ -1013,6 +1046,11 @@ class AtspiMenu:
             o = self.node(path)
             if o is not None:
                 self.act(o)
+            return
+        if self.kind == "burger" and self.holds_items(self.trigger) and path[:1] == (-1,):
+            c = self.item_child(self.trigger, path[-1])
+            if c is not None:
+                self.act(c)  # GTK 3's menu items take the accessible click
             return
         if self.busy:
             return
