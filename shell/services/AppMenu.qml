@@ -26,9 +26,21 @@ Singleton {
     // to) the app the user was in.
     property string heldId: ""
     readonly property var focused: Compositor.focusedWindow
-    onFocusedChanged: if (focused) heldId = focused.id
+    onFocusedChanged: if (focused) { heldId = focused.id; holding = false; }
     readonly property var win: focused
-        || (ShellState.activePopup && heldId ? (Compositor.windows.find(w => w.id === heldId) || null) : null)
+        || ((ShellState.activePopup || root.holding) && heldId
+            ? (Compositor.windows.find(w => w.id === heldId) || null) : null)
+    // When a hearth menu closes, arbor gives the keyboard back to the app a
+    // moment later: keep the held window until then (or 400 ms), or the
+    // title flashes "Desktop" in between.
+    property bool holding: false
+    Connections {
+        target: ShellState
+        function onActivePopupChanged() {
+            if (!ShellState.activePopup && root.heldId) { root.holding = true; holdTimer.restart(); }
+        }
+    }
+    Timer { id: holdTimer; interval: 400; onTriggered: root.holding = false }
     // Native menus that turned out empty (emptyTimer): appmenu-gtk-module
     // exports an empty one for Firefox and Thunderbird, whose XUL menus it
     // can't see; those windows go on to AT-SPI below instead.
