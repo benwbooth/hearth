@@ -146,7 +146,20 @@
         export HEARTH_RESTARTER=1
         child=
         recent=()
-        trap '[ -n "\$child" ] && kill -TERM "\$child" 2>/dev/null; wait "\$child"; exit 143' TERM INT HUP
+        # Asked to stop: TERM the shell, KILL it if it hasn't gone in 4 s.
+        # devloop KILLs this wrapper after 5 s, which would orphan a
+        # lingering shell; one still holding the session lock then refused
+        # the next hearth's lock (2026-11-21).
+        stop() {
+          if [ -n "\$child" ]; then
+            kill -TERM "\$child" 2>/dev/null
+            for _ in \$(seq 40); do kill -0 "\$child" 2>/dev/null || break; sleep 0.1; done
+            kill -KILL "\$child" 2>/dev/null
+            wait "\$child"
+          fi
+          exit 143
+        }
+        trap stop TERM INT HUP
         while :; do
           $out/libexec/hearth-shell "\$@" &
           child=\$!
@@ -156,7 +169,8 @@
           for t in "\''${recent[@]}"; do (( now - t < 60 )) && keep+=("\$t"); done
           recent=("\''${keep[@]}" "\$now")
           (( \''${#recent[@]} > 5 )) && { echo "hearth: the shell keeps ending; giving up" >&2; exit "\$rc"; }
-          echo "hearth: arbor restarted (exit \$rc); starting the shell again" >&2
+          if [ "\$rc" = 75 ]; then echo "hearth: the shell asked to be restarted (exit 75); starting it again" >&2
+          else echo "hearth: arbor restarted (exit \$rc); starting the shell again" >&2; fi
           sleep 0.3
         done
         EOF

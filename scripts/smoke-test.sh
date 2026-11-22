@@ -76,6 +76,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
+real_home=$HOME
 export HOME=$work/home XDG_CONFIG_HOME=$work/home/.config XDG_CACHE_HOME=$work/home/.cache \
   XDG_STATE_HOME=$work/home/.local/state XDG_DATA_HOME=$work/home/.local/share XDG_RUNTIME_DIR=$run
 unset WAYLAND_DISPLAY WAYLAND_SOCKET DISPLAY ARBOR_SOCKET NIRI_SOCKET NOTIFY_SOCKET \
@@ -96,7 +97,11 @@ dbus-daemon --config-file="$work/dbus.conf" --fork --print-address=1 --print-pid
   { log "can't start dbus"; exit 2; }
 export DBUS_SESSION_BUS_ADDRESS=$(cat "$work/dbus.addr")
 
-XDG_CONFIG_HOME=$work/kwin setsid kwin_wayland --virtual --no-lockscreen --socket=kwin \
+# KWin with the real HOME, cache and data dirs (its config stays in
+# $work/kwin): with fresh ones and the private bus it was SIGKILLed within a
+# second of starting (2026-11-21), and arbor's winit backend panicked.
+HOME=$real_home XDG_CONFIG_HOME=$work/kwin setsid env -u QT_QPA_PLATFORM -u QT_WAYLAND_RECONNECT \
+  -u XDG_CACHE_HOME -u XDG_DATA_HOME -u XDG_STATE_HOME kwin_wayland --virtual --no-lockscreen --socket=kwin \
   --width 3840 --height 1620 >"$work/kwin.log" 2>&1 </dev/null &
 kwin_pid=$!
 for _ in $(seq 100); do [[ -S $run/kwin ]] && break; sleep 0.1; done

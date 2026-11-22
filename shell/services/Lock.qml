@@ -47,6 +47,18 @@ Singleton {
     // ---- lock state
     property bool locked: false        // drives WlSessionLock.locked
     property bool secure: false        // the compositor confirmed (set by LockScreen)
+    // The compositor refused or never confirmed the lock (an older hearth
+    // still holding it, say, as when devloop swaps shells): ask again after
+    // retryDelays[n] ms, then give up (compositorEnded's fallback).
+    // Under the hearth wrapper (HEARTH_RESTARTER) each new try is a new
+    // shell process: arbor (smithay) remembers every output a client put a
+    // lock surface on, refused locks included, and kills the connection
+    // when that client asks for the same output again. The flag file
+    // carries the try count over to the next process.
+    readonly property var retryDelays: [1000, 2000, 4000]
+    readonly property bool restarter: Quickshell.env("HEARTH_RESTARTER") === "1"
+    property int lockAttempt: 0
+    property bool retrying: false      // between two lock requests
     property string reason: ""         // manual | idle | sleep | restore
     property double lockedAt: 0
     property bool graceActive: false   // any input unlocks without a password
@@ -94,7 +106,7 @@ Singleton {
 
     function lock(why) {
         why = why || "manual";
-        if (root.locked) {
+        if (root.locked || root.retrying) {
             // Already locked: sleep (or a manual lock) ends the grace period.
             if (why !== "idle") root.graceActive = false;
             return;
@@ -114,7 +126,11 @@ Singleton {
         root.graceActive = why === "idle" && g > 0;
         if (root.graceActive) { graceTimer.interval = g * 1000; graceTimer.restart(); }
         root.mainOutput = Compositor.focusedOutput || (Quickshell.screens.length ? Quickshell.screens[0].name : "");
+        root.lockAttempt = 0;
+        root.retrying = false;
+        lockRetry.stop();
         root.locked = true;
+        secureWatch.interval = 4000;
         secureWatch.restart();
         Quickshell.execDetached(["sh", "-c", 'umask 077; : > "$1"', "sh", root.flagFile]);
         console.info("hearth lock: locked (" + why + ")");
@@ -193,10 +209,34 @@ Singleton {
         root.message = "";
         Quickshell.execDetached(["rm", "-f", root.flagFile]);
     }
-    // The compositor never confirmed the lock, or ended it: hand over to
-    // hyprlock when it is installed (the session must not stay open).
+    // The compositor never confirmed the lock, or ended it: ask again a
+    // few times (arbor takes a new locker once the old one's client is
+    // gone), then hand over to hyprlock when it is installed (the session
+    // must not stay open).
     function compositorEnded() {
         secureWatch.stop();
+        if (root.retrying) return;     // a try is already on its way
+        if (root.lockAttempt < root.retryDelays.length) {
+            const d = root.retryDelays[root.lockAttempt];
+            root.lockAttempt++;
+            console.warn("hearth lock: lock not confirmed; asking again in " + d / 1000 + " s (try "
+                         + (root.lockAttempt + 1) + " of " + (root.retryDelays.length + 1) + ")");
+            root.retrying = true;
+            if (root.restarter) {
+                Quickshell.execDetached(["sh", "-c", 'umask 077; printf "%s\\n" "$2" > "$1"', "sh",
+                                         root.flagFile, String(root.lockAttempt)]);
+                restartForLock.interval = d;
+                restartForLock.restart();
+                return;
+            }
+            // Drop the refused lock object first; locked=true makes a new one.
+            root.locked = false;
+            lockRetry.interval = d;
+            lockRetry.restart();
+            return;
+        }
+        root.lockAttempt = 0;
+        root.retrying = false;
         root.locked = false;
         root.unlocking = false;
         root.buffer = "";
@@ -217,7 +257,31 @@ Singleton {
         interval: 4000
         onTriggered: if (root.locked && !root.secure && !root.unlocking) root.compositorEnded()
     }
-    onSecureChanged: if (secure) secureWatch.stop()
+    Timer {
+        id: lockRetry
+        onTriggered: {
+            if (!root.retrying) return;
+            root.retrying = false;
+            root.locked = true;
+            secureWatch.interval = 3000;
+            secureWatch.restart();
+            console.info("hearth lock: asking the compositor to lock again (" + root.reason + ")");
+        }
+    }
+    // The wrapper starts the shell again on exit status 75; the new one
+    // finds the flag file and locks (restoreCheck).
+    Timer {
+        id: restartForLock
+        onTriggered: {
+            console.warn("hearth lock: restarting the shell to ask for the lock again");
+            Qt.exit(75);
+        }
+    }
+    onSecureChanged: if (secure) {
+        secureWatch.stop();
+        if (root.lockAttempt > 0) console.info("hearth lock: locked after " + (root.lockAttempt + 1) + " tries");
+        root.lockAttempt = 0;
+    }
 
     // Should the animation not report back, unlock anyway.
     Timer { id: unlockFallback; interval: 1500; onTriggered: root.finishUnlock() }
@@ -404,19 +468,29 @@ printf '%s\\n%s\\n%s\\n%s\\n' "$pw" "$fp" "$name" "$av"`, "sh", root.pamDir]
         probe.running = true;
         restoreCheck.running = true;
     }
+    // The file holds the number of failed tries when a shell restarted to
+    // try again (see restarter).
     Process {
         id: restoreCheck
-        command: ["test", "-e", root.flagFile]
-        onExited: code => { if (code === 0) root.lock("restore"); }
+        command: ["sh", "-c", '[ -e "$1" ] && printf "locked %s\\n" "$(cat "$1")"', "sh", root.flagFile]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const m = /^locked\s*(\d*)/.exec(text);
+                if (!m) return;
+                root.lock("restore");
+                root.lockAttempt = Math.min(parseInt(m[1]) || 0, root.retryDelays.length);
+            }
+        }
     }
 
     IpcHandler {
         target: "lock"
         function lock(why: string): void { root.lock(why || "manual"); }
-        function isLocked(): bool { return root.locked; }
+        function isLocked(): bool { return root.locked || root.retrying; }
         function isSecure(): bool { return root.locked && root.secure; }
         function state(): string {
             return JSON.stringify({ locked: root.locked, secure: root.secure, reason: root.reason,
+                                    retrying: root.retrying, lockAttempt: root.lockAttempt,
                                     grace: root.graceActive, field: root.fieldShown, typed: root.typed,
                                     checking: root.checking, message: root.message, failures: root.failures,
                                     fingerprint: root.fpState, fpService: root.fpService, pwService: root.pwService,
