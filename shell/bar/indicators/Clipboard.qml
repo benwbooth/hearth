@@ -325,7 +325,7 @@ Indicator {
                 Layout.fillWidth: true
                 Layout.leftMargin: 4
                 visible: view.mode === "list" && view.shown.length > 0
-                text: "Enter copies   ⌦ Delete   ⌃P Pin   ⌃E Edit" + (view.current && (view.current.url || view.current.path) ? "   ⌃O Open" : "")
+                text: "Enter copies   Del Delete   Ctrl+P Pin   Ctrl+E Edit" + (view.current && (view.current.url || view.current.path) ? "   Ctrl+O Open" : "")
                 color: Theme.fgSecondary
                 font.pointSize: Theme.menuSmallFontSize
             }

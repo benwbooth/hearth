@@ -57,7 +57,7 @@ Singleton {
         XF86MonBrightnessDown: "Brightness Down", XF86PowerOff: "Power button" })
     // The shortcut bound to an action (a regex on the bind's action, e.g.
     // /^close-window$/ or /"session" "lock"/), as "Super+Q" for menus
-    // (MenuItem draws it as ⌘Q). Super binds first; "" when none.
+    // (MenuItem shows it as Super+Q). Super binds first; "" when none.
     function menuShortcut(re) {
         const hits = root.effective.filter(e => !e.off && re.test(e.action));
         if (!hits.length) return "";

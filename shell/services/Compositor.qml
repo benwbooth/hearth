@@ -49,6 +49,8 @@ Singleton {
     readonly property var backend: root.isHyprland ? hyprLoader.item : root.isArbor ? arborLoader.item : null
 
     readonly property var windows: backend ? backend.windows : []
+    // The compositor's own overview is open (arbor's Mission Control).
+    readonly property bool overviewOpen: !!(backend && backend.overviewOpen)
     readonly property var workspaces: backend ? backend.workspaces : []
     readonly property var focusedWindow: windows.find(w => w.focused) || null
     readonly property string focusedWindowId: focusedWindow && focusedWindow.id !== undefined ? String(focusedWindow.id) : ""

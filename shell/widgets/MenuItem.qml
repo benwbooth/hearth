@@ -5,8 +5,8 @@ import ".."
 
 // One row in a hearth menu, macOS 26 style: 24 pt rows, 13 pt text, the
 // selection an accent-filled rounded rectangle (8 pt corners) inset from the
-// menu's edge, a checkmark/icon column, right-aligned shortcut glyphs
-// (⌃⌥⇧⌘), a chevron for submenus, disabled rows greyed out.
+// menu's edge, a checkmark/icon column, right-aligned shortcuts spelled
+// the PC way (Ctrl+Alt+Shift+Super+key), a chevron for submenus, disabled rows greyed out.
 //
 // Inside a BarPopup the selection is the popup's (`current`): shared by
 // pointer and keyboard. Choosing a row blinks it once before `triggered`
@@ -71,17 +71,19 @@ MouseArea {
         ScriptAction { script: root.triggered() }
     }
 
-    // macOS shortcut glyphs: "Ctrl+Shift+S" -> "⌃⇧S", in macOS's
-    // modifier order (Super is ⌘).
-    function macShortcut(s) {
+    // Shortcuts the PC way, with words, not macOS glyphs: "super+shift+s"
+    // -> "Shift+Super+S", modifiers in Ctrl, Alt, Shift, Super order.
+    function pcShortcut(s) {
         if (!s) return "";
         const parts = s.split("+").map(x => x.trim()).filter(x => x !== "");
         if (s.endsWith("++")) parts.push("+");
-        const mods = { ctrl: "⌃", control: "⌃", alt: "⌥", option: "⌥", shift: "⇧", super: "⌘", meta: "⌘", cmd: "⌘", win: "⌘", logo: "⌘" };
-        const order = "⌃⌥⇧⌘";
-        const keys = { return: "↩", enter: "↩", backspace: "⌫", delete: "⌦", del: "⌦", escape: "⎋", esc: "⎋", tab: "⇥",
-                       left: "←", right: "→", up: "↑", down: "↓", pgup: "⇞", pageup: "⇞", pgdown: "⇟", pagedown: "⇟",
-                       home: "↖", end: "↘", space: "Space", print: "PrtSc" };
+        const mods = { ctrl: "Ctrl", control: "Ctrl", alt: "Alt", option: "Alt", shift: "Shift",
+                       super: "Super", meta: "Super", cmd: "Super", win: "Super", logo: "Super", mod: "Super" };
+        const order = ["Ctrl", "Alt", "Shift", "Super"];
+        const keys = { return: "Enter", enter: "Enter", backspace: "Backspace", delete: "Del", del: "Del",
+                       escape: "Esc", esc: "Esc", tab: "Tab", left: "←", right: "→", up: "↑", down: "↓",
+                       pgup: "PgUp", pageup: "PgUp", pgdown: "PgDn", pagedown: "PgDn", page_up: "PgUp", page_down: "PgDn",
+                       home: "Home", end: "End", space: "Space", print: "PrtSc" };
         let m = [], k = [];
         for (const p of parts) {
             const l = p.toLowerCase();
@@ -89,9 +91,9 @@ MouseArea {
             else k.push(keys[l] || (p.length === 1 ? p.toUpperCase() : p));
         }
         m = [...new Set(m)].sort((a, b) => order.indexOf(a) - order.indexOf(b));
-        return m.join("") + k.join(" ");
+        return m.concat(k).join("+");
     }
-    readonly property string shortcutText: hasSubmenu ? "" : macShortcut(shortcut)
+    readonly property string shortcutText: hasSubmenu ? "" : pcShortcut(shortcut)
 
     width: parent ? parent.width : implicitWidth
     implicitWidth: (gutter ? Theme.menuGutter : Theme.menuTextInset) + label.implicitWidth

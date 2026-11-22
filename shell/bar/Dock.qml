@@ -91,7 +91,8 @@ PanelWindow {
     property bool held: false
     // `held` goes up when the pointer touches the edge strip or the dock and
     // drops `autohideDelay` ms after it leaves.
-    readonly property bool shown: !autohide || held || menuOpen || previews > 0 || dragKey !== ""
+    // Always up in the overview, like macOS's Mission Control.
+    readonly property bool shown: !autohide || held || menuOpen || previews > 0 || dragKey !== "" || Compositor.overviewOpen
     // True once the slide-in has finished (the name label waits for it).
     property bool settled: false
     Component.onCompleted: settled = shown

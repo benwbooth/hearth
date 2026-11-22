@@ -12,8 +12,8 @@ import ".."
 // Folders, Images, Other, the calculator, web suggestions, Ask hearth) with
 // a preview of the selected one.
 //
-// Keys: ↑ ↓ choose, ⌘↑ ⌘↓ (Super or Ctrl) jump between groups, Return opens,
-// ⌘Return shows the file in the file manager, ⌘C copies a file's path or a
+// Keys: ↑ ↓ choose, Ctrl+↑ Ctrl+↓ (or Super) jump between groups, Enter opens,
+// Ctrl+Enter shows the file in the file manager, Ctrl+C copies a file's path or a
 // result, Esc clears the field, then closes.
 //
 // Motion after macOS 26's Spotlight: the field springs open from 92% with
@@ -412,8 +412,8 @@ Scope {
                         x: preview.x
                         width: preview.width
                         horizontalAlignment: Text.AlignHCenter
-                        text: win.current && win.current.kind === "file" ? "↩ Open   ⌘↩ Show in Folder   ⌘C Copy Path"
-                            : win.current && win.current.kind === "calc" ? "↩ Copy Result" : "↩ Open   ↑↓ Choose   Esc Close"
+                        text: win.current && win.current.kind === "file" ? "Enter Open   Ctrl+Enter Show in Folder   Ctrl+C Copy Path"
+                            : win.current && win.current.kind === "calc" ? "Enter Copy Result" : "Enter Open   ↑↓ Choose   Esc Close"
                         color: Theme.fgSecondary
                         font.pointSize: Theme.smallFontSize
                     }
@@ -490,7 +490,7 @@ Scope {
                                     if (r.kind === "app") return (r.entry.comment || r.entry.genericName || "Application");
                                     if (r.kind === "settings") return "Opens " + r.title + " in hearth Settings";
                                     if (r.kind === "action") return r.item.keys ? "Shortcut: " + r.item.keys : "Runs this action";
-                                    if (r.kind === "calc") return "Return copies the result";
+                                    if (r.kind === "calc") return "Enter copies the result";
                                     if (r.kind === "web") return "Opens a web search in your browser";
                                     if (r.kind === "ask") return "The assistant answers in the voice panel. Change the model in Settings > AI.";
                                     return "";

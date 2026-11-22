@@ -15,6 +15,7 @@ Scope {
     property var winMap: ({})      // id -> niri Window JSON
     property var wsList: []        // [niri Workspace JSON]
     property bool streaming: false
+    property bool overviewOpen: false  // arbor's overview (Mission Control)
 
     // wlr foreign-toplevel handles (thumbnails, minimize) matched to niri
     // windows by app id and title; niri doesn't share ids between the two.
@@ -183,6 +184,9 @@ Scope {
             break;
         case "WorkspaceUrgencyChanged":
             root.wsList = root.wsList.map(w => w.id === d.id ? Object.assign({}, w, { is_urgent: d.urgent }) : w);
+            break;
+        case "OverviewOpenedOrClosed":
+            root.overviewOpen = !!d.is_open;
             break;
         }
     }
