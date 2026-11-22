@@ -21,7 +21,7 @@ stdin (one command per line):
   {"cmd": "watch", "key": K, "kind": "dbusmenu", "service": S, "path": P}
   {"cmd": "watch", "key": K, "kind": "gtk", "bus": B, "menubar": P,
    "appmenu": P, "app": P, "win": P}
-  {"cmd": "watch", "key": K, "kind": "x11", "title": T, "pid": N}
+  {"cmd": "watch", "key": K, "kind": "x11", "title": T, "pid": N, "window": ID}
       (any window without an address: "none" unless pid is the satellite)
   {"cmd": "unwatch"}
   {"cmd": "open", "id": N}     a (sub)menu is about to show
@@ -628,13 +628,13 @@ def is_satellite(pid):
 class X11Window:
     """The focused X11 window (xwayland-satellite): resolve, then delegate."""
 
-    def __init__(self, key, title, pid=0):
+    def __init__(self, key, title, pid=0, window=0):
         self.key, self.title = key, title
         self.inner, self.xid, self.alive, self.tries = None, 0, True, 0
         if pid and not is_satellite(pid):
             # A Wayland window without an exported menu: its in-window menu
             # bar over AT-SPI, if it has one (Firefox, Electron...).
-            self.inner = AtspiMenu(key, title, pid)
+            self.inner = AtspiMenu(key, title, pid, window)
             return
         self.resolve()
 
@@ -760,16 +760,20 @@ class AtspiWorker:
 class AtspiMenu:
     """The focused window's menu through hearth-atspi-menu."""
 
-    def __init__(self, key, title, pid):
-        self.key, self.title, self.pid, self.alive = key, title, pid, True
-        if not AtspiWorker.send({"cmd": "watch", "key": key, "title": title, "pid": pid}):
+    def __init__(self, key, title, pid, window=0):
+        self.key, self.title, self.pid, self.window, self.alive = key, title, pid, window, True
+        if not AtspiWorker.send(self.watch_cmd()):
             out({"type": "none", "key": key})
 
     def same(self, other):
         return isinstance(other, AtspiMenu) and other.key == self.key
 
+    def watch_cmd(self):
+        return {"cmd": "watch", "key": self.key, "title": self.title, "pid": self.pid,
+                "window": self.window}
+
     def emit(self):
-        AtspiWorker.send({"cmd": "watch", "key": self.key, "title": self.title, "pid": self.pid})
+        AtspiWorker.send(self.watch_cmd())
 
     def stop(self):
         self.alive = False
@@ -804,7 +808,7 @@ def watch(c):
         new = GtkMenu(key, c["bus"], c.get("menubar", ""), c.get("appmenu", ""),
                       c.get("app", ""), c.get("win", ""))
     elif kind == "x11":
-        new = X11Window(key, c.get("title", ""), c.get("pid", 0))
+        new = X11Window(key, c.get("title", ""), c.get("pid", 0), c.get("window", 0))
     else:
         return
     if current and current.same(new) and getattr(current, "key", None) == key:

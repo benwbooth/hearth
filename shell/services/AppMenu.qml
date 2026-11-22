@@ -29,20 +29,28 @@ Singleton {
     onFocusedChanged: if (focused) heldId = focused.id
     readonly property var win: focused
         || (ShellState.activePopup && heldId ? (Compositor.windows.find(w => w.id === heldId) || null) : null)
+    // Native menus that turned out empty (emptyTimer): appmenu-gtk-module
+    // exports an empty one for Firefox and Thunderbird, whose XUL menus it
+    // can't see; those windows go on to AT-SPI below instead.
+    property var emptyKeys: ({})
     readonly property var ownRequest: {
         const w = root.win;
         if (!w) return null;
         const a = w.appMenu, g = w.gtkMenu;
-        if (a && a.service_name && a.object_path)
-            return { key: "d\n" + a.service_name + "\n" + a.object_path, kind: "dbusmenu",
-                     service: a.service_name, path: a.object_path };
-        if (g && g.unique_bus_name && (g.menubar_path || g.app_menu_path))
-            return { key: "g\n" + g.unique_bus_name + "\n" + g.menubar_path + "\n" + g.window_object_path,
-                     kind: "gtk", bus: g.unique_bus_name, menubar: g.menubar_path || "",
-                     appmenu: g.app_menu_path || "", app: g.application_object_path || "",
-                     win: g.window_object_path || "" };
+        if (a && a.service_name && a.object_path) {
+            const r = { key: "d\n" + a.service_name + "\n" + a.object_path, kind: "dbusmenu",
+                        service: a.service_name, path: a.object_path };
+            if (!root.emptyKeys[r.key]) return r;
+        }
+        if (g && g.unique_bus_name && (g.menubar_path || g.app_menu_path)) {
+            const r = { key: "g\n" + g.unique_bus_name + "\n" + g.menubar_path + "\n" + g.window_object_path,
+                        kind: "gtk", bus: g.unique_bus_name, menubar: g.menubar_path || "",
+                        appmenu: g.app_menu_path || "", app: g.application_object_path || "",
+                        win: g.window_object_path || "" };
+            if (!root.emptyKeys[r.key]) return r;
+        }
         if (Compositor.isArbor && w.pid)
-            return { key: "x\n" + w.id, kind: "x11", pid: w.pid, title: w.title };
+            return { key: "x\n" + w.id, kind: "x11", pid: w.pid, title: w.title, window: Number(w.id) };
         return null;
     }
     // Like macOS, an app's menu bar stays while one of its windows without
@@ -163,9 +171,20 @@ Singleton {
     Timer {
         id: emptyTimer
         interval: 1500
-        onTriggered: if (root.menu && root.menuKey === root.wanted && !root.forced
-                         && root.ownRequest && root.menuKey === root.ownRequest.key
-                         && !root.menu.children.length) root.noneKey = root.menuKey
+        onTriggered: {
+            if (root.menu && root.menuKey === root.wanted && !root.forced
+                    && root.ownRequest && root.menuKey === root.ownRequest.key
+                    && !root.menu.children.length) {
+                const k = root.menuKey;
+                if (k.startsWith("x\n")) {
+                    root.noneKey = k;
+                } else {
+                    const e = Object.assign({}, root.emptyKeys);
+                    e[k] = true;
+                    root.emptyKeys = e;
+                }
+            }
+        }
     }
     Timer {
         id: restart

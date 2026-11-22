@@ -155,19 +155,66 @@ def split_shortcut(label):
     return m.group(1), sc.replace("Super+", "Meta+")
 
 
+CACHE_FILE = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"),
+                          "hearth", "atspi-menus.json")
+
+# A ☰ button: an app's whole menu behind one button (Claude Desktop, GNOME
+# apps' "Main Menu", Slack...). Matched by name, in the top of the window.
+BURGER_NAMES = {"menu", "main menu", "application menu", "app menu", "open menu",
+                "open application menu", "open main menu", "show menu", "menu button",
+                "hamburger menu", "more options", "options menu"}
+
+
+def load_cache():
+    try:
+        with open(CACHE_FILE) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def save_cache(c):
+    try:
+        os.makedirs(os.path.dirname(CACHE_FILE), exist_ok=True)
+        tmp = CACHE_FILE + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(c, f)
+        os.replace(tmp, CACHE_FILE)
+    except OSError:
+        pass
+
+
 class AtspiMenu:
-    SKIP = None  # roles whose subtrees never hold the menu bar
+    """One window's menus over AT-SPI. Kinds:
 
-    def __init__(self, key, title, pid):
+    kept    a menu bar of menus whose items stay once built (Gecko, GTK):
+            read directly, clicked through accessible actions.
+    live    Chromium/Electron's native menu bar: buttons whose menus exist
+            only while their popup is open (opened with the accessible
+            press, closed by pressing again).
+    web     a menu bar drawn in the page (VS Code/Cursor's custom title
+            bar): titles clicked through arbor (ClickWindow), the menus
+            appear in the page.
+    burger  no menu bar, a ☰ button (clicked through arbor, or pressed when
+            it is a native widget): its popup's submenus become the menus of
+            the menu bar; a flat popup becomes one menu. Its titles are kept
+            in ~/.cache/hearth/atspi-menus.json, so they show without
+            opening anything; the very first time, a "Menu" placeholder.
+    """
+
+    SKIP = None  # roles whose subtrees never hold a native menu bar
+
+    def __init__(self, key, title, pid, window=0):
         self.key, self.title, self.pid = key, title, int(pid or 0)
+        self.window = int(window or 0)  # arbor's id, for ClickWindow / ClosePopups
         self.alive, self.busy, self.lazy = True, False, False
-        self.app = self.mb = self.frame = None
+        self.app = self.mb = self.frame = self.trigger = None
+        self.kind = None
+        self.burger = None  # {"flat": bool, "labels": [...]} once known
+        self.reset_burger = self.burger_open = False
         self.ids, self.paths = {}, {}
-        self.cache = {}  # live menus: path -> [item dicts] from the last look
+        self.cache = {}  # container path -> [item dicts] from the last look
         self.find()
-
-    def request(self):
-        return {"key": self.key, "kind": "x11", "title": self.title, "pid": self.pid}
 
     def same(self, other):
         return isinstance(other, AtspiMenu) and other.key == self.key
@@ -175,34 +222,33 @@ class AtspiMenu:
     def stop(self):
         self.alive = False
 
-    # -- finding the menu bar
+    # -- finding the menus
 
-    def find(self):
+    # Chromium/Electron build their tree on the first question, and VS Code
+    # turns accessibility on itself some seconds after its window appears:
+    # ask again for a while, between other commands (timers, not sleeps).
+    RETRY = [0.3, 0.6, 1.0, 1.5, 2, 3, 4, 4, 4]
+
+    def find(self, attempt=0):
+        if not self.alive:
+            return
         A = atspi()
-        for tries in range(4):
-            if not A:
-                break
+        found = False
+        if A:
             try:
-                mb = self.locate(A)
+                found = self.locate(A)
             except Exception as e:
                 err(f"AT-SPI: {e}")
-                mb = None
-            if mb is not None:
-                self.mb = mb
-                self.emit()
-                return
-            if not self.lazy:
-                break  # no menu bar (Qt, GTK...) or no accessibility (games)
-            # Chromium builds its tree on the first question: ask again.
-            time.sleep(0.4 * (tries + 1))
-        out({"type": "none", "key": self.key})
+        if found:
+            self.emit()
+            return
+        if attempt == 0:
+            out({"type": "none", "key": self.key})
+        # Only Chromium (lazy tree); Qt/GTK/Gecko answer the first time.
+        if self.lazy and attempt < len(self.RETRY):
+            later(self.RETRY[attempt], lambda: self.find(attempt + 1))
 
-    def locate(self, A):
-        if AtspiMenu.SKIP is None:
-            R = A.Role
-            AtspiMenu.SKIP = {R.DOCUMENT_WEB, R.DOCUMENT_FRAME, R.TERMINAL, R.TABLE, R.TREE_TABLE,
-                              R.TREE, R.LIST, R.LIST_BOX, R.TEXT, R.ENTRY, R.PAGE_TAB_LIST,
-                              R.SCROLL_PANE, R.EMBEDDED}
+    def apps(self, A):
         desk = A.get_desktop(0)
         chain = ancestors(self.pid)
         apps = []
@@ -216,6 +262,29 @@ class AtspiMenu:
                 apps.insert(0, a)
             elif p in chain:
                 apps.append(a)
+        return apps
+
+    def frames(self, A, app):
+        frames = [app.get_child_at_index(i) for i in range(app.get_child_count())]
+
+        def rank(f):
+            try:
+                n = f.get_name() or ""
+                active = f.get_state_set().contains(A.StateType.ACTIVE)
+            except Exception:
+                return 9
+            return 0 if n == self.title else 1 if active else 2
+
+        return sorted([f for f in frames if f], key=rank)
+
+    def locate(self, A):
+        if AtspiMenu.SKIP is None:
+            R = A.Role
+            AtspiMenu.SKIP = {R.DOCUMENT_WEB, R.DOCUMENT_FRAME, R.TERMINAL, R.TABLE, R.TREE_TABLE,
+                              R.TREE, R.LIST, R.LIST_BOX, R.TEXT, R.ENTRY, R.PAGE_TAB_LIST,
+                              R.SCROLL_PANE, R.EMBEDDED}
+        apps = self.apps(A)
+
         def toolkit(a):
             try:
                 return a.get_toolkit_name() or ""
@@ -224,42 +293,74 @@ class AtspiMenu:
 
         self.lazy = any(toolkit(a) == "Chromium" for a in apps)
         for app in apps:
-            frames = [app.get_child_at_index(i) for i in range(app.get_child_count())]
-            frames = [f for f in frames if f]
-
-            def rank(f):
+            for f in self.frames(A, app):
+                # 1. A native menu bar; 2. one in the page; 3. a ☰ button.
+                mb = self.search(A, f, lambda o, r: r == A.Role.MENU_BAR, web=False)
+                kind = None
+                if mb is not None and self.has_titles(mb):
+                    kind = "kept" if mb.get_child_at_index(0).get_role() == A.Role.MENU else "live"
+                else:
+                    mb = self.search(A, f, lambda o, r: r == A.Role.MENU_BAR and self.has_titles(o),
+                                     web=True)
+                    if mb is not None:
+                        kind = "web"
+                trigger = None
+                if kind is None:
+                    trigger = self.search(A, f, self.is_burger, web=True)
+                    if trigger is None:
+                        continue
+                    kind = "burger"
+                self.app, self.frame, self.mb, self.trigger, self.kind = app, f, mb, trigger, kind
+                # Under a main loop libatspi caches children and would never
+                # see a popup appear: ask the app every time.
                 try:
-                    n = f.get_name() or ""
-                    active = f.get_state_set().contains(A.StateType.ACTIVE)
+                    app.set_cache_mask(A.Cache.NONE)
                 except Exception:
-                    return 9
-                return 0 if n == self.title else 1 if active else 2
+                    pass
+                if kind == "burger":
+                    self.burger = load_cache().get(self.burger_key())
+                return True
+        return False
 
-            for f in sorted(frames, key=rank):
-                mb = self.search(A, f)
-                if mb is not None and mb.get_child_count() > 0:
-                    self.app, self.frame = app, f
-                    # Under a main loop libatspi caches children and would
-                    # never see a popup appear: ask the app every time.
-                    try:
-                        app.set_cache_mask(A.Cache.NONE)
-                    except Exception:
-                        pass
-                    return mb
-        return None
+    def has_titles(self, mb):
+        try:
+            return any((mb.get_child_at_index(i).get_name() or "")
+                       for i in range(min(mb.get_child_count(), 30)))
+        except Exception:
+            return False
 
-    def search(self, A, root):
-        todo, seen = [(root, 0)], 0
-        while todo and seen < 4000:
+    def is_burger(self, o, r):
+        A = Atspi
+        if r not in (A.Role.PUSH_BUTTON, A.Role.TOGGLE_BUTTON):
+            return False
+        name = (o.get_name() or "").strip().lower()
+        if name not in BURGER_NAMES:
+            return False
+        # In the top of the window: a title bar's button, not a list's.
+        try:
+            e = o.get_component_iface().get_extents(A.CoordType.WINDOW)
+            return self.to_surface(o, e.x, e.y)[1] < 120
+        except Exception:
+            return True
+
+    def search(self, A, root, test, web):
+        """Breadth-first search under `root` for test(o, role); `web`: also
+        into web pages. Bounded in nodes and time: each call to a busy app
+        can take a while."""
+        todo, seen, until = [(root, 0)], 0, time.monotonic() + 1.5
+        while todo and seen < 5000 and time.monotonic() < until:
             o, d = todo.pop(0)
             seen += 1
             try:
                 r = o.get_role()
+                if test(o, r):
+                    return o
             except Exception:
                 continue
-            if r == A.Role.MENU_BAR:
-                return o
-            if d >= 14 or r in AtspiMenu.SKIP:
+            if d >= (30 if web else 14):
+                continue
+            if r in AtspiMenu.SKIP and not (web and r in (A.Role.DOCUMENT_WEB, A.Role.DOCUMENT_FRAME,
+                                                           A.Role.EMBEDDED, A.Role.SCROLL_PANE)):
                 continue
             try:
                 n = o.get_child_count()
@@ -270,6 +371,12 @@ class AtspiMenu:
                 if c:
                     todo.append((c, d + 1))
         return None
+
+    def burger_key(self):
+        try:
+            return f"{self.app.get_name()}|{self.trigger.get_name()}"
+        except Exception:
+            return ""
 
     # -- the tree
 
@@ -286,13 +393,9 @@ class AtspiMenu:
             o = o.get_child_at_index(i) if o else None
         return o
 
-    def is_live(self, top):
-        try:
-            return top.get_role() != Atspi.Role.MENU
-        except Exception:
-            return True
-
-    def convert(self, o, path, depth=0):
+    def convert(self, o, path, depth=0, deep=False):
+        """An accessible menu item as an item dict; `deep`: its submenu's
+        items too (kept menus, whose items exist while closed)."""
         A = Atspi
         try:
             role = o.get_role()
@@ -315,40 +418,78 @@ class AtspiMenu:
             pass
         sub = role == A.Role.MENU or st.contains(A.StateType.HAS_POPUP)
         kids = []
-        if sub and depth < 5:
+        if sub and deep and depth < 5:
             for i in range(min(o.get_child_count(), 300)):
                 c = o.get_child_at_index(i)
-                k = c and self.convert(c, list(path) + [i], depth + 1)
+                k = c and self.convert(c, list(path) + [i], depth + 1, deep)
                 if k:
                     kids.append(k)
         toggle = ("checkmark" if role == A.Role.CHECK_MENU_ITEM
                   else "radio" if role == A.Role.RADIO_MENU_ITEM else "")
+        if not label and not sub:
+            return None
         return item(self.nid(path), label,
                     enabled=st.contains(A.StateType.ENABLED) or st.contains(A.StateType.SENSITIVE),
                     toggleType=toggle,
                     toggleState=(1 if st.contains(A.StateType.CHECKED) else 0) if toggle else -1,
                     shortcut=shortcut, submenu=sub, children=kids)
 
+    def read(self, menu, path):
+        """The items of an open `menu`, the container at `path`."""
+        kids = []
+        for i in range(min(menu.get_child_count(), 300)):
+            c = menu.get_child_at_index(i)
+            k = c and self.convert(c, list(path) + [i])
+            if k:
+                kids.append(k)
+        self.cache[tuple(path)] = kids
+        return kids
+
+    def filled(self, items):
+        """Items with the submenus read so far put in."""
+        res = []
+        for it in items:
+            it = dict(it)
+            p = self.paths.get(it["id"])
+            if p is not None and p in self.cache:
+                it["children"] = self.filled(self.cache[p])
+            res.append(it)
+        return res
+
+    def placeholder(self, nid):
+        return [item(-1000 - abs(nid), "…", enabled=False)]
+
+    def tops(self):
+        """[(path, label, kept accessible or None)] of the menu bar's menus."""
+        if self.kind == "burger":
+            b = self.burger
+            if not b:
+                return [((-2,), (self.trigger.get_name() or "Menu").strip().title(), None)]
+            if b.get("flat"):
+                return [((-1,), (self.trigger.get_name() or "Menu").strip().title(), None)]
+            return [((i,), l, None) for i, l in enumerate(b.get("labels", [])) if l]
+        res = []
+        for i in range(self.mb.get_child_count()):
+            c = self.mb.get_child_at_index(i)
+            if c and (c.get_name() or ""):
+                res.append(((i,), split_shortcut(c.get_name())[0], c if self.kind == "kept" else None))
+        return res
+
     def emit(self):
-        if not self.alive or self.mb is None:
+        if not self.alive or self.kind is None:
             return
         tops = []
         try:
-            for i in range(self.mb.get_child_count()):
-                c = self.mb.get_child_at_index(i)
-                if not c:
-                    continue
-                name = c.get_name() or ""
-                if not name:
-                    continue
-                if self.is_live(c):
-                    t = item(self.nid([i]), name, submenu=True, children=self.cache.get((i,), []))
-                else:
-                    t = self.convert(c, [i]) or item(self.nid([i]), name, submenu=True)
+            for path, label, kept in self.tops():
+                nid = self.nid(path)
+                if kept is not None:
+                    t = self.convert(kept, path, deep=True) or item(nid, label)
                     t["submenu"] = True
+                else:
+                    t = item(nid, label, submenu=True,
+                             children=self.filled(self.cache.get(path, [])))
                 if not t["children"]:
-                    # Filled when it opens (open() below).
-                    t["children"] = [item(-1000 - i, "…", enabled=False)]
+                    t["children"] = self.placeholder(nid)  # filled when it opens
                 tops.append(t)
         except Exception as e:
             err(f"AT-SPI: {e}")
@@ -357,7 +498,7 @@ class AtspiMenu:
     # -- the app's own menus, opened for a moment
 
     def popups(self):
-        """The app's open menus (live apps), outermost first."""
+        """The app's open popup menus (frames of their own), outermost first."""
         A, found = Atspi, []
         try:
             self.app.clear_cache()
@@ -374,8 +515,6 @@ class AtspiMenu:
                     if r == A.Role.MENU and o.get_child_count() > 0:
                         found.append(o)
                         continue
-                    # Chromium puts a popup's menu some levels into its
-                    # own frame; web content is never searched.
                     if d < 12 and r not in (A.Role.DOCUMENT_WEB, A.Role.DOCUMENT_FRAME):
                         for k in range(min(o.get_child_count(), 50)):
                             c = o.get_child_at_index(k)
@@ -384,6 +523,70 @@ class AtspiMenu:
         except Exception:
             pass
         return found
+
+    def page_menu(self, near):
+        """A menu shown in the page (web kind): first under `near` (VS Code
+        puts it in the title's element), else anywhere in its document."""
+        A = Atspi
+        test = (lambda o, r: r == A.Role.MENU and o.get_child_count() > 0
+                and o.get_state_set().contains(A.StateType.SHOWING))
+        m = self.search(A, near, test, web=True)
+        if m is None:
+            doc = self.document(near)
+            if doc is not None:
+                m = self.search(A, doc, test, web=True)
+        return m
+
+    def document(self, o):
+        """The outermost web document `o` is in, or None (a native widget)."""
+        A, doc = Atspi, None
+        try:
+            for _ in range(60):
+                o = o.get_parent()
+                if o is None:
+                    break
+                r = o.get_role()
+                if r in (A.Role.DOCUMENT_WEB, A.Role.DOCUMENT_FRAME):
+                    doc = o
+                elif r in (A.Role.FRAME, A.Role.APPLICATION):
+                    break
+        except Exception:
+            pass
+        return doc
+
+    def to_surface(self, o, x, y):
+        """AT-SPI window coordinates -> the window surface's logical pixels.
+        Chromium reports its own widgets in logical pixels but web content in
+        device pixels (a 960x600 page is 1280x800 at 4/3): divide by the
+        page's size over its host's."""
+        doc = self.document(o) if Atspi.Accessible.get_role(o) not in (
+            Atspi.Role.DOCUMENT_WEB, Atspi.Role.DOCUMENT_FRAME) else o
+        if doc is None:
+            return x, y
+        try:
+            d = doc.get_component_iface().get_extents(Atspi.CoordType.WINDOW)
+            p = doc.get_parent().get_component_iface().get_extents(Atspi.CoordType.WINDOW)
+            k = d.width / p.width if p.width > 0 and d.width > 0 else 1
+        except Exception:
+            k = 1
+        return x / k, y / k
+
+    def press(self, o):
+        """Open/activate `o`: a click through arbor for page elements (they
+        ignore the accessible press: they open on pointer-down), the
+        accessible action for native widgets."""
+        if self.document(o) is None:
+            return self.act(o)
+        if not self.window:
+            return False
+        try:
+            e = o.get_component_iface().get_extents(Atspi.CoordType.WINDOW)
+        except Exception:
+            return False
+        if e.width <= 0 or e.height <= 0:
+            return False
+        x, y = self.to_surface(o, e.x + e.width / 2, e.y + e.height / 2)
+        return arbor("click-window", "--id", str(self.window), "--x", f"{x:.2f}", "--y", f"{y:.2f}")
 
     def act(self, o):
         try:
@@ -395,7 +598,7 @@ class AtspiMenu:
             err(f"AT-SPI action: {e}")
         return False
 
-    def wait(self, test, then, fail=None, tries=30):
+    def wait(self, test, tries=30):
         """Poll test() every 40 ms (the app answers asynchronously)."""
         for _ in range(tries):
             try:
@@ -403,128 +606,183 @@ class AtspiMenu:
             except Exception:
                 r = None
             if r:
-                then(r)
-                return
+                return r
             time.sleep(0.04)
-        self.busy = False
-        if fail:
-            fail()
+        return None
 
-    def open_live(self, path, then):
-        """Open the app's menus down to `path` (a live top menu and the
-        submenus in it); then(menu accessible holding path's items)."""
-        top = self.node(path[:1])
-        if top is None or not self.act(top):
-            self.busy = False
-            return
-        level = [1]
+    def open_burger(self):
+        """Click the ☰ and wait for its popup. A button that keeps its own
+        open/closed state (Claude Desktop's) still thinks it is open after
+        its menu was closed from outside (ClosePopups): the first click
+        then only "closes" it, so click again when nothing opened."""
+        if self.reset_burger:
+            # We closed its menu from outside last time: one click first to
+            # put its state back (it opens nothing).
+            self.reset_burger = False
+            self.press(self.trigger)
+            time.sleep(0.12)
+        for tries in (15, 25):
+            if not self.press(self.trigger):
+                return None
+            menus = self.wait(self.popups, tries)
+            if menus:
+                self.burger_open = True
+                return menus
+        return None
 
-        def step(menus):
-            menu = menus[level[0] - 1]
-            if level[0] >= len(path):
-                then(menu, top)
-                return
-            c = menu.get_child_at_index(path[level[0]])
-            want = level[0] + 1
-            level[0] = want
-            if c is None or not self.act(c):
-                self.close_live(top)
-                self.busy = False
-                return
-            self.wait(lambda: (lambda m: m if len(m) >= want else None)(self.popups()), step,
-                      fail=lambda: self.close_live(top))
+    def open_chain(self, path):
+        """Open the app's menus down to the container at `path` (a top menu,
+        then submenus in it); returns its accessible, None on failure. Close
+        with close_all()."""
+        if self.kind == "burger":
+            menus = self.open_burger()
+            if not menus:
+                return None
+            menu, rest = menus[0], list(path[1:]) if path[0] < 0 else list(path)
+        else:
+            top = self.node(path[:1])
+            if top is None or not self.press(top):
+                return None
+            if self.kind == "web":
+                menu = self.wait(lambda: self.page_menu(top))
+            else:
+                menus = self.wait(self.popups)
+                menu = menus[0] if menus else None
+            rest = list(path[1:])
+        for idx in rest:
+            if menu is None:
+                return None
+            c = menu.get_child_at_index(idx)
+            if c is None:
+                return None
+            if self.kind == "web":
+                if not self.press(c):
+                    return None
+                menu = self.wait(lambda: self.page_menu(c))
+            else:
+                n = len(self.popups())
+                if not self.act(c):
+                    return None
+                menus = self.wait(lambda: (lambda m: m if len(m) > n else None)(self.popups()))
+                menu = menus[-1] if menus else None
+        return menu
 
-        self.wait(lambda: (lambda m: m if m else None)(self.popups()), step,
-                  fail=lambda: self.close_live(top))
-
-    def close_live(self, top):
-        if self.popups():
-            self.act(top)
+    def close_all(self, path):
+        if self.kind == "web":
+            top = self.node(path[:1])
+            if top is not None and self.page_menu(top) is not None:
+                self.press(top)  # its title again closes it
+        elif self.kind == "live":
+            top = self.node(path[:1])
+            if self.popups() and top is not None:
+                self.act(top)
+        elif self.burger_open or self.popups():
+            # Not by asking AT-SPI first: it may not show the popup yet.
+            self.burger_open = False
+            arbor("close-popups", "--id", str(self.window))
+            self.reset_burger = self.document(self.trigger) is not None
 
     def open(self, nid):
         path = self.paths.get(nid)
-        if not path or self.busy or self.mb is None:
+        if not path or self.busy or self.kind is None:
             return
-        top = self.node(path[:1])
-        if top is None:
-            return
-        if self.is_live(top):
-            self.busy = True
-
-            def read(menu, top_):
-                kids = []
-                for i in range(min(menu.get_child_count(), 300)):
-                    c = menu.get_child_at_index(i)
-                    k = c and self.convert(c, list(path) + [i], 1)
-                    if k:
-                        kids.append(k)
-                self.cache[tuple(path)] = kids
-                self.close_live(top_)
-                self.busy = False
-                # Nested live menus go into their parent's list.
-                if len(path) > 1:
-                    parent = self.cache.get(tuple(path[:-1]), [])
-                    for p in parent:
-                        if p["id"] == nid:
-                            p["children"] = kids
-                    self.cache[tuple(path[:-1])] = parent
-                self.emit()
-
-            self.open_live(list(path), read)
-            return
-        o = self.node(path)
-        if o is None:
-            return
-        if o.get_child_count() > 0:
-            self.emit()  # kept: just read it again (states change)
-            return
-        # Never opened yet: open it in the app once, read, close.
-        self.busy = True
-        if not self.act(o):
-            self.busy = False
-            return
-
-        def done(_):
+        if self.kind == "kept":
+            o = self.node(path)
+            if o is None:
+                return
+            if o.get_child_count() > 0:
+                self.emit()  # just read it again (states change)
+                return
+            # Never opened yet: open it in the app once, read, close.
+            if not self.act(o):
+                return
+            self.wait(lambda: o.get_child_count() > 0)
             if o.get_state_set().contains(Atspi.StateType.EXPANDED):
                 self.act(o)
-            self.busy = False
             self.emit()
+            return
+        self.busy = True
+        try:
+            if path == (-2,):
+                self.learn_burger()
+            else:
+                menu = self.open_chain(path)
+                if menu is not None:
+                    self.read(menu, path)
+                self.close_all(path)
+        finally:
+            self.busy = False
+        self.emit()
 
-        self.wait(lambda: o.get_child_count() > 0, done)
+    def learn_burger(self):
+        """First look at a ☰: are its items submenus (they become the menu
+        bar's menus) or commands (one menu)? Kept per app."""
+        menus = self.open_burger()
+        if not menus:
+            return
+        root = menus[0]
+        labels, subs = [], 0
+        for i in range(min(root.get_child_count(), 60)):
+            c = root.get_child_at_index(i)
+            try:
+                labels.append(split_shortcut(c.get_name() or "")[0])
+                if c.get_role() == Atspi.Role.MENU or c.get_state_set().contains(Atspi.StateType.HAS_POPUP):
+                    subs += 1
+            except Exception:
+                labels.append("")
+        named = [l for l in labels if l]
+        flat = subs < max(1, len(named) // 2)
+        if flat:
+            self.read(root, (-1,))
+        self.close_all((-1,))
+        self.burger = {"flat": flat, "labels": labels}
+        c = load_cache()
+        c[self.burger_key()] = self.burger
+        save_cache(c)
 
     def close(self, nid):
         pass
 
     def click(self, nid):
         path = self.paths.get(nid)
-        if not path or self.mb is None:
+        if not path or self.kind is None or len(path) < 2 and self.kind != "kept":
             return
-        top = self.node(path[:1])
-        if top is None:
-            return
-        if not self.is_live(top):
+        if self.kind == "kept":
             o = self.node(path)
             if o is not None:
                 self.act(o)
             return
-        if self.busy or len(path) < 2:
+        if self.busy:
             return
         self.busy = True
-        want = None
-        for k in self.cache.get(tuple(path[:-1]), []):
-            if k["id"] == nid:
-                want = k["label"]
-
-        def press(menu, top_):
-            c = menu.get_child_at_index(path[-1])
+        try:
+            want = None
+            for k in self.cache.get(tuple(path[:-1]), []):
+                if k["id"] == nid:
+                    want = k["label"]
+            menu = self.open_chain(path[:-1])
+            c = menu.get_child_at_index(path[-1]) if menu is not None else None
             name = split_shortcut((c.get_name() or "") if c else "")[0]
-            self.busy = False
             if c is None or (want is not None and name != want):
-                self.close_live(top_)  # the menu changed since: don't guess
+                self.close_all(path)  # the menu changed since: don't guess
                 return
-            self.act(c)
+            if self.kind == "web":
+                self.press(c)
+            else:
+                self.act(c)
+            self.burger_open = False  # choosing an item closes the menu
+        finally:
+            self.busy = False
 
-        self.open_live(list(path[:-1]), press)
+
+def arbor(*args):
+    """`arbor msg action ...` (ClickWindow, ClosePopups)."""
+    import subprocess
+    try:
+        return subprocess.run(["arbor", "msg", "action", *args], capture_output=True,
+                              timeout=3).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
 
 
 # ---------------------------------------------------------------- commands
@@ -538,12 +796,13 @@ def handle(line):
     cmd = c.get("cmd")
     try:
         if cmd == "watch":
-            if current and current.key == c.get("key") and current.mb is not None:
+            if current and current.key == c.get("key") and current.kind is not None:
                 current.emit()
                 return
             if current:
                 current.stop()
-            current = AtspiMenu(c.get("key", ""), c.get("title", ""), c.get("pid", 0))
+            current = AtspiMenu(c.get("key", ""), c.get("title", ""), c.get("pid", 0),
+                                c.get("window", 0))
         elif cmd == "unwatch":
             if current:
                 current.stop()
@@ -556,12 +815,47 @@ def handle(line):
         err(e)
 
 
+timers = []  # (when, fn)
+
+
+def later(delay, fn):
+    timers.append((time.monotonic() + delay, fn))
+
+
 def main():
     # No GLib main loop: under one, libatspi dispatching the apps' event
     # flood deadlocked (stuck in a futex, the next command never handled).
-    # Blocking calls are fine in a process of its own.
-    for line in sys.stdin:
-        handle(line)
+    # Blocking calls are fine in a process of its own; stdin and the retry
+    # timers are served by select.
+    import select
+    try:  # go when hearth-appmenu goes, even if stuck in a call
+        import ctypes
+        import signal
+        ctypes.CDLL(None).prctl(1, signal.SIGTERM)  # PR_SET_PDEATHSIG
+    except Exception:
+        pass
+    buf = b""
+    fd = sys.stdin.fileno()
+    while True:
+        now = time.monotonic()
+        due = [t for t in timers if t[0] <= now]
+        for t in due:
+            timers.remove(t)
+            try:
+                t[1]()
+            except Exception as e:
+                err(e)
+        wait = max(0.0, min(t[0] for t in timers) - time.monotonic()) if timers else None
+        r, _, _ = select.select([fd], [], [], wait)
+        if not r:
+            continue
+        data = os.read(fd, 65536)
+        if not data:
+            return
+        buf += data
+        while b"\n" in buf:
+            line, buf = buf.split(b"\n", 1)
+            handle(line.decode("utf-8", "replace"))
 
 
 if __name__ == "__main__":
