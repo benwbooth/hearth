@@ -56,6 +56,10 @@ Singleton {
 
     function setNightLight(on) {
         root.nightLight = on;
+        // Kept until the schedule next changes, across shell restarts (each
+        // hearth update restarts the shell, which used to switch a night
+        // light you had turned off straight back on).
+        root.overrideUntil = on === root.scheduledNight() ? 0 : root.nextScheduleChange();
         root.applyNightLight();
         root.saveState();
     }
@@ -255,6 +259,18 @@ Singleton {
         const h = new Date().getHours();
         return h >= root.nightStartHour || h < root.nightEndHour;
     }
+    // When the schedule next switches (ms since the epoch).
+    function nextScheduleChange() {
+        const d = new Date();
+        d.setMinutes(0, 0, 0);
+        do d.setHours(d.getHours() + 1);
+        while (d.getHours() !== root.nightStartHour && d.getHours() !== root.nightEndHour);
+        return d.getTime();
+    }
+    // A manual on/off lasts until then (0: following the schedule).
+    property real overrideUntil: 0
+    // Nothing is applied before the saved state is read.
+    property bool stateRead: false
 
     function applyNightLight() {
         if (Compositor.isArbor) {
@@ -269,7 +285,11 @@ Singleton {
             : ["hyprctl", "hyprsunset", "identity"]);
     }
     Process { id: gammastep }
-    Component.onCompleted: if (Compositor.isArbor) applyNightLight()
+    function stateReady() {
+        if (root.stateRead) return;
+        root.stateRead = true;
+        if (Compositor.isArbor) root.applyNightLight();
+    }
 
     Timer {
         id: tempDebounce
@@ -285,12 +305,20 @@ Singleton {
         property bool last: root.scheduledNight()
         onTriggered: {
             const now = root.scheduledNight();
-            if (now !== last) { last = now; root.nightLight = now; if (Compositor.isArbor) root.applyNightLight(); }
+            if (now !== last) {
+                last = now;
+                root.overrideUntil = 0;
+                root.nightLight = now;
+                if (Compositor.isArbor) root.applyNightLight();
+                root.saveState();
+            }
         }
     }
 
     function saveState() {
-        state.setText(JSON.stringify({ temperature: root.temperature }, null, 2));
+        const s = { temperature: root.temperature };
+        if (root.overrideUntil > Date.now()) s.override = { on: root.nightLight, until: root.overrideUntil };
+        state.setText(JSON.stringify(s, null, 2));
     }
 
     FileView {
@@ -301,7 +329,13 @@ Singleton {
             try {
                 const s = JSON.parse(text());
                 if (s.temperature) root.temperature = s.temperature;
+                if (s.override && s.override.until > Date.now()) {
+                    root.overrideUntil = s.override.until;
+                    root.nightLight = !!s.override.on;
+                }
             } catch (e) {}
+            root.stateReady();
         }
+        onLoadFailed: root.stateReady()
     }
 }

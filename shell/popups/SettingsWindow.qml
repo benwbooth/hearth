@@ -519,7 +519,7 @@ Scope {
             Group {
                 Row_ {
                     label: "Night Light"
-                    note: `Warmer colours in the evening: on automatically from ${Brightness.nightStartHour}:00 to ${Brightness.nightEndHour}:00. Switching it here lasts until the next scheduled change.`
+                    note: `Warmer colours in the evening: on automatically from ${Brightness.nightStartHour}:00 to ${Brightness.nightEndHour}:00. Switching it here lasts until the next scheduled change, even if the desktop restarts.`
                     Toggle {
                         checked: Brightness.nightLight
                         onToggled: c => Brightness.setNightLight(c)
