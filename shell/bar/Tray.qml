@@ -72,7 +72,8 @@ Row {
         function showMenu() {
             const win = item.QsWindow.window;
             const p = item.mapToItem(win.contentItem, 0, 0);
-            modelData.display(win, p.x, p.y);
+            // Below the icon, like macOS, so the menu never covers the tray.
+            modelData.display(win, p.x, p.y + item.height);
         }
 
         onClicked: mouse => {
