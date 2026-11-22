@@ -186,8 +186,16 @@
         # lists them: only real shell instances (not Quickshell's own helper
         # process, which has the same command line and is always newer) and
         # only this login's runtime dir (not smoke tests or nested test
-        # sessions, which run with their own).
-        pid=\$(${quickshell}/bin/quickshell list --all --json 2>/dev/null | ${pkgs.jq}/bin/jq -r '[.[] | select(.config_path | test("^/nix/store/[^/]*-hearth-[^/]*/share/hearth/shell/shell.qml\$"))] | sort_by(.launch_time) | last | .pid // empty')
+        # sessions, which run with their own). A test shell that shares the
+        # runtime dir anyway (HEARTH_SESSION_DRYRUN=1, or another Wayland
+        # display) is skipped: it took Super+L and every shortcut once.
+        pid=""
+        for p in \$(${quickshell}/bin/quickshell list --all --json 2>/dev/null | ${pkgs.jq}/bin/jq -r '[.[] | select(.config_path | test("^/nix/store/[^/]*-hearth-[^/]*/share/hearth/shell/shell.qml\$"))] | sort_by(.launch_time) | reverse | .[].pid'); do
+          env=\$(tr '\\0' '\\n' < /proc/\$p/environ 2>/dev/null) || continue
+          case "\$env" in *HEARTH_SESSION_DRYRUN=1*) continue ;; esac
+          if [ -n "\$WAYLAND_DISPLAY" ] && ! printf '%s\\n' "\$env" | grep -qx "WAYLAND_DISPLAY=\$WAYLAND_DISPLAY"; then continue; fi
+          pid=\$p; break
+        done
         if [ -n "\$pid" ]; then exec ${quickshell}/bin/quickshell ipc --pid "\$pid" "\$@"; fi
         exec ${quickshell}/bin/quickshell ipc -p $out/share/hearth/shell "\$@"
         EOF
