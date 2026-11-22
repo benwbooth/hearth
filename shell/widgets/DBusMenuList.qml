@@ -160,7 +160,7 @@ Item {
                         width: parent.width
                         enabled: row.modelData.enabled
                         text: row.modelData.label
-                        icon: row.modelData.toggleType === "" ? (row.modelData.icon || "") : ""
+                        icon: row.modelData.icon || ""
                         checkable: row.modelData.toggleType !== ""
                         radio: row.modelData.toggleType === "radio"
                         checked: row.modelData.toggleState === 1

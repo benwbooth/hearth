@@ -123,10 +123,20 @@ MouseArea {
         x: Math.round(5 * Theme.pt)
         width: Theme.menuGutter - x
         height: parent.height
+        // A checked toggle with an icon: a soft accent square behind the
+        // icon instead of a checkmark (as our apps' own ☰ menus show it).
+        Rectangle {
+            anchors.centerIn: parent
+            anchors.horizontalCenterOffset: -2
+            width: 22; height: 22
+            radius: 5
+            color: Theme.accentDim
+            visible: root.icon !== "" && root.checkable && root.checked
+        }
         Label {
             anchors.centerIn: parent
             anchors.horizontalCenterOffset: -2
-            visible: root.checkable && root.checked
+            visible: root.checkable && root.checked && root.icon === ""
             text: root.radio ? "●" : "✓"
             color: root.textColor
             font.pointSize: root.radio ? Theme.macPt(7) : Theme.menuFontSize
@@ -137,7 +147,7 @@ MouseArea {
             anchors.horizontalCenterOffset: -2
             implicitSize: 16
             name: root.icon
-            visible: root.icon !== "" && !(root.checkable && root.checked)
+            visible: root.icon !== ""
             opacity: root.enabled ? 1 : 0.35
         }
     }

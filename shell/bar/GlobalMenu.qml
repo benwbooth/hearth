@@ -279,6 +279,7 @@ Row {
             MenuTitle {
                 id: title
                 text: topItem.modelData.label
+                icon: topItem.modelData.icon || ""
                 tip: "The " + topItem.modelData.label + " menu of " + root.appName
                 enabled: topItem.modelData.enabled
                 popup: pop
@@ -408,9 +409,11 @@ Row {
         readonly property bool menuPress: !!bar && bar.pressTitle !== undefined
         readonly property var bar: t.QsWindow.window
         property string tip: ""
+        // The app's icon for this menu (dbusmenu icon-name), before the label.
+        property string icon: ""
         hoverEnabled: true
         implicitHeight: Theme.menuBarHeight
-        implicitWidth: label.implicitWidth + 2 * Math.round(9.5 * Theme.pt)
+        implicitWidth: titleRow.implicitWidth + 2 * Math.round(9.5 * Theme.pt)
         onPressed: mouse => { ShellState.pressedIn(t); if (menuPress) bar.pressTitle(t, popup, mouse); else popup.toggle(); }
         onPositionChanged: mouse => { if (menuPress && pressed) bar.dragTitle(t, popup, mouse); }
         onReleased: mouse => { if (menuPress) bar.releaseTitle(t, popup, mouse); }
@@ -431,14 +434,26 @@ Row {
             text: t.tip
             hovered: t.containsMouse && !(t.popup && t.popup.open) && !ShellState.activePopup
         }
-        Label {
-            id: label
+        Row {
+            id: titleRow
             anchors.centerIn: parent
-            text: t.text
-            color: t.enabled ? Theme.barFg : Theme.barFgDim
-            font.pointSize: Theme.menuBarFontSize
-            font.weight: t.bold ? Font.Bold : Font.Normal
-            font.letterSpacing: Theme.menuTracking
+            spacing: Math.round(5 * Theme.pt)
+            Icon {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: t.icon !== ""
+                name: t.icon
+                implicitSize: 16
+                opacity: t.enabled ? 1 : 0.45
+            }
+            Label {
+                id: label
+                anchors.verticalCenter: parent.verticalCenter
+                text: t.text
+                color: t.enabled ? Theme.barFg : Theme.barFgDim
+                font.pointSize: Theme.menuBarFontSize
+                font.weight: t.bold ? Font.Bold : Font.Normal
+                font.letterSpacing: Theme.menuTracking
+            }
         }
     }
 }
