@@ -215,6 +215,21 @@ mac layout). Pieces:
     the satellite, the helper takes `_NET_ACTIVE_WINDOW` and reads its
     `_KDE_NET_WM_APPMENU_*` / `_GTK_*` properties with `xprop`, or the menu
     the app registered for that window id with `RegisterWindow`.
+  - AT-SPI (accessibility), for a Wayland window that exports no menu:
+    `helpers/hearth-atspi-menu`, a worker the helper starts on first use,
+    reads the window's in-window menu bar from the accessibility bus (found
+    by the window's pid) and clicks its items through their accessible
+    actions. Firefox/Thunderbird keep a menu's items once it has been
+    opened; Electron/Chromium only have them while the app's own popup is
+    open. So a menu without items yet is opened in the app for a moment
+    (about 60 ms, under hearth's menu), read and closed, and an Electron
+    item is clicked by opening its menu again and activating it there.
+    Shortcuts come from the accessible key binding (Gecko) or the end of
+    the label (Electron: "Save As... Ctrl+Shift+S"). Needs accessibility
+    on (`org.a11y.Status IsEnabled`, as in the arbor session); the app's
+    own menu bar stays in its window. Its own process because libatspi
+    deadlocked in a GLib main loop (and next to dbus-python): the worker
+    reads stdin and polls with short sleeps instead.
 - `nix/appmenu-gtk-module.nix` (`.#appmenu-gtk-module`, linked into hearth's
   `lib/gtk-3.0/modules`): vala-panel's appmenu-gtk-module (ex
   unity-gtk-module) for GTK 3 apps with plain GtkMenuBars, loaded by
@@ -250,8 +265,8 @@ Coverage on arbor (tested in a nested arbor on a private session bus,
 | Brave / Chrome / Chromium, Wayland | no | yes | Chromium's dbusmenu via KDE appmenu protocol (needs the registrar) |
 | Brave / Chromium, X11 | no | yes | RegisterWindow on our registrar |
 | Electron on X11 (VS Code/Cursor with `"window.titleBarStyle": "native"`, Slack, Teams, Spotify, ChatGPT app) | no | yes | RegisterWindow; Electron hides its in-window bar |
-| Electron on Wayland (Claude Desktop, VS Code, Cursor by default) | fallback | fallback | Electron has no Wayland global menu; run with `--ozone-platform=x11` to get it |
-| Firefox, Thunderbird | fallback | fallback | no global menu upstream (only distro patches) |
+| Electron on Wayland (Claude Desktop, VS Code, Cursor by default) | fallback | yes (2026-11-22) | AT-SPI: its in-window menu bar; the menu bar stays in the window too. Tested: VS Code 1.147 with `"window.titleBarStyle": "native"`. Untested: Claude Desktop (no window in the nested test), and VS Code/Cursor's default custom title bar, which draws its menus in the page |
+| Firefox, Thunderbird | fallback | yes (2026-11-22) | AT-SPI: the (hidden) XUL menu bar; Firefox 160 tested |
 | JetBrains IDEs (X11 by default) | no | expected yes, untested | IntelliJ's own dbusmenu + RegisterWindow on X11 |
 | Java Swing/AWT | fallback | fallback | no export without jayatana (not packaged) |
 | Wine / Proton games and apps | fallback | fallback | Wine draws its menus in the window |
@@ -263,7 +278,8 @@ Coverage on arbor (tested in a nested arbor on a private session bus,
 that arbor sessions don't run, so Qt menus only showed if something else
 owned it.
 
-Testing: `helpers/hearth-appmenu` speaks JSON lines on stdin/stdout (see its
+Testing: `hearth-ipc call appmenu openMenu File` opens a menu of the menu
+bar. `helpers/hearth-appmenu` speaks JSON lines on stdin/stdout (see its
 docstring), so a second copy with `HEARTH_APPMENU_REGISTRAR=0` can watch and
 click any menu on the bus; `hearth-ipc call appmenu dump` prints what the
 menu bar has. Never run the registrar on the live bus from a test session.

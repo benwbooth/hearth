@@ -135,7 +135,8 @@
           --set-default HEARTH_FONT_DIR ${fontDir} \
           --set-default HEARTH_VERSION "${hearthVersion}" \
           --set-default HEARTH_SOUND_DIR ${pkgs.sound-theme-freedesktop}/share/sounds/freedesktop/stereo \
-          --set-default HEARTH_XKB_RULES ${pkgs.xkeyboard_config}/share/X11/xkb/rules/evdev.lst
+          --set-default HEARTH_XKB_RULES ${pkgs.xkeyboard_config}/share/X11/xkb/rules/evdev.lst \
+          --set-default HEARTH_ATSPI_TYPELIB ${pkgs.at-spi2-core}/lib/girepository-1.0:${pkgs.gobject-introspection}/lib/girepository-1.0
         # hearth runs the shell and starts it again when arbor restarts in
         # place (`arbor msg action reload-binary`, or after a crash): the shell
         # quits with 75 when arbor's event stream drops (ArborBackend.qml), or

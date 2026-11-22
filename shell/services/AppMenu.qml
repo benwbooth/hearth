@@ -80,6 +80,8 @@ Singleton {
     // shell.qml at startup so apps launched later find the registrar.
     readonly property bool enabled: (Compositor.isArbor && Settings.mac) || Quickshell.env("HEARTH_APPMENU") === "1"
 
+    signal openRequested(string label)
+
     function send(obj) { if (proc.running) proc.write(JSON.stringify(obj) + "\n"); }
     function open(id) { send({ cmd: "open", id: id }); }
     function close(id) { send({ cmd: "close", id: id }); }
@@ -112,6 +114,13 @@ Singleton {
         target: "appmenu"
         // `hearth-ipc call appmenu watch :1.42 /MenuBar/1` (testing).
         function watch(service: string, path: string): void { root.forced = service ? service + "\n" + path : ""; }
+        // `hearth-ipc call appmenu openMenu File`: open that menu of the
+        // menu bar, as a click on its title would (tests).
+        function openMenu(label: string): string {
+            if (!root.topLevel.some(i => i.label === label)) return "no menu " + label;
+            root.openRequested(label);
+            return "ok";
+        }
         function dump(): string { return JSON.stringify({ key: root.key, request: root.request, own: root.ownRequest, forced: root.forced, registrar: root.registrarOwned, menu: root.menu }); }
     }
 

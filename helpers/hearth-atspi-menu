@@ -1,0 +1,568 @@
+#!/usr/bin/env python3
+"""Menus of apps that export none, read from their in-window menu bar over
+AT-SPI (the accessibility bus): Firefox, Thunderbird, Electron on Wayland
+(Claude Desktop, VS Code, Cursor...). Run by hearth-appmenu, whose JSON
+lines it speaks:
+
+stdin:  {"cmd": "watch", "key": K, "title": T, "pid": N}
+        {"cmd": "open", "id": N} / {"cmd": "click", "id": N} / {"cmd": "unwatch"}
+stdout: {"type": "menu", "key": K, "source": "atspi", "menu": ITEM}
+        {"type": "none", "key": K}   no accessible menu bar
+        {"type": "error", "message": str}
+
+Its own process: libatspi and dbus-python share libdbus, and in one process
+a blocking AT-SPI call could deadlock against hearth-appmenu's D-Bus main
+loop (seen: the helper stuck, Chromium left with a half-open menu).
+"""
+import json
+import os
+import sys
+
+# The AT-SPI typelibs (at-spi2-core, and DBus-1.0 from
+# gobject-introspection), for this process only: the shell's own
+# environment, which apps it starts inherit, doesn't carry them.
+if os.environ.get("HEARTH_ATSPI_TYPELIB"):
+    os.environ["GI_TYPELIB_PATH"] = os.pathsep.join(
+        os.environ["HEARTH_ATSPI_TYPELIB"].split(os.pathsep)
+        + [p for p in os.environ.get("GI_TYPELIB_PATH", "").split(os.pathsep) if p])
+
+import time  # noqa: E402
+
+current = None
+
+
+def out(obj):
+    try:
+        sys.stdout.write(json.dumps(obj) + "\n")
+        sys.stdout.flush()
+    except BrokenPipeError:
+        sys.exit(0)
+
+
+def err(e):
+    out({"type": "error", "message": str(e)})
+
+
+def strip_mnemonic(s):
+    res, i = [], 0
+    while i < len(s):
+        c = s[i]
+        if c == "_":
+            if i + 1 < len(s) and s[i + 1] == "_":
+                res.append("_")
+                i += 2
+                continue
+            i += 1
+            continue
+        res.append(c)
+        i += 1
+    return "".join(res)
+
+
+def item(nid, label="", **kw):
+    d = {"id": nid, "label": label, "enabled": True, "visible": True, "type": "standard",
+         "toggleType": "", "toggleState": -1, "icon": "", "shortcut": "",
+         "submenu": False, "children": []}
+    d.update(kw)
+    return d
+
+
+GTK_KEYS = {
+    "plus": "+", "minus": "-", "equal": "=", "comma": ",", "period": ".", "slash": "/",
+    "backslash": "\\", "question": "?", "semicolon": ";", "apostrophe": "'", "grave": "`",
+    "bracketleft": "[", "bracketright": "]", "Return": "Return", "KP_Enter": "Enter",
+    "Delete": "Del", "Insert": "Ins", "Escape": "Esc", "Page_Up": "PgUp",
+    "Page_Down": "PgDown", "BackSpace": "Backspace", "space": "Space",
+    "KP_Add": "+", "KP_Subtract": "-", "asterisk": "*", "exclam": "!",
+}
+GTK_MODS = {"primary": "Ctrl", "control": "Ctrl", "ctrl": "Ctrl", "shift": "Shift",
+            "alt": "Alt", "mod1": "Alt", "super": "Meta", "meta": "Meta", "hyper": "Hyper"}
+
+
+def gtk_accel_text(accel):
+    """'<Primary><Shift>z' -> 'Ctrl+Shift+Z' (the dbusmenu style above)."""
+    mods, rest = [], accel
+    while rest.startswith("<") and ">" in rest:
+        m, rest = rest[1:].split(">", 1)
+        mods.append(GTK_MODS.get(m.lower(), m))
+    if not rest:
+        return ""
+    key = GTK_KEYS.get(rest, rest.upper() if len(rest) == 1 else rest)
+    return "+".join(mods + [key])
+
+
+# Apps that export no menu (Firefox, Thunderbird, Electron on Wayland: Claude
+# Desktop, VS Code, Cursor...) still show their in-window menu bar to
+# accessibility tools. This reads it over AT-SPI (the accessibility bus,
+# which must be on: org.a11y.Status IsEnabled) and clicks its items through
+# their accessible actions. Two kinds:
+#   kept  Firefox/Thunderbird (XUL, also GTK): the top menus are "menu"
+#         objects whose items exist once the menu has been opened once and
+#         stay; items can be clicked while the menu is closed.
+#   live  Electron/Chromium: the top menus are buttons; the items exist only
+#         while the app's own popup is open.
+# Either way a menu with no items yet is opened in the app for a moment
+# (under hearth's own menu) to read it, then closed again.
+
+Atspi = None
+
+
+def atspi():
+    global Atspi
+    if Atspi is None:
+        try:
+            import gi
+            gi.require_version("Atspi", "2.0")
+            from gi.repository import Atspi as A
+            A.init()
+            A.set_timeout(800, 5000)
+            Atspi = A
+        except Exception as e:  # no typelib or no a11y bus
+            err(f"AT-SPI unavailable: {e}")
+            Atspi = False
+    return Atspi
+
+
+def ancestors(pid):
+    seen = []
+    try:
+        while pid > 1 and len(seen) < 32:
+            seen.append(pid)
+            with open(f"/proc/{pid}/stat") as f:
+                pid = int(f.read().rsplit(")", 1)[1].split()[1])
+    except (OSError, ValueError, IndexError):
+        pass
+    return seen
+
+
+SHORTCUT_RE = None
+
+
+def split_shortcut(label):
+    """Electron appends the shortcut to the label: 'Save As... Ctrl+Shift+S',
+    'Open Folder... [Ctrl+K Ctrl+O]'."""
+    global SHORTCUT_RE
+    if SHORTCUT_RE is None:
+        import re
+        mod = r"(?:Ctrl|Shift|Alt|Super|Meta|Cmd|Command|Option|AltGr)\+"
+        SHORTCUT_RE = re.compile(r"^(.*?\S)\s+(\[[^\]]+\]|(?:" + mod + r")+\S+|F\d{1,2})$")
+    m = SHORTCUT_RE.match(label)
+    if not m:
+        return label, ""
+    sc = m.group(2)
+    if sc.startswith("["):
+        sc = sc[1:-1].replace(" ", ", ")
+    return m.group(1), sc.replace("Super+", "Meta+")
+
+
+class AtspiMenu:
+    SKIP = None  # roles whose subtrees never hold the menu bar
+
+    def __init__(self, key, title, pid):
+        self.key, self.title, self.pid = key, title, int(pid or 0)
+        self.alive, self.busy, self.lazy = True, False, False
+        self.app = self.mb = self.frame = None
+        self.ids, self.paths = {}, {}
+        self.cache = {}  # live menus: path -> [item dicts] from the last look
+        self.find()
+
+    def request(self):
+        return {"key": self.key, "kind": "x11", "title": self.title, "pid": self.pid}
+
+    def same(self, other):
+        return isinstance(other, AtspiMenu) and other.key == self.key
+
+    def stop(self):
+        self.alive = False
+
+    # -- finding the menu bar
+
+    def find(self):
+        A = atspi()
+        for tries in range(4):
+            if not A:
+                break
+            try:
+                mb = self.locate(A)
+            except Exception as e:
+                err(f"AT-SPI: {e}")
+                mb = None
+            if mb is not None:
+                self.mb = mb
+                self.emit()
+                return
+            if not self.lazy:
+                break  # no menu bar (Qt, GTK...) or no accessibility (games)
+            # Chromium builds its tree on the first question: ask again.
+            time.sleep(0.4 * (tries + 1))
+        out({"type": "none", "key": self.key})
+
+    def locate(self, A):
+        if AtspiMenu.SKIP is None:
+            R = A.Role
+            AtspiMenu.SKIP = {R.DOCUMENT_WEB, R.DOCUMENT_FRAME, R.TERMINAL, R.TABLE, R.TREE_TABLE,
+                              R.TREE, R.LIST, R.LIST_BOX, R.TEXT, R.ENTRY, R.PAGE_TAB_LIST,
+                              R.SCROLL_PANE, R.EMBEDDED}
+        desk = A.get_desktop(0)
+        chain = ancestors(self.pid)
+        apps = []
+        for i in range(desk.get_child_count()):
+            a = desk.get_child_at_index(i)
+            try:
+                p = a.get_process_id() if a else 0
+            except Exception:
+                continue
+            if p == self.pid:
+                apps.insert(0, a)
+            elif p in chain:
+                apps.append(a)
+        def toolkit(a):
+            try:
+                return a.get_toolkit_name() or ""
+            except Exception:
+                return ""
+
+        self.lazy = any(toolkit(a) == "Chromium" for a in apps)
+        for app in apps:
+            frames = [app.get_child_at_index(i) for i in range(app.get_child_count())]
+            frames = [f for f in frames if f]
+
+            def rank(f):
+                try:
+                    n = f.get_name() or ""
+                    active = f.get_state_set().contains(A.StateType.ACTIVE)
+                except Exception:
+                    return 9
+                return 0 if n == self.title else 1 if active else 2
+
+            for f in sorted(frames, key=rank):
+                mb = self.search(A, f)
+                if mb is not None and mb.get_child_count() > 0:
+                    self.app, self.frame = app, f
+                    # Under a main loop libatspi caches children and would
+                    # never see a popup appear: ask the app every time.
+                    try:
+                        app.set_cache_mask(A.Cache.NONE)
+                    except Exception:
+                        pass
+                    return mb
+        return None
+
+    def search(self, A, root):
+        todo, seen = [(root, 0)], 0
+        while todo and seen < 4000:
+            o, d = todo.pop(0)
+            seen += 1
+            try:
+                r = o.get_role()
+            except Exception:
+                continue
+            if r == A.Role.MENU_BAR:
+                return o
+            if d >= 14 or r in AtspiMenu.SKIP:
+                continue
+            try:
+                n = o.get_child_count()
+            except Exception:
+                continue
+            for i in range(min(n, 200)):
+                c = o.get_child_at_index(i)
+                if c:
+                    todo.append((c, d + 1))
+        return None
+
+    # -- the tree
+
+    def nid(self, path):
+        k = tuple(path)
+        if k not in self.ids:
+            self.ids[k] = len(self.ids) + 1
+            self.paths[self.ids[k]] = k
+        return self.ids[k]
+
+    def node(self, path):
+        o = self.mb
+        for i in path:
+            o = o.get_child_at_index(i) if o else None
+        return o
+
+    def is_live(self, top):
+        try:
+            return top.get_role() != Atspi.Role.MENU
+        except Exception:
+            return True
+
+    def convert(self, o, path, depth=0):
+        A = Atspi
+        try:
+            role = o.get_role()
+            name = o.get_name() or ""
+            st = o.get_state_set()
+        except Exception:
+            return None
+        if role == A.Role.SEPARATOR:
+            return item(self.nid(path), type="separator")
+        if not st.contains(A.StateType.SHOWING) and not st.contains(A.StateType.VISIBLE):
+            return None
+        label, shortcut = split_shortcut(name)
+        try:
+            a = o.get_action_iface()
+            kb = a.get_key_binding(0) if a and a.get_n_actions() else ""
+            parts = kb.split(";")
+            if len(parts) >= 3 and parts[2]:
+                shortcut = gtk_accel_text(parts[2])
+        except Exception:
+            pass
+        sub = role == A.Role.MENU or st.contains(A.StateType.HAS_POPUP)
+        kids = []
+        if sub and depth < 5:
+            for i in range(min(o.get_child_count(), 300)):
+                c = o.get_child_at_index(i)
+                k = c and self.convert(c, list(path) + [i], depth + 1)
+                if k:
+                    kids.append(k)
+        toggle = ("checkmark" if role == A.Role.CHECK_MENU_ITEM
+                  else "radio" if role == A.Role.RADIO_MENU_ITEM else "")
+        return item(self.nid(path), label,
+                    enabled=st.contains(A.StateType.ENABLED) or st.contains(A.StateType.SENSITIVE),
+                    toggleType=toggle,
+                    toggleState=(1 if st.contains(A.StateType.CHECKED) else 0) if toggle else -1,
+                    shortcut=shortcut, submenu=sub, children=kids)
+
+    def emit(self):
+        if not self.alive or self.mb is None:
+            return
+        tops = []
+        try:
+            for i in range(self.mb.get_child_count()):
+                c = self.mb.get_child_at_index(i)
+                if not c:
+                    continue
+                name = c.get_name() or ""
+                if not name:
+                    continue
+                if self.is_live(c):
+                    t = item(self.nid([i]), name, submenu=True, children=self.cache.get((i,), []))
+                else:
+                    t = self.convert(c, [i]) or item(self.nid([i]), name, submenu=True)
+                    t["submenu"] = True
+                if not t["children"]:
+                    # Filled when it opens (open() below).
+                    t["children"] = [item(-1000 - i, "…", enabled=False)]
+                tops.append(t)
+        except Exception as e:
+            err(f"AT-SPI: {e}")
+        out({"type": "menu", "key": self.key, "source": "atspi", "menu": item(0, children=tops)})
+
+    # -- the app's own menus, opened for a moment
+
+    def popups(self):
+        """The app's open menus (live apps), outermost first."""
+        A, found = Atspi, []
+        try:
+            self.app.clear_cache()
+            for i in range(self.app.get_child_count()):
+                f = self.app.get_child_at_index(i)
+                # Popups are frames of their own (Chromium wraps each menu
+                # in a "menu bar" there); the window's frame is skipped.
+                if not f or f == self.frame or (f.get_name() or "") == (self.frame.get_name() or "\0"):
+                    continue
+                todo = [(f, 0)]
+                while todo:
+                    o, d = todo.pop(0)
+                    r = o.get_role()
+                    if r == A.Role.MENU and o.get_child_count() > 0:
+                        found.append(o)
+                        continue
+                    # Chromium puts a popup's menu some levels into its
+                    # own frame; web content is never searched.
+                    if d < 12 and r not in (A.Role.DOCUMENT_WEB, A.Role.DOCUMENT_FRAME):
+                        for k in range(min(o.get_child_count(), 50)):
+                            c = o.get_child_at_index(k)
+                            if c:
+                                todo.append((c, d + 1))
+        except Exception:
+            pass
+        return found
+
+    def act(self, o):
+        try:
+            a = o.get_action_iface()
+            if a and a.get_n_actions():
+                a.do_action(0)
+                return True
+        except Exception as e:
+            err(f"AT-SPI action: {e}")
+        return False
+
+    def wait(self, test, then, fail=None, tries=30):
+        """Poll test() every 40 ms (the app answers asynchronously)."""
+        for _ in range(tries):
+            try:
+                r = test()
+            except Exception:
+                r = None
+            if r:
+                then(r)
+                return
+            time.sleep(0.04)
+        self.busy = False
+        if fail:
+            fail()
+
+    def open_live(self, path, then):
+        """Open the app's menus down to `path` (a live top menu and the
+        submenus in it); then(menu accessible holding path's items)."""
+        top = self.node(path[:1])
+        if top is None or not self.act(top):
+            self.busy = False
+            return
+        level = [1]
+
+        def step(menus):
+            menu = menus[level[0] - 1]
+            if level[0] >= len(path):
+                then(menu, top)
+                return
+            c = menu.get_child_at_index(path[level[0]])
+            want = level[0] + 1
+            level[0] = want
+            if c is None or not self.act(c):
+                self.close_live(top)
+                self.busy = False
+                return
+            self.wait(lambda: (lambda m: m if len(m) >= want else None)(self.popups()), step,
+                      fail=lambda: self.close_live(top))
+
+        self.wait(lambda: (lambda m: m if m else None)(self.popups()), step,
+                  fail=lambda: self.close_live(top))
+
+    def close_live(self, top):
+        if self.popups():
+            self.act(top)
+
+    def open(self, nid):
+        path = self.paths.get(nid)
+        if not path or self.busy or self.mb is None:
+            return
+        top = self.node(path[:1])
+        if top is None:
+            return
+        if self.is_live(top):
+            self.busy = True
+
+            def read(menu, top_):
+                kids = []
+                for i in range(min(menu.get_child_count(), 300)):
+                    c = menu.get_child_at_index(i)
+                    k = c and self.convert(c, list(path) + [i], 1)
+                    if k:
+                        kids.append(k)
+                self.cache[tuple(path)] = kids
+                self.close_live(top_)
+                self.busy = False
+                # Nested live menus go into their parent's list.
+                if len(path) > 1:
+                    parent = self.cache.get(tuple(path[:-1]), [])
+                    for p in parent:
+                        if p["id"] == nid:
+                            p["children"] = kids
+                    self.cache[tuple(path[:-1])] = parent
+                self.emit()
+
+            self.open_live(list(path), read)
+            return
+        o = self.node(path)
+        if o is None:
+            return
+        if o.get_child_count() > 0:
+            self.emit()  # kept: just read it again (states change)
+            return
+        # Never opened yet: open it in the app once, read, close.
+        self.busy = True
+        if not self.act(o):
+            self.busy = False
+            return
+
+        def done(_):
+            if o.get_state_set().contains(Atspi.StateType.EXPANDED):
+                self.act(o)
+            self.busy = False
+            self.emit()
+
+        self.wait(lambda: o.get_child_count() > 0, done)
+
+    def close(self, nid):
+        pass
+
+    def click(self, nid):
+        path = self.paths.get(nid)
+        if not path or self.mb is None:
+            return
+        top = self.node(path[:1])
+        if top is None:
+            return
+        if not self.is_live(top):
+            o = self.node(path)
+            if o is not None:
+                self.act(o)
+            return
+        if self.busy or len(path) < 2:
+            return
+        self.busy = True
+        want = None
+        for k in self.cache.get(tuple(path[:-1]), []):
+            if k["id"] == nid:
+                want = k["label"]
+
+        def press(menu, top_):
+            c = menu.get_child_at_index(path[-1])
+            name = split_shortcut((c.get_name() or "") if c else "")[0]
+            self.busy = False
+            if c is None or (want is not None and name != want):
+                self.close_live(top_)  # the menu changed since: don't guess
+                return
+            self.act(c)
+
+        self.open_live(list(path[:-1]), press)
+
+
+# ---------------------------------------------------------------- commands
+
+def handle(line):
+    global current
+    try:
+        c = json.loads(line)
+    except ValueError:
+        return
+    cmd = c.get("cmd")
+    try:
+        if cmd == "watch":
+            if current and current.key == c.get("key") and current.mb is not None:
+                current.emit()
+                return
+            if current:
+                current.stop()
+            current = AtspiMenu(c.get("key", ""), c.get("title", ""), c.get("pid", 0))
+        elif cmd == "unwatch":
+            if current:
+                current.stop()
+            current = None
+        elif current and cmd == "open":
+            current.open(int(c["id"]))
+        elif current and cmd == "click":
+            current.click(int(c["id"]))
+    except Exception as e:
+        err(e)
+
+
+def main():
+    # No GLib main loop: under one, libatspi dispatching the apps' event
+    # flood deadlocked (stuck in a futex, the next command never handled).
+    # Blocking calls are fine in a process of its own.
+    for line in sys.stdin:
+        handle(line)
+
+
+if __name__ == "__main__":
+    main()

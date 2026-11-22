@@ -209,6 +209,12 @@ Row {
                 enabled: topItem.modelData.enabled
                 popup: pop
             }
+            Connections {
+                target: AppMenu
+                function onOpenRequested(label) {
+                    if (label === topItem.modelData.label && topItem.visible && !pop.open) pop.toggle();
+                }
+            }
             BarPopup {
                 id: pop
                 menuBarMenu: true

@@ -632,8 +632,9 @@ class X11Window:
         self.key, self.title = key, title
         self.inner, self.xid, self.alive, self.tries = None, 0, True, 0
         if pid and not is_satellite(pid):
-            self.alive = False
-            out({"type": "none", "key": key})
+            # A Wayland window without an exported menu: its in-window menu
+            # bar over AT-SPI, if it has one (Firefox, Electron...).
+            self.inner = AtspiMenu(key, title, pid)
             return
         self.resolve()
 
@@ -642,6 +643,9 @@ class X11Window:
 
     def resolve(self):
         if not self.alive:
+            return False
+        if isinstance(self.inner, AtspiMenu):
+            self.inner.emit()
             return False
         xid = x11_active_window()
         props = x11_props(xid) if xid else {}
@@ -701,6 +705,84 @@ class X11Window:
     def click(self, nid):
         if self.inner:
             self.inner.click(nid)
+
+
+# ---------------------------------------------------------------- AT-SPI
+
+# Apps that export no menu (Firefox, Thunderbird, Electron on Wayland) still
+# show their in-window menu bar to accessibility tools: helpers/hearth-atspi-
+# menu reads it, in its own process (see there), started on first use.
+
+class AtspiWorker:
+    proc = None
+    buf = b""
+
+    @classmethod
+    def send(cls, obj):
+        if cls.proc is None or cls.proc.poll() is not None:
+            here = os.path.dirname(os.path.abspath(__file__))
+            try:
+                cls.proc = subprocess.Popen([os.path.join(here, "hearth-atspi-menu")],
+                                            stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+            except OSError as e:
+                err(f"hearth-atspi-menu: {e}")
+                return False
+            cls.buf = b""
+            GLib.io_add_watch(cls.proc.stdout.fileno(), GLib.IO_IN | GLib.IO_HUP, cls.on_out)
+        try:
+            cls.proc.stdin.write((json.dumps(obj) + "\n").encode())
+            cls.proc.stdin.flush()
+            return True
+        except (BrokenPipeError, OSError):
+            cls.proc = None
+            return False
+
+    @classmethod
+    def on_out(cls, fd, cond):
+        data = os.read(fd, 65536)
+        if not data:
+            return False
+        cls.buf += data
+        while b"\n" in cls.buf:
+            line, cls.buf = cls.buf.split(b"\n", 1)
+            try:
+                m = json.loads(line)
+            except ValueError:
+                continue
+            # Only for the window still watched.
+            inner = getattr(current, "inner", None)
+            if m.get("type") == "error" or (isinstance(inner, AtspiMenu) and inner.alive
+                                           and m.get("key") == inner.key):
+                out(m)
+        return True
+
+
+class AtspiMenu:
+    """The focused window's menu through hearth-atspi-menu."""
+
+    def __init__(self, key, title, pid):
+        self.key, self.title, self.pid, self.alive = key, title, pid, True
+        if not AtspiWorker.send({"cmd": "watch", "key": key, "title": title, "pid": pid}):
+            out({"type": "none", "key": key})
+
+    def same(self, other):
+        return isinstance(other, AtspiMenu) and other.key == self.key
+
+    def emit(self):
+        AtspiWorker.send({"cmd": "watch", "key": self.key, "title": self.title, "pid": self.pid})
+
+    def stop(self):
+        self.alive = False
+        AtspiWorker.send({"cmd": "unwatch"})
+
+    def open(self, nid):
+        AtspiWorker.send({"cmd": "open", "id": nid})
+
+    def close(self, nid):
+        pass
+
+    def click(self, nid):
+        AtspiWorker.send({"cmd": "click", "id": nid})
 
 
 # ---------------------------------------------------------------- commands
