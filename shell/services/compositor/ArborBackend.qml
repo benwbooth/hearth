@@ -198,12 +198,16 @@ Scope {
                 root.streaming = true;
             } else {
                 // arbor restarted in place (reload-binary, or after a crash: its
-                // supervisor keeps the sockets). Qt could reconnect this shell's
-                // Wayland connection, but Quickshell's own protocol objects (layer
-                // surfaces, toplevel handles, screencopy) don't survive that, so
-                // quit and let the hearth wrapper start a fresh shell (exit 75,
-                // see flake.nix). Only under that wrapper; test runs reconnect.
-                if (root.streaming && Quickshell.env("HEARTH_RESTARTER") === "1") {
+                // supervisor keeps the sockets). With arbor's Wayland proxy
+                // (ARBOR_WAYLAND_PROXY=1) this shell's Wayland connection and its
+                // layer surfaces survive: just reconnect the event stream (the
+                // first events re-send the whole state). Without it, Qt could
+                // reconnect the Wayland connection, but Quickshell's own protocol
+                // objects don't survive that, so quit and let the hearth wrapper
+                // start a fresh shell (exit 75, see flake.nix). Only under that
+                // wrapper; test runs reconnect.
+                if (root.streaming && Quickshell.env("HEARTH_RESTARTER") === "1"
+                        && Quickshell.env("ARBOR_WAYLAND_PROXY") !== "1") {
                     console.info("arbor restarted: restarting the shell");
                     Qt.exit(75);
                 }
@@ -215,7 +219,7 @@ Scope {
     }
     Timer {
         id: reconnect
-        interval: 2000
+        interval: Quickshell.env("ARBOR_WAYLAND_PROXY") === "1" ? 300 : 2000
         onTriggered: { stream.connected = false; stream.connected = true; }
     }
 
@@ -257,7 +261,7 @@ Scope {
     }
     Timer {
         id: glassReconnect
-        interval: 2000
+        interval: Quickshell.env("ARBOR_WAYLAND_PROXY") === "1" ? 300 : 2000
         onTriggered: { glassSock.connected = false; glassSock.connected = true; }
     }
     function setGlass(req) {
