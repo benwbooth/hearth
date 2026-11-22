@@ -100,10 +100,23 @@ KEYNAMES = {"Control": "Ctrl", "Super": "Meta", "Alt": "Alt", "Shift": "Shift"}
 
 
 def shortcut_text(sc):
+    def key(k):
+        k = KEYNAMES.get(str(k), str(k))
+        return k.upper() if len(k) == 1 else k  # Electron sends "n" for N
     try:
-        return ", ".join("+".join(KEYNAMES.get(str(k), str(k)) for k in combo) for combo in sc)
+        return ", ".join("+".join(key(k) for k in combo) for combo in sc)
     except Exception:
         return ""
+
+
+def label_chord(label):
+    """Electron puts a chord it can't express in the label: "Open Folder...
+    [Ctrl+K Ctrl+O]" -> ("Open Folder...", "Ctrl+K, Ctrl+O")."""
+    if label.endswith("]") and " [" in label:
+        text, chord = label[:-1].rsplit(" [", 1)
+        if "+" in chord:
+            return text, chord.replace(" ", ", ")
+    return label, ""
 
 
 def item(nid, label="", **kw):
@@ -158,12 +171,13 @@ class DbusMenu:
         nid, props, children = node
         p = {str(k): v for k, v in props.items()}
         kids = [DbusMenu.convert(c) for c in children]
+        label, chord = label_chord(strip_mnemonic(str(p.get("label", ""))))
         return item(
-            int(nid), strip_mnemonic(str(p.get("label", ""))),
+            int(nid), label,
             enabled=bool(p.get("enabled", True)), visible=bool(p.get("visible", True)),
             type=str(p.get("type", "standard")), toggleType=str(p.get("toggle-type", "")),
             toggleState=int(p.get("toggle-state", -1)), icon=str(p.get("icon-name", "")),
-            shortcut=shortcut_text(p.get("shortcut", [])),
+            shortcut=shortcut_text(p.get("shortcut", [])) or chord,
             submenu=str(p.get("children-display", "")) == "submenu" or len(kids) > 0,
             children=kids)
 
@@ -631,12 +645,39 @@ class X11Window:
     def __init__(self, key, title, pid=0, window=0):
         self.key, self.title = key, title
         self.inner, self.xid, self.alive, self.tries = None, 0, True, 0
-        if pid and not is_satellite(pid):
-            # A Wayland window without an exported menu: its in-window menu
-            # bar over AT-SPI, if it has one (Firefox, Electron...).
-            self.inner = AtspiMenu(key, title, pid, window)
+        self.wayland = bool(pid) and not is_satellite(pid)
+        self.pid, self.window = pid, window
+        if self.wayland:
+            self.resolve_wayland()
             return
         self.resolve()
+
+    def resolve_wayland(self):
+        """A Wayland window without an address for its menu. Electron
+        (43+, with the registrar and the appmenu protocol) still exports
+        its menu and calls RegisterWindow, with its own window number in
+        place of an X11 id: the registration from this window's process is
+        its menu. Otherwise its in-window menu bar over AT-SPI (Firefox,
+        Electron with a ☰ or a menu bar drawn in the page...)."""
+        reg = registered_for_pid(self.pid)
+        if reg:
+            if isinstance(self.inner, DbusMenu) and (self.inner.service, self.inner.path) == reg:
+                self.inner.fetch()
+                return
+            if self.inner:
+                self.inner.stop()
+            try:
+                self.inner = DbusMenu(self.key, *reg)
+                out({"type": "resolved", "key": self.key, "request": self.inner.request()})
+                return
+            except dbus.DBusException as e:
+                err(e)
+        if isinstance(self.inner, AtspiMenu):
+            self.inner.emit()
+            return
+        if self.inner:
+            self.inner.stop()
+        self.inner = AtspiMenu(self.key, self.title, self.pid, self.window)
 
     def same(self, other):
         return isinstance(other, X11Window) and other.key == self.key
@@ -644,8 +685,8 @@ class X11Window:
     def resolve(self):
         if not self.alive:
             return False
-        if isinstance(self.inner, AtspiMenu):
-            self.inner.emit()
+        if self.wayland:
+            self.resolve_wayland()
             return False
         xid = x11_active_window()
         props = x11_props(xid) if xid else {}
@@ -686,7 +727,11 @@ class X11Window:
         return False
 
     def registered(self, xid):
-        if xid == self.xid and self.alive:
+        if not self.alive:
+            return
+        if self.wayland:
+            self.resolve_wayland()
+        elif xid == self.xid:
             self.resolve()
 
     def stop(self):
@@ -705,6 +750,41 @@ class X11Window:
     def click(self, nid):
         if self.inner:
             self.inner.click(nid)
+
+
+def pid_of(service):
+    try:
+        return int(bus.get_object("org.freedesktop.DBus", "/org/freedesktop/DBus").GetConnectionUnixProcessID(
+            service, dbus_interface="org.freedesktop.DBus", timeout=2))
+    except dbus.DBusException:
+        return 0
+
+
+def ancestors(pid):
+    seen = []
+    try:
+        while pid > 1 and len(seen) < 32:
+            seen.append(pid)
+            with open(f"/proc/{pid}/stat") as f:
+                pid = int(f.read().rsplit(")", 1)[1].split()[1])
+    except (OSError, ValueError, IndexError):
+        pass
+    return seen
+
+
+def registered_for_pid(pid):
+    """(service, path) of the newest RegisterWindow from process `pid` (or
+    its parent or child), or None."""
+    if not registrar or not pid:
+        return None
+    mine = set(ancestors(pid))
+    best = None
+    for wid, (service, path) in registrar.windows.items():
+        p = pid_of(service)
+        if p and (p in mine or pid in ancestors(p)):
+            if best is None or wid > best[0]:
+                best = (wid, service, path)
+    return best[1:] if best else None
 
 
 # ---------------------------------------------------------------- AT-SPI
