@@ -215,21 +215,49 @@ mac layout). Pieces:
     the satellite, the helper takes `_NET_ACTIVE_WINDOW` and reads its
     `_KDE_NET_WM_APPMENU_*` / `_GTK_*` properties with `xprop`, or the menu
     the app registered for that window id with `RegisterWindow`.
-  - AT-SPI (accessibility), for a Wayland window that exports no menu:
-    `helpers/hearth-atspi-menu`, a worker the helper starts on first use,
-    reads the window's in-window menu bar from the accessibility bus (found
-    by the window's pid) and clicks its items through their accessible
-    actions. Firefox/Thunderbird keep a menu's items once it has been
-    opened; Electron/Chromium only have them while the app's own popup is
-    open. So a menu without items yet is opened in the app for a moment
-    (about 60 ms, under hearth's menu), read and closed, and an Electron
-    item is clicked by opening its menu again and activating it there.
-    Shortcuts come from the accessible key binding (Gecko) or the end of
-    the label (Electron: "Save As... Ctrl+Shift+S"). Needs accessibility
-    on (`org.a11y.Status IsEnabled`, as in the arbor session); the app's
-    own menu bar stays in its window. Its own process because libatspi
-    deadlocked in a GLib main loop (and next to dbus-python): the worker
-    reads stdin and polls with short sleeps instead.
+  - Electron's own registration on Wayland: Electron 43+ exports its
+    menu over dbusmenu there too (with the registrar and the KDE appmenu
+    protocol) but calls `RegisterWindow` with its own window number, not an
+    X11 id. A Wayland window without a menu address takes the newest
+    registration from its process (or a parent/child) whose `GetLayout`
+    answers with items (Electron registers every window, also when the app
+    set no menu: Claude Desktop's objects don't exist). VS Code, native
+    or custom title bar: its full menus this way.
+  - AT-SPI (accessibility), for a Wayland window still without a menu:
+    `helpers/hearth-atspi-menu`, a worker hearth-appmenu starts on first
+    use, finds the window by pid on the accessibility bus. Four kinds:
+    - kept: a menu bar whose menus keep their items (Firefox, Thunderbird:
+      read directly, items clicked through their accessible action; a menu
+      never opened yet is opened once in the app to be built);
+    - live: Electron's native menu bar (buttons whose menus exist only
+      while their popup is open: opened for a moment to be read);
+    - web: a menu bar drawn in the page (titles clicked through arbor);
+    - burger: a ☰ button (Claude Desktop, GNOME apps): clicked through
+      arbor's `ClickWindow` (page elements open on pointer-down and ignore
+      the accessible press); its submenus become the menu bar's menus. The
+      whole ☰ is read in one look and kept in
+      `~/.cache/hearth/atspi-menus.json` with the app's binary path, so its
+      menus open at once afterwards; read again after an update or when a
+      click finds it out of date. Choosing an item opens the ☰ once.
+    App menus opened to be read are closed with arbor's `ClosePopups`.
+    Chromium reports page coordinates in device pixels (divided by the
+    page's size over its host's). Needs accessibility on
+    (`org.a11y.Status IsEnabled`, as in the arbor session), and Electron
+    apps need `--force-renderer-accessibility=basic` (or a screen reader)
+    to build their tree at all: /etc/nixos adds it to Claude Desktop's
+    wrapper. Its own process without a GLib main loop: libatspi deadlocked
+    under one (and next to dbus-python).
+  - A native menu that stays empty (appmenu-gtk-module exports one for
+    Firefox and Thunderbird, whose XUL menus it can't see) goes on to
+    AT-SPI for that window.
+- The bold app-name title: an app's own first menu named after it (our
+  apps' macOS-style Almanac/Grove/Tessera/Earshot/Kog/treetop menus) is the
+  bold menu, as on macOS, and isn't shown twice; hearth adds Hide <App> /
+  Hide Others / Show All before its Quit unless it has them. Apps without
+  one get hearth's bold menu.
+- Switching apps: while the new app's menu is on its way, the bar shows the
+  last menu that app had (and holds back the Window fallback for 500 ms), so
+  it never flashes the app name and Window alone.
 - `nix/appmenu-gtk-module.nix` (`.#appmenu-gtk-module`, linked into hearth's
   `lib/gtk-3.0/modules`): vala-panel's appmenu-gtk-module (ex
   unity-gtk-module) for GTK 3 apps with plain GtkMenuBars, loaded by
@@ -255,7 +283,7 @@ Coverage on arbor (tested in a nested arbor on a private session bus,
 | Qt 5/6 widgets, KDE apps (KWrite, Konsole, Okular, KeePassXC) on Wayland | yes* | yes | dbusmenu via KDE appmenu protocol |
 | Qt on X11 (`QT_QPA_PLATFORM=xcb`) | no | yes | `_KDE_NET_WM_APPMENU_*` on the X window |
 | Qt Quick with `Qt.labs.platform` MenuBar | yes | yes | dbusmenu (QPlatformMenuBar) |
-| Qt Quick with QtQuick.Controls `MenuBar` (earshot, Kog, almanac, tessera have none) | no | fallback | Qt 6.11 makes it native on macOS only; use `Qt.labs.platform` MenuBar to export |
+| Qt Quick with QtQuick.Controls `MenuBar` | no | fallback | Qt 6.11 makes it native on macOS only. Our apps (almanac, tessera, grove, earshot, Kog, treetop) export through a `GlobalMenuBar` type on `QPlatformTheme::createPlatformMenuBar()` (2026-11-22) |
 | GTK 3 GtkApplication menu bar (gtk3-demo-application, LibreOffice gtk3) | no | yes | GMenuModel via gtk_shell1 |
 | GTK 3 plain GtkMenuBar (tested with a PyGObject app; Emacs pgtk, Inkscape, virt-manager, meld expected) | no | yes | appmenu-gtk-module |
 | GTK 3 on X11 | no | yes | `_GTK_*` properties |
@@ -265,8 +293,10 @@ Coverage on arbor (tested in a nested arbor on a private session bus,
 | Brave / Chrome / Chromium, Wayland | no | yes | Chromium's dbusmenu via KDE appmenu protocol (needs the registrar) |
 | Brave / Chromium, X11 | no | yes | RegisterWindow on our registrar |
 | Electron on X11 (VS Code/Cursor with `"window.titleBarStyle": "native"`, Slack, Teams, Spotify, ChatGPT app) | no | yes | RegisterWindow; Electron hides its in-window bar |
-| Electron on Wayland (Claude Desktop, VS Code, Cursor by default) | fallback | yes (2026-11-22) | AT-SPI: its in-window menu bar; the menu bar stays in the window too. Tested: VS Code 1.147 with `"window.titleBarStyle": "native"`. Untested: Claude Desktop (no window in the nested test), and VS Code/Cursor's default custom title bar, which draws its menus in the page |
-| Firefox, Thunderbird | fallback | yes (2026-11-22) | AT-SPI: the (hidden) XUL menu bar; Firefox 160 tested |
+| Electron on Wayland with a menu bar (VS Code, native or custom title bar) | fallback | yes (2026-11-22) | Electron's own dbusmenu registration, matched by pid |
+| Electron on Wayland with a ☰ (Claude Desktop) | fallback | yes (2026-11-22) | AT-SPI ☰ + arbor ClickWindow, whole tree cached; needs `--force-renderer-accessibility=basic` |
+| Electron with an auto-hidden menu bar (Slack, Heroic) | fallback | titles (2026-11-22) | AT-SPI with `--force-renderer-accessibility=basic`; items: in progress |
+| Firefox, Thunderbird | fallback | yes (2026-11-22) | AT-SPI: the (hidden) XUL menu bar, also under appmenu-gtk-module (empty export → AT-SPI); Firefox 160, Thunderbird tested |
 | JetBrains IDEs (X11 by default) | no | expected yes, untested | IntelliJ's own dbusmenu + RegisterWindow on X11 |
 | Java Swing/AWT | fallback | fallback | no export without jayatana (not packaged) |
 | Wine / Proton games and apps | fallback | fallback | Wine draws its menus in the window |
