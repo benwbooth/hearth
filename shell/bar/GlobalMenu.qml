@@ -310,9 +310,12 @@ Row {
         id: winTitle
         text: "Window"
         tip: "Minimize, zoom, full screen or move " + root.appName + "'s window"
-        // Not while the app's own menus are still on their way (they may
-        // bring a Window menu): no "app name + Window" flash on a switch.
-        visible: root.hasWindow && !root.appHasWindowMenu && !AppMenu.resolving && root.fits(topRep.count + 1)
+        // Decided by the menus shown: with the app's held or cached menus on
+        // screen it shows at once (unless they have their own Window menu);
+        // only with nothing shown yet does it wait for them (they may bring
+        // a Window menu), so a switch never flashes "app name + Window".
+        visible: root.hasWindow && !root.appHasWindowMenu && (!!AppMenu.tree || !AppMenu.resolving)
+                 && root.fits(topRep.count + 1)
         popup: winMenu
     }
     BarPopup {
