@@ -12,10 +12,15 @@
 Window.SetBackgroundTopColor(0, 0, 0);
 Window.SetBackgroundBottomColor(0, 0, 0);
 
-global.W = Window.GetWidth();
-global.H = Window.GetHeight();
-global.X0 = Window.GetX();
-global.Y0 = Window.GetY();
+# The screen can change size under us: the splash starts on the firmware's
+# framebuffer (simpledrm) and moves to the GPU driver's a few seconds later,
+# often at another size. Everything is placed by layout(), which runs again
+# whenever the size changes; placed once, the splash sat around the old
+# screen's middle, in the top-left corner of the new one.
+global.W = 0;
+global.H = 0;
+global.X0 = 0;
+global.Y0 = 0;
 
 fun even(v) {
   return Math.Int(v / 2 + 0.5) * 2;
@@ -28,21 +33,17 @@ fun clamp(v, lo, hi) {
 }
 
 # ---- logo -------------------------------------------------------------------
-logo_size = clamp(Math.Int(H * 0.094 / 8 + 0.5) * 8, 48, 512);
-logo.image = Image("logo-" + logo_size + ".png");
-logo.sprite = Sprite(logo.image);
-logo.x = X0 + Math.Int((W - logo_size) / 2);
-logo.y = Y0 + Math.Int(H * 0.46 - logo_size / 2);
-logo.sprite.SetPosition(logo.x, logo.y, 10);
+logo.sprite = Sprite();
+logo.sprite.SetZ(10);
 logo.sprite.SetOpacity(0);
 
 # ---- pills (progress bar, password field) --------------------------------------
 # A pill is a left cap, a stretched middle and a right cap, so the round ends
 # keep their shape at any width.
-fun pill_new(h, z) {
-  local.p.h = clamp(even(h), 2, 128);
-  local.p.l = Sprite(Image("capl-" + p.h + ".png"));
-  local.p.r = Sprite(Image("capr-" + p.h + ".png"));
+fun pill_new(z) {
+  local.p.h = 0;
+  local.p.l = Sprite();
+  local.p.r = Sprite();
   local.p.m = Sprite();
   local.p.px = Image("px.png");
   local.p.mw = -1;
@@ -55,6 +56,16 @@ fun pill_new(h, z) {
   local.p.l.SetOpacity(0);
   local.p.r.SetOpacity(0);
   local.p.m.SetOpacity(0);
+  return p;
+}
+
+# The caps for height h (pre-rendered per height); the middle is rebuilt on the
+# next pill_set.
+fun pill_size(p, h) {
+  p.h = clamp(even(h), 2, 128);
+  p.l.SetImage(Image("capl-" + p.h + ".png"));
+  p.r.SetImage(Image("capr-" + p.h + ".png"));
+  p.mw = -1;
   return p;
 }
 
@@ -83,12 +94,8 @@ fun pill_hide(p) {
 }
 
 # ---- progress bar ---------------------------------------------------------------
-bar.h = clamp(even(H * 0.0062), 4, 32);
-bar.w = Math.Int(H * 0.205);
-bar.x = X0 + Math.Int((W - bar.w) / 2);
-bar.y = logo.y + logo_size + Math.Int(H * 0.09);
-bar.track = pill_new(bar.h, 20);
-bar.fill = pill_new(bar.h, 21);
+bar.track = pill_new(20);
+bar.fill = pill_new(21);
 bar.target = 0;
 bar.shown = 0;
 
@@ -97,23 +104,61 @@ global.show_bar = (mode == "boot" || mode == "resume" || mode == "updates" ||
                    mode == "system-upgrade" || mode == "firmware-upgrade");
 
 # ---- password field -------------------------------------------------------------
-field.h = clamp(even(H * 0.03), 20, 128);
-field.w = Math.Int(H * 0.19);
-field.x = X0 + Math.Int((W - field.w) / 2);
-field.y = bar.y - Math.Int(field.h / 2) + Math.Int(bar.h / 2);
-field.bg = pill_new(field.h, 30);
-field.dot = clamp(even(field.h * 0.24), 4, 48);
-field.dot_image = Image("dot-" + field.dot + ".png");
-field.font = "Inter " + clamp(Math.Int(H * 0.0105 + 0.5), 9, 40);
-field.small = "Inter " + clamp(Math.Int(H * 0.0085 + 0.5), 8, 32);
-field.placeholder = Sprite(Image.Text("Enter Password", 1, 1, 1, 1, field.font));
+field.bg = pill_new(30);
+field.placeholder = Sprite();
 field.placeholder.SetZ(31);
 field.placeholder.SetOpacity(0);
 field.prompt = Sprite();
 field.prompt.SetZ(31);
 
 field.ndots = 0;
+field.last_prompt = "";
+field.last_bullets = 0;
 global.asking = 0;
+
+# ---- layout ---------------------------------------------------------------------
+fun layout() {
+  global.W = Window.GetWidth();
+  global.H = Window.GetHeight();
+  global.X0 = Window.GetX();
+  global.Y0 = Window.GetY();
+
+  global.logo_size = clamp(Math.Int(H * 0.094 / 8 + 0.5) * 8, 48, 512);
+  logo.sprite.SetImage(Image("logo-" + logo_size + ".png"));
+  logo.x = X0 + Math.Int((W - logo_size) / 2);
+  logo.y = Y0 + Math.Int(H * 0.46 - logo_size / 2);
+  logo.sprite.SetPosition(logo.x, logo.y, 10);
+
+  bar.h = clamp(even(H * 0.0062), 4, 32);
+  bar.w = Math.Int(H * 0.205);
+  bar.x = X0 + Math.Int((W - bar.w) / 2);
+  bar.y = logo.y + logo_size + Math.Int(H * 0.09);
+  pill_size(bar.track, bar.h);
+  pill_size(bar.fill, bar.h);
+
+  field.h = clamp(even(H * 0.03), 20, 128);
+  field.w = Math.Int(H * 0.19);
+  field.x = X0 + Math.Int((W - field.w) / 2);
+  field.y = bar.y - Math.Int(field.h / 2) + Math.Int(bar.h / 2);
+  pill_size(field.bg, field.h);
+  field.dot = clamp(even(field.h * 0.24), 4, 48);
+  field.dot_image = Image("dot-" + field.dot + ".png");
+  for (i = 0; i < field.ndots; i++) field.dots[i].SetImage(field.dot_image);
+  field.font = "Inter " + clamp(Math.Int(H * 0.0105 + 0.5), 9, 40);
+  field.small = "Inter " + clamp(Math.Int(H * 0.0085 + 0.5), 8, 32);
+  field.placeholder.SetImage(Image.Text("Enter Password", 1, 1, 1, 1, field.font));
+
+  # A password field on screen moves with everything else.
+  if (asking) show_field(field.last_prompt, field.last_bullets);
+}
+
+fun layout_if_resized() {
+  w = Window.GetWidth();
+  h = Window.GetHeight();
+  if (w > 0 && h > 0 &&
+      (w != W || h != H || Window.GetX() != X0 || Window.GetY() != Y0))
+    layout();
+}
 
 fun field_hide() {
   pill_hide(field.bg);
@@ -124,6 +169,8 @@ fun field_hide() {
 
 fun show_field(prompt, bullets) {
   global.asking = 1;
+  field.last_prompt = prompt;
+  field.last_bullets = bullets;
   pill_hide(bar.track);
   pill_hide(bar.fill);
   pill_set(field.bg, field.x, field.y, field.w, 0.16);
@@ -193,6 +240,7 @@ fun display_normal() {
 global.frame = 0;
 
 fun refresh() {
+  layout_if_resized();
   global.frame++;
   # Fade the logo in over half a second (plymouth calls this at 50 Hz).
   a = clamp(frame / 25, 0, 1);
@@ -221,6 +269,8 @@ fun quit() {
 fun message(text) {
   # Hidden on purpose: Esc shows plymouth's details view with every message.
 }
+
+layout();
 
 Plymouth.SetRefreshFunction(refresh);
 Plymouth.SetBootProgressFunction(boot_progress);
