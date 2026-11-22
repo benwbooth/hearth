@@ -1,0 +1,34 @@
+/* Breeze Dark for swaync, matching hearth's Theme.qml. Appended after
+   swaync's default style.css (see /etc/nixos home/hyprland.nix). */
+:root {
+  --cc-bg: rgba(32, 35, 38, 0.97);
+  --noti-border-color: #3f444a;
+  --noti-bg: 41, 44, 48;
+  --noti-bg-alpha: 0.98;
+  --noti-bg-darker: #202326;
+  --noti-bg-hover: #31363b;
+  --noti-bg-focus: rgba(61, 174, 233, 0.25);
+  --noti-close-bg: #31363b;
+  --noti-close-bg-hover: #da4453;
+  --text-color: #fcfcfc;
+  --text-color-disabled: #a1a9b1;
+  --bg-selected: #3daee9;
+  --border-radius: 8px;
+  --font-size-body: 13px;
+  --font-size-summary: 14px;
+}
+@define-color cc-bg rgba(32, 35, 38, 0.97);
+@define-color noti-border-color #3f444a;
+@define-color noti-bg rgba(41, 44, 48, 0.98);
+@define-color noti-bg-opaque #292c30;
+@define-color noti-bg-darker #202326;
+@define-color noti-bg-hover #31363b;
+@define-color noti-bg-hover-opaque #31363b;
+@define-color noti-bg-focus rgba(61, 174, 233, 0.25);
+@define-color noti-close-bg #31363b;
+@define-color noti-close-bg-hover #da4453;
+@define-color text-color #fcfcfc;
+@define-color text-color-disabled #a1a9b1;
+@define-color bg-selected #3daee9;
+
+* { font-family: "Noto Sans", sans-serif; }
