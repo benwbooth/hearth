@@ -151,9 +151,12 @@ Indicator {
         }
     }
 
-    // Tray glyph: the active layout's zones.
+    // Menu bar: the active layout as a crisp symbol (services/Symbols).
+    icon: menuBarItem ? Symbols.zones(activeLayout ? activeLayout.zones : []) : ""
+    // Classic panel: the active layout's zones drawn here.
     property Item glyph: Item {
         parent: root
+        visible: !root.menuBarItem
         anchors.centerIn: parent
         width: 24
         height: 16

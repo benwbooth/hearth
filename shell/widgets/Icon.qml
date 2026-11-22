@@ -14,6 +14,7 @@ IconImage {
     source: {
         const n = root.name;
         if (!n) return Quickshell.iconPath(root.fallback, true);
+        if (n.startsWith("data:")) return n;
         if (n.startsWith("/") || n.includes("://")) return n.startsWith("/") ? "file://" + n : n;
         // The shell's icon theme is Breeze Dark (pragma); in light mode the
         // monochrome icons come from Breeze (services/IconIndex.qml).

@@ -33,7 +33,7 @@ MouseArea {
         if (want) want.registerTitle(root);
     }
     onMenuPressChanged: syncTitle()
-    Component.onCompleted: syncTitle()
+    Component.onCompleted: { syncTitle(); Qt.callLater(snapIcon); }
     Component.onDestruction: if (registeredIn) registeredIn.unregisterTitle(root)
     property string icon: ""
     property string iconFallback: "application-x-executable"
@@ -45,6 +45,37 @@ MouseArea {
     readonly property var hostWindow: root.QsWindow.window
     readonly property int hostHeight: hostWindow && hostWindow.barHeight ? hostWindow.barHeight : Theme.barHeight
     property int iconSize: hostWindow && hostWindow.barIconSize ? hostWindow.barIconSize : Theme.iconSize
+    // Menu bar icons are drawn pixel-exact: at a size icon themes are drawn
+    // for (16/22/24/32 device pixels, the nearest to iconSize) and on the
+    // device pixel grid. At a fractional scale (4/3) a 17 px icon was 22.67
+    // device pixels between pixels, which blurred every edge.
+    // The output's real scale (4/3): with fractional scaling the screen's
+    // devicePixelRatio is rounded up (2), the window draws at the true one.
+    readonly property real dpr: {
+        const sc = hostWindow && hostWindow.screen ? hostWindow.screen : null;
+        const o = sc ? Displays.live[sc.name] : null;
+        if (o && o.logical && o.logical.scale > 0) return o.logical.scale;
+        return sc && sc.devicePixelRatio > 0 ? sc.devicePixelRatio : 1;
+    }
+    function crispSize(s) {
+        if (!menuBarItem) return s;
+        const px = s * dpr;
+        let best = 22;
+        for (const d of [16, 22, 24, 32]) if (Math.abs(d - px) < Math.abs(best - px)) best = d;
+        return best / dpr;
+    }
+    function snapIcon() {
+        if (!menuBarItem || !iconItem.visible) return;
+        const p = iconItem.mapToItem(null, 0, 0);
+        const rx = p.x - iconSnap.x, ry = p.y - iconSnap.y;
+        iconSnap.x = Math.round(rx * dpr) / dpr - rx;
+        iconSnap.y = Math.round(ry * dpr) / dpr - ry;
+    }
+    onXChanged: Qt.callLater(snapIcon)
+    onYChanged: Qt.callLater(snapIcon)
+    onWidthChanged: Qt.callLater(snapIcon)
+    onHeightChanged: Qt.callLater(snapIcon)
+    onDprChanged: Qt.callLater(snapIcon)
     property color textColor: menuBarItem ? Theme.barFg : Theme.fg
     property bool monochrome: Settings.menubar.monochromeIcons !== false
     // Recolour only the colourless parts (app tray icons; see below).
@@ -88,7 +119,11 @@ MouseArea {
             visible: root.icon !== ""
             name: root.icon
             fallback: root.iconFallback
-            implicitSize: root.iconSize
+            implicitSize: root.crispSize(root.iconSize)
+            transform: Translate { id: iconSnap }
+            onXChanged: Qt.callLater(root.snapIcon)
+            onYChanged: Qt.callLater(root.snapIcon)
+            onVisibleChanged: Qt.callLater(root.snapIcon)
             // Menu bar: monochrome like SF Symbols (Settings > Menu Bar >
             // Monochrome icons): every status icon in the text colour.
             // App tray icons (`adaptive`): only their colourless pixels take

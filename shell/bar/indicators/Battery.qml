@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Services.UPower
 import "../../widgets"
+import "../../services"
 import "../.."
 
 // Batteries: this is a desktop, so it only shows when something runs on a
@@ -58,7 +59,8 @@ Indicator {
     }
 
     shown: devices.length > 0
-    icon: lowest?.iconName || "battery"
+    icon: menuBarItem && lowest ? Symbols.battery(lowest.percentage, lowest.state === UPowerDeviceState.Charging)
+        : lowest?.iconName || "battery"
     iconFallback: "battery"
     tooltip: lowest ? (devices.length === 1 ? label(lowest) + ": " + pct(lowest)
                                             : "Lowest battery: " + label(lowest) + " " + pct(lowest)) : ""

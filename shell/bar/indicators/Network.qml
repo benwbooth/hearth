@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Networking
 import "../../widgets"
+import "../../services"
 import "../.."
 
 // Network: wired link, Wi-Fi (on/off, networks, connect with a password
@@ -48,6 +49,8 @@ Indicator {
 
     shown: Networking.backend !== NetworkBackendType.None
     icon: {
+        // The menu bar's own crisp symbol (services/Symbols).
+        if (wiredUp && menuBarItem) return limited ? Symbols.ethernetLimited : Symbols.ethernet;
         if (wiredUp) return vpnUp ? "network-wired-activated-locked"
                          : limited ? "network-wired-activated-limited" : "network-wired-activated";
         if (wifiUp && wifiNet) return wifiIcon(wifiNet.signalStrength, false).replace(/$/, vpnUp ? "-locked" : limited ? "-limited" : "");

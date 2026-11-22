@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import "../../widgets"
+import "../../services"
 import "../.."
 
 // Removable drives (USB sticks, SD cards, external disks): shown only while
@@ -11,7 +12,7 @@ import "../.."
 // is refreshed whenever `udisksctl monitor` reports a change.
 Indicator {
     id: root
-    icon: "drive-removable-media"
+    icon: menuBarItem ? Symbols.eject : "drive-removable-media"
     shown: devices.length > 0
     tooltip: devices.length === 1 ? devices[0].title : devices.length + " removable drives"
     tooltipSub: devices.map(d => d.filesystems.map(f => f.label + (f.mountpoint ? " — " + f.mountpoint : " (not mounted)")).join("\n")).join("\n")

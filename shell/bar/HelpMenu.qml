@@ -10,7 +10,7 @@ import ".."
 // Enter or a click runs/opens it), plus the guides.
 BarButton {
     id: root
-    icon: "help-contextual"
+    icon: menuBarItem ? Symbols.info : "help-contextual"
     iconFallback: "help-about"
     implicitWidth: Theme.menuBarItemWidth
     tooltip: "Help: find a shortcut, setting or action, or read a guide"
