@@ -109,6 +109,7 @@ Singleton {
         { title: "Search words: kind:pdf, kind:image, kind:folder, date:today, date:yesterday, date:2026-11-20", keys: "Super+Space", run: () => Spotlight.toggle() },
         { title: "Calculator and conversions in Search: 2^10, 15% of 80, 5 ft to m, 72F in C, 100 USD in EUR (Return copies the result)", keys: "Super+Space", run: () => Spotlight.toggle() },
         { title: "Settings: Search: which folders are searched, what's left out (privacy), result groups, web suggestions, rebuild the index", pane: "spotlight" },
+        { title: "Settings: Appearance: light or dark mode for the desktop and apps (Auto switches at 7:00 and 19:00), accent colour, glass", pane: "appearance" },
         { title: "Voice assistant (like Siri): press, speak, it stops when you stop talking: open apps and files, find documents, volume, weather, dark mode…", keys: "Super+Alt+Space", run: () => Voice.toggle() },
         { title: "Settings: voice assistant: shortcut, language, Whisper model, pause length, spoken replies (Piper voices), glowing edge, sounds", pane: "voice" },
         { title: "Assistant menu (the sparkle next to Control Center): ask by voice or by typing, the last answer, switch the assistant's model, see graphics memory (VRAM) and load or unload AI models", run: () => ShellState.openIndicator("ai") },

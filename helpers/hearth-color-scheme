@@ -1,0 +1,207 @@
+#!/usr/bin/env python3
+"""Switch apps between light and dark: hearth-color-scheme light|dark
+
+hearth runs this when its own light/dark changes (Settings > Appearance,
+including Auto's 7:00/19:00 switch), so the whole desktop follows:
+
+- Qt/KDE apps: Breeze Light/Dark colours and icon theme in kdeglobals, then
+  the signals running KDE apps listen for (they recolour live).
+- Browsers, Electron and GTK 4 apps: the settings portal's color-scheme,
+  which the KDE portal backend derives from kdeglobals (the same signal makes
+  it announce the change).
+- GTK 3/4: gtk-theme / color-scheme / icon-theme in dconf (GSettings) and
+  ~/.config/gtk-{3,4}.0/settings.ini.
+
+Only what differs is written; with nothing to change it does nothing.
+Prints one JSON line: {"changed": [...]}.
+"""
+import json
+import os
+import sys
+import tempfile
+
+MODE = sys.argv[1] if len(sys.argv) > 1 else ""
+if MODE not in ("light", "dark"):
+    sys.exit("usage: hearth-color-scheme light|dark")
+DARK = MODE == "dark"
+
+CONFIG = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+SCHEME = "BreezeDark" if DARK else "BreezeLight"
+ICONS = "breeze-dark" if DARK else "breeze"
+GTK_THEME = "Breeze-Dark" if DARK else "Breeze"
+LOOK = "org.kde.breezedark.desktop" if DARK else "org.kde.breeze.desktop"
+changed = []
+
+
+def data_dirs():
+    home = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    rest = os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share"
+    return [home] + [d for d in rest.split(":") if d] + ["/run/current-system/sw/share"]
+
+
+def write_atomic(path, text):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".hearth-")
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+    try:
+        os.chmod(tmp, os.stat(path).st_mode & 0o777)
+    except FileNotFoundError:
+        pass
+    os.replace(tmp, path)
+
+
+# --- INI files that keep their order and anything we don't touch ------------
+
+def read_sections(path):
+    """[(header line or None, [lines])], in file order."""
+    sections = [(None, [])]
+    try:
+        with open(path) as f:
+            for line in f.read().splitlines():
+                if line.startswith("["):
+                    sections.append((line.strip(), []))
+                else:
+                    sections[-1][1].append(line)
+    except FileNotFoundError:
+        pass
+    return sections
+
+
+def render(sections):
+    out = []
+    for header, lines in sections:
+        if header is not None:
+            if out and out[-1] != "":
+                out.append("")
+            out.append(header)
+        out.extend(lines)
+    while out and out[-1] == "":
+        out.pop()
+    return "\n".join(out) + "\n"
+
+
+def set_key(sections, header, key, value):
+    for h, lines in sections:
+        if h == header:
+            for i, line in enumerate(lines):
+                if line.split("=", 1)[0].strip() == key:
+                    lines[i] = f"{key}={value}"
+                    return
+            # Before trailing blank lines.
+            at = len(lines)
+            while at > 0 and lines[at - 1].strip() == "":
+                at -= 1
+            lines.insert(at, f"{key}={value}")
+            return
+    sections.append((header, [f"{key}={value}"]))
+
+
+def drop_key(sections, header, key):
+    for h, lines in sections:
+        if h == header:
+            lines[:] = [l for l in lines if l.split("=", 1)[0].strip() != key]
+
+
+# --- kdeglobals ---------------------------------------------------------------
+
+def scheme_file():
+    for d in data_dirs():
+        p = os.path.join(d, "color-schemes", SCHEME + ".colors")
+        if os.path.isfile(p):
+            return p
+    return None
+
+
+def apply_kdeglobals():
+    path = os.path.join(CONFIG, "kdeglobals")
+    src = scheme_file()
+    if not src:
+        return False
+    before = render(read_sections(path)) if os.path.exists(path) else ""
+    sections = read_sections(path)
+    scheme = read_sections(src)
+    # The scheme's colour sections replace ours (plasma-apply-colorscheme does
+    # the same); its [General]/[KDE] only carry its name and contrast.
+    colour = lambda h: h and (h.startswith("[Colors:") or h.startswith("[ColorEffects:") or h == "[WM]")
+    sections = [s for s in sections if not colour(s[0])]
+    first = next((i for i, s in enumerate(sections) if s[0] is not None), len(sections))
+    sections[first:first] = [(h, [l for l in lines if l.strip()]) for h, lines in scheme if colour(h)]
+    set_key(sections, "[General]", "ColorScheme", SCHEME)
+    drop_key(sections, "[General]", "ColorSchemeHash")
+    set_key(sections, "[Icons]", "Theme", ICONS)
+    set_key(sections, "[KDE]", "LookAndFeelPackage", LOOK)
+    after = render(sections)
+    if after == before:
+        return False
+    write_atomic(path, after)
+    changed.append("kdeglobals")
+    return True
+
+
+def notify_kde():
+    try:
+        import dbus
+        bus = dbus.SessionBus()
+        # KConfigWatcher (KDE apps, the KDE portal backend: color-scheme).
+        msg = dbus.lowlevel.SignalMessage("/kdeglobals", "org.kde.kconfig.notify", "ConfigChanged")
+        groups = {"General": [b"ColorScheme"], "Icons": [b"Theme"], "KDE": [b"LookAndFeelPackage"]}
+        msg.append(dbus.Dictionary({k: dbus.Array([dbus.ByteArray(v) for v in vs], signature="ay")
+                                    for k, vs in groups.items()}, signature="saay"))
+        bus.send_message(msg)
+        # KGlobalSettings: palette (0) and icons (4) changed, for older Qt apps.
+        for kind in (0, 4):
+            m = dbus.lowlevel.SignalMessage("/KGlobalSettings", "org.kde.KGlobalSettings", "notifyChange")
+            m.append(dbus.Int32(kind), dbus.Int32(0))
+            bus.send_message(m)
+        bus.flush()
+    except Exception as e:  # no bus (tests): the files are still right
+        print(f"hearth-color-scheme: no D-Bus notify: {e}", file=sys.stderr)
+
+
+# --- GTK ------------------------------------------------------------------------
+
+def apply_settings_ini():
+    for ver in ("gtk-3.0", "gtk-4.0"):
+        path = os.path.join(CONFIG, ver, "settings.ini")
+        if not os.path.exists(path):
+            continue
+        sections = read_sections(path)
+        before = render(sections)
+        set_key(sections, "[Settings]", "gtk-application-prefer-dark-theme", "true" if DARK else "false")
+        set_key(sections, "[Settings]", "gtk-icon-theme-name", ICONS)
+        if ver == "gtk-3.0":
+            set_key(sections, "[Settings]", "gtk-theme-name", GTK_THEME)
+        after = render(sections)
+        if after != before:
+            write_atomic(path, after)
+            changed.append(ver + "/settings.ini")
+
+
+def apply_gsettings():
+    try:
+        from gi.repository import Gio
+        src = Gio.SettingsSchemaSource.get_default()
+        if not src or not src.lookup("org.gnome.desktop.interface", True):
+            return
+        s = Gio.Settings.new("org.gnome.desktop.interface")
+        want = {
+            "color-scheme": "prefer-dark" if DARK else "prefer-light",
+            "gtk-theme": GTK_THEME,
+            "icon-theme": ICONS,
+        }
+        keys = s.props.settings_schema.list_keys()
+        for k, v in want.items():
+            if k in keys and s.get_string(k) != v:
+                s.set_string(k, v)
+                changed.append("gsettings " + k)
+        Gio.Settings.sync()
+    except Exception as e:
+        print(f"hearth-color-scheme: gsettings: {e}", file=sys.stderr)
+
+
+if apply_kdeglobals():
+    notify_kde()
+apply_settings_ini()
+apply_gsettings()
+print(json.dumps({"mode": MODE, "changed": changed}))

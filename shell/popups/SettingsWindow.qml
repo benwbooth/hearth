@@ -228,7 +228,7 @@ Scope {
                     label: "Appearance"
                     key: "appearance.mode"
                     options: [{ value: "light", label: "Light" }, { value: "dark", label: "Dark" }, { value: "auto", label: "Auto" }]
-                    note: "Auto is light from 7:00 to 19:00."
+                    note: "Apps follow it too (KDE, GTK, browsers). Auto is light from 7:00 to 19:00."
                 }
                 Divider {}
                 Row_ {
