@@ -49,6 +49,12 @@ fun pill_new(h, z) {
   local.p.l.SetZ(z);
   local.p.m.SetZ(z);
   local.p.r.SetZ(z);
+  # New sprites sit at 0,0 fully opaque: the caps would show as a white
+  # block in the top-left corner (like a text cursor) until pill_set moves
+  # them, and the password field's and the shutdown screen's never move.
+  local.p.l.SetOpacity(0);
+  local.p.r.SetOpacity(0);
+  local.p.m.SetOpacity(0);
   return p;
 }
 

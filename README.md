@@ -608,23 +608,26 @@ nixos-icons' SVG with resvg, GRUB fonts made from Inter with grub-mkfont):
   rounded glass box on the selection, a small countdown and key hints at the
   bottom. Icons by GRUB class: `nixos` (colour snowflake), `submenu` (the
   "All configurations" list), `windows` (os-prober's Windows Boot Manager),
-  `efi`/`uefi-firmware`, and `os` for anything else. GRUB can't scale fonts,
-  so sizes are baked for 3840x1600; `grub-theme-hearth-5k` is the same at
-  5120x2160 (`mkGrubTheme { scale = height / 1600; }` in `boot/default.nix`
-  for others).
+  `efi`/`uefi-firmware`, and `os` for anything else. GRUB can't scale fonts
+  or pick a theme by resolution, and its `auto` mode drops to 800x600 on any
+  monitor whose own mode is 4096 px or wider (the 5K LG), so the package
+  holds one theme per screen height (`h2160/` ... `h600/`) and
+  `select-mode.cfg`, which tries real modes from 5120x2160 down, keeps the
+  first the firmware has and switches to that height's theme. Linux keeps the
+  mode (`gfxpayload=keep`), so the splash starts at the panel's resolution.
   GRUB's `boot_menu` only lays items out vertically, so macOS's horizontal
   row of disks becomes a centred column.
 - `packages.x86_64-linux.boot-screenshots`: a NixOS VM test (OVMF -> GRUB ->
-  Plymouth at 3840x1600, with fake Windows and firmware entries) that saves
-  screenshots of the GRUB menu, the splash and the password prompt to
+  Plymouth with the LG's 5120x2160 as the monitor's preferred mode, and fake
+  Windows and firmware entries) that saves screenshots of the GRUB menu, the splash and the password prompt to
   `result/`. Nothing touches the host's bootloader.
 
-Use in /etc/nixos:
+Use in /etc/nixos (`nix/boot.nix` sets the GRUB theme, `font = null` so
+NixOS doesn't set a mode first, the `select-mode.cfg` hook, and the Plymouth
+theme with `DeviceScale=1` and `UseSimpledrm=1`); leave `gfxmodeEfi` and the
+kernel's `video=` unset:
 
 ```nix
-boot.loader.grub.theme = inputs.hearth.packages.${system}.grub-theme-hearth;
-boot.plymouth.theme = "hearth";
-boot.plymouth.themePackages = [ inputs.hearth.packages.${system}.plymouth-theme-hearth ];
-boot.plymouth.font = "${pkgs.inter}/share/fonts/truetype/InterVariable.ttf";
-boot.plymouth.extraConfig = "ShowDelay=0\nDeviceScale=1\n";
+imports = [ inputs.hearth.nixosModules.boot ];
+hearth.boot.enable = true;
 ```

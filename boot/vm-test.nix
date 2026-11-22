@@ -2,17 +2,20 @@
 # saves screenshots of the GRUB menu, the boot splash and the password
 # prompt to $out. `nix build .#boot-screenshots`.
 # Nothing here touches the host's bootloader.
-{ pkgs, boot }:
+{ pkgs, module }:
 pkgs.testers.runNixOSTest {
   name = "hearth-boot-screenshots";
   nodes.machine = { pkgs, lib, ... }: {
+    imports = [ module ];
+    hearth.boot.enable = true;
     virtualisation = {
       useBootLoader = true;
       useEFIBoot = true;
       memorySize = 2048;
-      # A 3840x1600 framebuffer, like the real gfxmode, so GRUB and Plymouth
-      # get the same sizes as on the LG.
-      qemu.options = [ "-vga none" "-device VGA,edid=on,xres=3840,yres=1600,vgamem_mb=128" ];
+      # The LG's 5120x2160 as the monitor's preferred mode (EDID), so OVMF
+      # offers it and GRUB's own "auto" would fall back to 800x600 as on the
+      # real machine; select-mode.cfg has to find 5120x2160 itself.
+      qemu.options = [ "-vga none" "-device VGA,edid=on,xres=5120,yres=2160,vgamem_mb=256" ];
     };
     boot.loader.efi.canTouchEfiVariables = false;
     boot.loader.timeout = lib.mkForce 60;
@@ -20,9 +23,6 @@ pkgs.testers.runNixOSTest {
       enable = true;
       efiSupport = true;
       efiInstallAsRemovable = true;
-      theme = boot.grub-theme-hearth;
-      splashImage = null;
-      gfxmodeEfi = "3840x1600,auto";
       # Fake entries so the icon row shows what the real machine has.
       extraEntries = ''
         menuentry "Windows Boot Manager" --class windows --class os {
@@ -35,19 +35,9 @@ pkgs.testers.runNixOSTest {
     };
     boot.initrd.systemd.enable = true;
     boot.initrd.kernelModules = [ "bochs" ];
-    boot.plymouth = {
-      enable = true;
-      theme = "hearth";
-      themePackages = [ boot.plymouth-theme-hearth ];
-      font = "${pkgs.inter}/share/fonts/truetype/InterVariable.ttf";
-      extraConfig = ''
-        ShowDelay=0
-        DeviceScale=1
-      '';
-    };
     # The test VM has a serial console (the real machine has none); without
     # this plymouth falls back to text on every console.
-    boot.kernelParams = [ "quiet" "splash" "video=3840x1600" "plymouth.ignore-serial-consoles" ];
+    boot.kernelParams = [ "quiet" "splash" "vt.global_cursor_default=0" "plymouth.ignore-serial-consoles" ];
     # Keep tty1 free for the password prompt test after boot.
     systemd.services."getty@tty1".enable = false;
     systemd.services."autovt@tty1".enable = false;
@@ -86,6 +76,15 @@ pkgs.testers.runNixOSTest {
     machine.send_key("ret")
     time.sleep(1)
     machine.screenshot("after-password")
+    machine.succeed("plymouth quit")
+
+    # The shutdown screen (logo only, no bar): nothing in the corners.
+    machine.wait_until_fails("plymouth --ping")
+    machine.succeed("plymouthd --mode=shutdown --tty=tty1 --pid-file=/run/plymouth-test2.pid")
+    machine.wait_until_succeeds("plymouth --ping")
+    machine.succeed("plymouth show-splash")
+    time.sleep(2)
+    machine.screenshot("shutdown-splash")
     machine.succeed("plymouth quit")
     print(machine.succeed("grep -iv 'ply-terminal\\|keyboard' /tmp/plymouth-debug.log | head -150"))
   '';

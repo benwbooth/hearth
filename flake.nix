@@ -213,8 +213,8 @@
     packages.${system} = {
       default = hearth;
       inherit hearth quickshell appmenu-gtk-module recoll;
-      inherit (boot) plymouth-theme-hearth grub-theme-hearth grub-theme-hearth-5k;
-      boot-screenshots = import ./boot/vm-test.nix { inherit pkgs boot; };
+      inherit (boot) plymouth-theme-hearth grub-theme-hearth;
+      boot-screenshots = import ./boot/vm-test.nix { inherit pkgs; module = self.nixosModules.boot; };
     };
 
     # The login screen (README "Login screen"): greetd + arbor + hearth-greeter.
@@ -222,6 +222,8 @@
     # Spotlight's indexer and the AI hub's llama.cpp server as user units
     # (README "Spotlight", "AI").
     nixosModules.ai = import ./nix/ai.nix self;
+    # The boot menu and splash (README "Boot").
+    nixosModules.boot = import ./nix/boot.nix self;
 
     # `nix develop`, then `quickshell -p shell` runs straight from the
     # checkout and hot-reloads on every save.
