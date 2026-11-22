@@ -1,0 +1,12 @@
+# attr	toolkit	reason (static classification impossible or wrong: unfree/uncached bundles, insecure deps)
+steam	cef	Steam client: CEF (steamwebhelper) + its own UI; FHS launcher hides the binary
+vscode	electron	bundled Electron (unfree tarball; no store closure to read)
+zoom-us	qt5-quick	bundled Qt 5 + QML client
+google-chrome	chromium	Chrome
+microsoft-edge	chromium	Edge
+vivaldi	chromium	Vivaldi
+kdePackages.neochat	qt6-quick	Kirigami app (uncached: insecure libolm)
+kdePackages.itinerary	qt6-quick	Kirigami app (uncached)
+calf	gtk2	calfjackhost is GTK 2
+helix	tui	terminal editor
+kicad	wx-gtk3	wxWidgets (uncached)

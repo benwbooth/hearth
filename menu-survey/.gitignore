@@ -5,3 +5,6 @@ data/classify.log
 data/shots/
 data/*.tmp
 __pycache__/
+data/survey.sqlite
+data/probe*.log
+data/scan.log

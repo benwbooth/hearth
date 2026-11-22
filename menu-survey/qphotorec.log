@@ -1,0 +1,12 @@
+The X11 connection broke (error 1). Did the X11 server die?
+en
+translator not installed
+
+
+Sun Nov 22 14:44:12 2026
+PhotoRec 7.2, Data Recovery Utility, February 2024
+Christophe GRENIER <grenier@cgsecurity.org>
+https://www.cgsecurity.org
+OS: Linux, kernel 7.3.5 (#1-NixOS SMP PREEMPT_DYNAMIC Tue Nov 17 10:14:21 UTC 2026) x86_64
+Compiler: GCC 15.3
+ext2fs lib: 1.47.4, ntfs lib: libntfs-3g, ewf lib: 20140816, libjpeg: libjpeg-turbo-3.1.4

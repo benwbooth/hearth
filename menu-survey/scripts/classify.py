@@ -232,6 +232,13 @@ def classify_store(out, exec_line=""):
                 sm.add("script:wine")
         if b"Electron/" in head or b"electron::" in head:
             sm.add("Electron")
+    elf_ok = bool(prog) and head[:4] == b"\x7fELF" if prog else False
+    if elf_ok and any(x in sm for x in ("libQt6Widgets.so", "libQt5Widgets.so", "libgtk-3.so", "libgtk-4.so",
+                                         "libQt6Quick.so", "libQt5Quick.so", "libwx_gtk3u", "libgtk-x11-2.0.so",
+                                         "libSDL2-2.0.so", "libSDL3.so", "libglfw.so", "libtk8", "libfltk")):
+        # The program's own links decide; the closure only adds bundles.
+        cm = cm & {"electron", "firefox", "chromium", "wine", "jdk", "openjfx", "flutter", "python", "pygobject"}
+        cm.discard("jdk")
     toolkit, menu_hint = decide(cm, fm, sm)
     return dict(store=out, toolkit=toolkit, menu_hint=menu_hint, electron=electron_ver,
                 closure=sorted(cm), files=sorted(fm), syms=sorted(sm), chain=chain[:4])
@@ -258,6 +265,8 @@ def decide(cm, fm, sm):
         return "wine", "custom"
     if has("jar", "libjvm.so", "script:java") or (has("jdk") and not main_tk and not has("qtbase6", "qtbase5", "gtk4")):
         return ("javafx" if has("openjfx") else "java-swing"), "menubar"
+    if has("libKF6XmlGui.so", "libKF5XmlGui.so") and not has("libKF6Kirigami", "libKirigami"):
+        return ("qt6-widgets" if has("libKF6XmlGui.so") else "qt5-widgets"), "menubar"
     if has("libQt6Quick.so", "libQt5Quick.so", "libKF6Kirigami", "libKirigami") and not has("libQt6Widgets.so", "libQt5Widgets.so", "QMenuBar", "_ZN8QMenuBar", "libKF6XmlGui.so", "libKF5XmlGui.so"):
         return ("qt6-quick" if has("libQt6Quick.so", "qtbase6") else "qt5-quick"), "custom"
     if has("libQt6Widgets.so", "libKF6XmlGui.so") or (has("qtbase6") and not has("qtbase5")):
@@ -307,14 +316,19 @@ def decide(cm, fm, sm):
 
 def classify_drv(attr):
     """Unfree / uncached: derivation inputs only."""
+    os.environ["NIXPKGS_ALLOW_UNFREE"] = "1"
     js = run(["nix", "derivation", "show", "--impure", "--inputs-from", "/etc/nixos", f"nixpkgs#{attr}"], timeout=180)
     try:
         d = json.loads(js)
     except Exception:
         return dict(attr=attr, toolkit="unknown", menu_hint="unknown", error="eval")
+    d = d.get("derivations", d)  # nix >= 2.30 wraps them
     drv = next(iter(d.values()))
+    inputs = drv.get("inputs") or {}
+    drvs = list((inputs.get("drvs") or drv.get("inputDrvs") or {}).keys())
+    srcs = list(inputs.get("srcs") or drv.get("inputSrcs") or [])
     names = []
-    for k in list(drv.get("inputDrvs", {}).keys()) + drv.get("inputSrcs", []):
+    for k in drvs + srcs:
         b = os.path.basename(k)
         names.append(b[33:].removesuffix(".drv") if len(b) > 33 else b)
     env = drv.get("env", {})

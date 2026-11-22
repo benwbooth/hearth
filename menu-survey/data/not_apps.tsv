@@ -39,3 +39,6 @@ lxappearance	theme settings for other desktops
 thunderbird-esr	duplicate of thunderbird
 flathub:com.prusa3d.PrusaSlicer	duplicate of prusa-slicer
 flathub:io.dbeaver.DBeaverCommunity	duplicate of dbeaver-bin
+syncthing	daemon; its desktop entries start the service / open the web UI
+mediainfo	CLI (mediainfo-gui is the app)
+httrack	WebHTTrack runs in a browser

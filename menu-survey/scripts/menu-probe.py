@@ -27,6 +27,7 @@ import configparser
 import glob
 import json
 import os
+import re
 import shlex
 import signal
 import subprocess
@@ -35,9 +36,10 @@ import time
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 RIG = os.path.expanduser("~/.config/Claude/side-session-notes/local_3249e068-f6b4-44ca-966b-72365fe5da97/menu-rig.sh")
-RIGDIR = os.path.join(os.environ["XDG_RUNTIME_DIR"], "menu-rig-survey")
+WORKER = os.environ.get("MENU_PROBE_WORKER", "")
+RIGDIR = os.path.join(os.environ["XDG_RUNTIME_DIR"], "menu-rig-survey" + WORKER)
 ENV = dict(os.environ, MENU_RIG_DIR=RIGDIR)
-OUT = os.path.join(ROOT, "data", "probe.jsonl")
+OUT = os.path.join(ROOT, "data", f"probe{WORKER}.jsonl")
 SHOTS = os.path.join(ROOT, "data", "shots")
 SESSION_ENV = {
     "GTK_MODULES": "appmenu-gtk-module",
@@ -63,24 +65,50 @@ def rig(*args, timeout=30):
     return sh([RIG, *args], timeout=timeout)
 
 
-def nix_build(attr, timeout=900):
-    r = sh(["nix", "build", "--no-link", "--print-out-paths", "--inputs-from", "/etc/nixos",
-            "--option", "max-jobs", "0", f"nixpkgs#{attr}"], timeout=timeout)
+ROOTS = os.path.expanduser("~/.cache/hearth-menu-survey/roots")
+
+
+def nix_build(attr, timeout=900, unfree=False, root=None):
+    """Substitute only (max-jobs 0) for free packages; unfree ones may build
+    their small wrappers locally (their payload comes from the vendor)."""
+    args = ["nix", "build", "--print-out-paths", "--inputs-from", "/etc/nixos"]
+    args += ["--out-link", os.path.join(ROOTS, root)] if root else ["--no-link"]
+    if unfree:
+        args += ["--impure"]
+    else:
+        args += ["--option", "max-jobs", "0"]
+    os.makedirs(ROOTS, exist_ok=True)
+    global ENV
+    old = ENV
+    if unfree:
+        ENV = dict(ENV, NIXPKGS_ALLOW_UNFREE="1")
+    try:
+        r = sh(args + [f"nixpkgs#{attr}"], timeout=timeout)
+    finally:
+        ENV = old
     outs = [l for l in r.stdout.split() if l.startswith("/nix/store/")]
     return outs, (r.stderr.strip().splitlines() or [""])[-1]
 
 
 def tool(name, attr=None):
     if name not in TOOLS:
-        outs, _ = nix_build(attr or name)
+        outs, _ = nix_build(attr or name, root=name)  # rooted: per-app deletes keep it
         TOOLS[name] = outs[0] if outs else ""
     return TOOLS[name]
 
 
+def rig_alive():
+    try:
+        pid = int(open(os.path.join(RIGDIR, "hearth.pid")).read())
+        os.kill(pid, 0)
+    except (OSError, ValueError):
+        return False
+    return rig("run", "arbor", "msg", "-j", "windows").returncode == 0
+
+
 def rig_up():
     if os.path.exists(os.path.join(RIGDIR, "hearth.pid")):
-        r = rig("run", "arbor", "msg", "-j", "windows")
-        if r.returncode == 0:
+        if rig_alive():
             if not os.path.exists(os.path.join(RIGDIR, "core.pids")):
                 with open(os.path.join(RIGDIR, "core.pids"), "w") as f:
                     f.write(" ".join(core_pids()))
@@ -149,7 +177,10 @@ def cleanup():
     if SCOPE["unit"]:
         sh(["systemctl", "--user", "kill", "-s", "KILL", SCOPE["unit"]], timeout=20)
         SCOPE["unit"] = ""
-    core = set(open(os.path.join(RIGDIR, "core.pids")).read().split())
+    try:
+        core = set(open(os.path.join(RIGDIR, "core.pids")).read().split())
+    except OSError:
+        return
     victims = [p for p in bus_pids() if p not in core]
     # Clients of the nested arbor are ours (its own windows aside).
     victims += [str(w["pid"]) for w in windows() if w.get("app_id") != "org.quickshell" and w.get("pid")]
@@ -239,7 +270,10 @@ def count_items(node):
 def attempt(attr, argv, variant, extra_env, extra_args, wait_win=35, wait_menu=16):
     cleanup()
     before = {w["id"] for w in windows()}
-    env = dict(SESSION_ENV, **extra_env)
+    # The arbor session has X11 too (xwayland-satellite): VLC 3 and other
+    # X11-only apps need DISPLAY even when they run "natively".
+    env = dict(SESSION_ENV, DISPLAY=arbor_display())
+    env.update(extra_env)
     envargs = [f"{k}={v}" for k, v in env.items()]
     log = open(os.path.join(RIGDIR, "app.log"), "w")
     SCOPE["n"] += 1
@@ -389,7 +423,10 @@ def infer_x11_route(w):
 
 
 def bus_pids_beyond_core():
-    core = set(open(os.path.join(RIGDIR, "core.pids")).read().split())
+    try:
+        core = set(open(os.path.join(RIGDIR, "core.pids")).read().split())
+    except OSError:
+        core = set()
     return [p for p in bus_pids() if p not in core]
 
 
@@ -421,8 +458,73 @@ def toolkit_of(attr):
     return ""
 
 
+FLATPAK_DIR = os.path.expanduser("~/.cache/hearth-menu-survey/flatpak")
+
+
+def flatpak(*args, timeout=1800):
+    """flatpak --user with a throwaway installation (never Ben's own)."""
+    env = dict(ENV, FLATPAK_USER_DIR=FLATPAK_DIR)
+    try:
+        return subprocess.run(["flatpak", "--user", *args], capture_output=True, text=True, timeout=timeout, env=env)
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(args, 124, "", "timeout")
+
+
+def probe_flatpak(attr):
+    fid = attr.split(":", 1)[1]
+    os.makedirs(FLATPAK_DIR, exist_ok=True)
+    flatpak("remote-add", "--if-not-exists", "flathub", "https://dl.flathub.org/repo/flathub.flatpakrepo")
+    r = flatpak("install", "-y", "--noninteractive", "flathub", fid)
+    if r.returncode and "already installed" not in (r.stderr + r.stdout):
+        return [dict(attr=attr, variant="build", result="install-failed", error=(r.stderr or r.stdout)[-300:])]
+    meta = flatpak("info", "--show-metadata", fid).stdout
+    talk = sorted(set(re.findall(r"(com\.canonical\.AppMenu\.Registrar|org\.kde\.StatusNotifierWatcher|org\.a11y\.Bus)", meta)))
+    argv = ["env", f"FLATPAK_USER_DIR={FLATPAK_DIR}", "flatpak", "run", fid]
+    rows = []
+    r0 = attempt(attr, argv, "session", {}, [])
+    r0.update(toolkit=toolkit_of(attr), flatpak_talk=talk, flatpak=True)
+    rows.append(r0)
+    if r0["result"] != "menus":
+        # Same app with the registrar allowed through the sandbox's D-Bus proxy.
+        argv2 = argv[:-1] + ["--talk-name=com.canonical.AppMenu.Registrar", "--env=LD_LIBRARY_PATH=", fid]
+        r1 = attempt(attr, argv2, "flatpak+registrar", {}, [])
+        r1.update(toolkit=toolkit_of(attr))
+        rows.append(r1)
+    rows[-1]["shot"] = shot(attr)
+    cleanup()
+    return rows
+
+
+APPS = {}
+
+
+def store_delete(outs):
+    """Free the disk again: the app's closure, minus anything still alive
+    (the system, other roots, the tools above)."""
+    if outs:
+        sh(["nix", "store", "delete", "--recursive", "--skip-alive", *outs], timeout=900)
+
+
 def probe(attr):
-    outs, err = nix_build(attr)
+    if attr.startswith("flathub:"):
+        return probe_flatpak(attr)
+    src = APPS.get(attr, {}).get("source", "nixpkgs")
+    if src == "nixpkgs-uncached":
+        fid = APPS[attr].get("flathub")
+        if not fid:
+            return [dict(attr=attr, variant="build", result="not-prebuilt")]
+        rows = probe_flatpak("flathub:" + fid)
+        for r in rows:
+            r["attr"], r["via_flathub"] = attr, fid
+        return rows
+    outs, err = nix_build(attr, unfree=(src == "nixpkgs-unfree"), timeout=1800 if src == "nixpkgs-unfree" else 900)
+    try:
+        return probe_store(attr, outs, err)
+    finally:
+        store_delete(outs)
+
+
+def probe_store(attr, outs, err):
     if not outs:
         return [dict(attr=attr, variant="build", result="not-prebuilt", error=err)]
     out = outs[0]
@@ -446,7 +548,10 @@ def probe(attr):
             levers.append(("electron+libdbusmenu", {"LD_LIBRARY_PATH": f"{dbm}/lib"}, []))
             levers.append(("chromium-a11y", {}, ["--force-renderer-accessibility"]))
         disp = arbor_display()
-        if disp and tk not in ("gtk4", "gtk4-adwaita"):
+        # X11 only changes the outcome for toolkits whose X11 path differs
+        # (Chromium/Electron RegisterWindow, Java, unknown); Qt and GTK export
+        # the same menus on Wayland.
+        if disp and (is_chromish or tk in ("java-swing", "javafx", "unknown", "", "wx-gtk3", "tk", "fltk")):
             x11 = {"DISPLAY": disp, "QT_QPA_PLATFORM": "xcb", "GDK_BACKEND": "x11",
                    "ELECTRON_OZONE_PLATFORM_HINT": "x11", "SDL_VIDEODRIVER": "x11"}
             if is_chromish:
@@ -469,10 +574,14 @@ def main():
     ap.add_argument("--count", type=int, default=50)
     ap.add_argument("--attrs")
     ap.add_argument("--keep-rig", action="store_true")
+    ap.add_argument("--stride", type=int, default=1, help="take every Nth app (parallel workers)")
+    ap.add_argument("--offset", type=int, default=0)
+    ap.add_argument("--flathub", action="store_true", help="Flathub-only apps (throwaway flatpak installation)")
+    ap.add_argument("--sources", default="nixpkgs", help="comma list: nixpkgs,nixpkgs-unfree,nixpkgs-uncached,flathub")
     a = ap.parse_args()
     done = set()
-    if os.path.exists(OUT):
-        done = {json.loads(l)["attr"] for l in open(OUT)}
+    for fn in glob.glob(os.path.join(ROOT, "data", "probe*.jsonl")):
+        done |= {json.loads(l)["attr"] for l in open(fn)}
     if a.attrs:
         todo = a.attrs.split(",")
     else:
@@ -481,14 +590,25 @@ def main():
             hdr = f.readline().rstrip("\n").split("\t")
             for line in f:
                 r = dict(zip(hdr, line.rstrip("\n").split("\t")))
-                if r["include"] != "1" or r["source"] != "nixpkgs" or int(r["rank"]) < a.start:
+                APPS[r["attr"]] = r
+                want = ("flathub",) if a.flathub else tuple(a.sources.split(","))
+                if r["include"] != "1" or r["source"] not in want or int(r["rank"]) < a.start:
                     continue
                 todo.append(r["attr"])
-        todo = [t for t in todo if t not in done][:a.count]
-    rig_up()
+        todo = [t for t in todo if t not in done][:a.count][a.offset::a.stride]
+    if a.attrs:
+        with open(os.path.join(ROOT, "data", "apps.tsv")) as f:
+            hdr = f.readline().rstrip("\n").split("\t")
+            for line in f:
+                r = dict(zip(hdr, line.rstrip("\n").split("\t")))
+                APPS[r["attr"]] = r
+    print(f"{len(todo)} apps to probe", file=sys.stderr, flush=True)
     with open(OUT, "a") as f:
         for attr in todo:
             t = time.time()
+            if not rig_alive():
+                rig("stop")
+                rig_up()
             try:
                 rows = probe(attr)
             except Exception as e:
