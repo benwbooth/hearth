@@ -6,18 +6,20 @@
 # 2026-11-21: the new hearth gave up after 4 s and arbor stayed locked with
 # no lock client and nothing to type into.
 #
-#   scripts/lock-handover-test.sh [--hearth BIN] [--arbor BIN] [--term] [--keep] [--delay S]
+#   scripts/lock-handover-test.sh [--hearth BIN] [--arbor BIN] [--term] [--keep] [--delay S] [--in-process]
 #
 # BIN defaults to this checkout's package (nix build .#hearth) and devloop's
 # arbor. --term stops the old shell with TERM through its wrapper (as devloop
 # does) instead of killing quickshell outright. --delay: seconds A lives on
-# after B's first refusal (default 1). Runs entirely nested: virtual
+# after B's first refusal (default 1). --in-process: B runs without the
+# wrapper, so it asks again from the same process (needs an arbor whose
+# smithay keeps locked outputs per lock object). Runs entirely nested: virtual
 # KWin, nested arbor, private XDG_RUNTIME_DIR, HOME and session bus.
 set -uo pipefail
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
 state_root=${XDG_STATE_HOME:-$HOME/.local/state}
-arbor_bin="" hearth_bin="" term=0 keep=0 delay=1
+arbor_bin="" hearth_bin="" term=0 keep=0 delay=1 inproc=0
 while (($#)); do
   case $1 in
     --arbor) arbor_bin=$2; shift 2 ;;
@@ -25,7 +27,8 @@ while (($#)); do
     --term) term=1; shift ;;
     --keep) keep=1; shift ;;
     --delay) delay=$2; shift 2 ;;
-    *) echo "usage: $0 [--hearth BIN] [--arbor BIN] [--term] [--keep] [--delay S]" >&2; exit 2 ;;
+    --in-process) inproc=1; shift ;;
+    *) echo "usage: $0 [--hearth BIN] [--arbor BIN] [--term] [--keep] [--delay S] [--in-process]" >&2; exit 2 ;;
   esac
 done
 if [[ -z $arbor_bin ]]; then
@@ -147,8 +150,23 @@ sleep 3
 ipc "$a" lock lock manual
 if ! wait_secure "$a" 10; then log "FAIL: hearth A couldn't lock"; exit 1; fi
 log "hearth A ($a) holds the lock"
+# HEARTH_ROGUE_LOCKER=BIN: a client that asks for a lock (refused: A holds
+# it), then sends unlock_and_destroy. The session must stay locked.
+if [[ -n ${HEARTH_ROGUE_LOCKER:-} ]]; then
+  "$HEARTH_ROGUE_LOCKER" 2>&1 | sed 's/^/  /' >&2
+  sleep 0.5
+  if grep -aq "unlocking session" "$work/arbor.log"; then
+    log "FAIL: a refused locker unlocked the session"; exit 1
+  fi
+  [[ $(ipc "$a" lock isSecure) == true ]] && log "refused locker's unlock_and_destroy ignored; A still holds the lock" ||
+    { log "FAIL: A lost the lock after the rogue unlock"; exit 1; }
+fi
 
-setsid "$hearth_bin" >"$work/hearth-b.log" 2>&1 </dev/null &
+if ((inproc)); then
+  setsid env -u HEARTH_RESTARTER "$(dirname "$hearth_bin")/../libexec/hearth-shell" >"$work/hearth-b.log" 2>&1 </dev/null &
+else
+  setsid "$hearth_bin" >"$work/hearth-b.log" 2>&1 </dev/null &
+fi
 b=$(wait_new_shell "$a") || { log "hearth B didn't start"; exit 1; }
 log "hearth B ($b) started while A holds the lock"
 # Let B's restore lock be refused at least once.
