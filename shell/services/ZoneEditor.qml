@@ -25,13 +25,22 @@ Singleton {
             { x: 0, y: 0, width: 0.5, height: 1 }, { x: 0.5, y: 0, width: 0.5, height: 1 }
         ]).map(z => ({ x: +z.x, y: +z.y, width: +z.width, height: +z.height }));
         const copy = !l || l.is_built_in;
-        layout = {
+        const next = {
             id: copy ? "" : l.id,
             name: !l ? "My Layout" : l.is_built_in ? l.name + " (Copy)" : l.name,
             zones: zones
         };
-        display = displayName || "";
-        serial++;
+        const show = () => {
+            layout = next;
+            display = displayName || "";
+            serial++;
+        };
+        // Already open (say on "My Layout" from New custom layout): the window
+        // reads its layout only when it's made, so close it and open a fresh
+        // one (which also brings it to the front) instead of changing the
+        // layout under it with nothing to show for it.
+        if (layout !== null) { layout = null; Qt.callLater(show); }
+        else show();
     }
     function close() { layout = null; }
 

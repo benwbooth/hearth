@@ -41,6 +41,8 @@ Scope {
             property int sel: -1
             property bool snapGrid: true
             property bool snapEdges: true
+            // Against the column (the row itself grows past it when too wide).
+            readonly property bool compactBar: toolbar.fullWidth > toolbar.parent.width + 0.5
             property int divisions: 24
             readonly property real minSize: 0.05
             property var history: []
@@ -259,6 +261,11 @@ Scope {
                 property string text: ""
                 property string tip: ""
                 property bool checked: false
+                // Icon only when the window is too narrow for the full toolbar
+                // (the tooltip still names it).
+                readonly property bool compact: win.compactBar && icon !== ""
+                // Width with the text shown, whatever `compact` is.
+                readonly property real fullWidth: (icon !== "" ? 16 : 0) + (text !== "" ? tbLabel.implicitWidth + (icon !== "" ? 6 : 0) : 0) + 16
                 implicitWidth: tbRow.implicitWidth + 16
                 implicitHeight: 30
                 hoverEnabled: true
@@ -275,9 +282,9 @@ Scope {
                     anchors.centerIn: parent
                     spacing: 6
                     Icon { name: tb.icon; implicitSize: 16; visible: tb.icon !== ""; anchors.verticalCenter: parent.verticalCenter }
-                    Label { text: tb.text; visible: tb.text !== ""; anchors.verticalCenter: parent.verticalCenter }
+                    Label { id: tbLabel; text: tb.text; visible: tb.text !== "" && !tb.compact; anchors.verticalCenter: parent.verticalCenter }
                 }
-                Tooltip { anchorItem: tb; text: tb.tip; hovered: tb.containsMouse && !tb.pressed }
+                Tooltip { anchorItem: tb; text: tb.compact && tb.text !== "" ? tb.text + ": " + tb.tip : tb.tip; hovered: tb.containsMouse && !tb.pressed }
             }
             component Sep: Rectangle { implicitWidth: 1; implicitHeight: 22; color: Theme.border }
 
@@ -289,10 +296,27 @@ Scope {
 
                 // --- toolbar ---
                 RowLayout {
+                    id: toolbar
                     Layout.fillWidth: true
                     spacing: 4
+                    // Everything at full size (text on the buttons, a 220 px
+                    // name box). Buttons that don't fill are fixed at their
+                    // width in a layout, so a too-wide row pushed the whole
+                    // window's contents past its right edge.
+                    readonly property real fullWidth: {
+                        let w = 0, n = 0;
+                        for (const c of children) {
+                            if (!c.visible) continue;
+                            w += c === nameBox ? 220 : c.fullWidth !== undefined ? c.fullWidth : c.implicitWidth;
+                            n++;
+                        }
+                        return w + Math.max(0, n - 1) * spacing;
+                    }
                     TextBox {
                         id: nameBox
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 120
+                        Layout.maximumWidth: 220
                         Layout.preferredWidth: 220
                         placeholder: "Layout name"
                     }
