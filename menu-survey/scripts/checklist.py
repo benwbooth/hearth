@@ -99,10 +99,11 @@ def gap_of(measured, toolkit, p):
     # An exported menu bar that came empty only counts when the app shows
     # menus on AT-SPI (appmenu-gtk-module exports an empty one for every GTK
     # 3 window, dialogs and splash screens included).
-    has_menus = a.get("menubars") or a.get("menus") or a.get("menu_items")
-    if w.get("app_menu") and (has_menus or not a.get("found")):
+    # Combo boxes' popups count as menus on AT-SPI: only a menu bar with
+    # items says the app really has menus the export lost.
+    if w.get("app_menu") and a.get("menubars") and a.get("menu_items"):
         return "dbusmenu-empty"
-    if (w.get("gtk_menu") or {}).get("menubar_path") and has_menus:
+    if (w.get("gtk_menu") or {}).get("menubar_path") and a.get("menubars"):
         return "gtkmenu-empty"
     if ins.get("mpris"):
         return "mpris-not-shown"
@@ -113,12 +114,12 @@ def gap_of(measured, toolkit, p):
         if ins.get("flatpak"):
             return "flatpak-no-a11y"
         return f"no-a11y:{tk}"
-    if a.get("menubars"):
+    if a.get("menubars") and a.get("menu_items"):
         return "atspi-menubar-not-read"
-    if a.get("menu_buttons"):
+    btns = [b for b in a.get("menu_buttons") or [] if b.get("popup") or b.get("role") == "push button menu"
+            or not (b.get("name") or "").strip()]
+    if btns:
         return "menu-button-not-read"
-    if a.get("menus") or a.get("menu_items"):
-        return "atspi-menus-not-read"
     if toolkit in ("qt6-mixed", "qt6-quick", "qt5-quick"):
         return "kirigami-no-menu"
     return "no-menus-visible"  # likely none-needed: check a screenshot

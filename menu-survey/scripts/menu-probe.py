@@ -352,6 +352,12 @@ def desktop_exec(out):
 
 
 def app_menus(dump):
+    if "menus" in (dump or {}) and isinstance(dump["menus"], list):  # appmenu summary
+        return [(m.get("label", ""), m.get("items", 0)) for m in dump["menus"]]
+    return _app_menus_tree(dump)
+
+
+def _app_menus_tree(dump):
     """Top-level menus with at least one item, from hearth's dump."""
     # The merged tree (the window's menus plus MPRIS / harvested shortcuts)
     # where hearth reports it.
@@ -448,7 +454,9 @@ def attempt_windows(attr, before, win, wait_menu, escaped=False):
                     time.sleep(0.7)
                 rig("run", "arbor", "msg", "action", "focus-window", "--id", str(cw["id"]))
                 refocused = True
-            r = rig("dump", timeout=20)
+            r = rig("ipc", "call", "appmenu", "summary", timeout=20)
+            if "summary" not in r.stdout and not r.stdout.strip().startswith("{"):
+                r = rig("dump", timeout=20)  # a hearth without summary
             try:
                 dump = json.loads(r.stdout)
                 dump_ok = True
@@ -466,7 +474,7 @@ def attempt_windows(attr, before, win, wait_menu, escaped=False):
                                app_menu=w.get("app_menu"),
                                gtk_menu=w.get("gtk_menu")),
                    route=route, request=req,
-                   menus=[f"{l}:{n}" for l, n in menus], n_items=count_items(dump.get("tree") or dump.get("menu") or {}),
+                   menus=[f"{l}:{n}" for l, n in menus], n_items=(sum(n for _, n in menus) if "menus" in dump else count_items(dump.get("tree") or dump.get("menu") or {})),
                    result="menus" if any(n for _, n in menus) else ("fallback" if dump_ok else "dump-failed"),
                    n_windows=len(cands))
         if best is None or cur["n_items"] > best["n_items"]:
@@ -535,13 +543,13 @@ def late_check(rows):
     rig("run", "arbor", "msg", "action", "focus-window", "--id", str(w["id"]))
     time.sleep(5)
     try:
-        dump = json.loads(rig("dump", timeout=20).stdout)
+        dump = json.loads(rig("ipc", "call", "appmenu", "summary", timeout=20).stdout)
     except Exception:
         return
     menus = app_menus(dump)
     if len([n for _, n in menus if n]) >= 2:
         sess.update(result="menus", menus=[f"{l}:{n}" for l, n in menus], late=True,
-                    n_items=count_items(dump.get("tree") or dump.get("menu") or {}),
+                    n_items=(sum(n for _, n in menus) if "menus" in dump else count_items(dump.get("tree") or dump.get("menu") or {})),
                     route=(dump.get("request") or {}).get("kind") or "?",
                     window=dict(sess.get("window") or {}, title=w.get("title"), late_window=w["id"]))
 

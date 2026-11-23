@@ -186,6 +186,16 @@ Singleton {
             // harvested shortcuts). Sending `menu` and the merged tree both
             // doubled big menus (KSystemLog) past what an IPC reply carries.
             menu: root.tree }); }
+        // `hearth-ipc call appmenu summary`: the focused window's route and its
+        // menus' titles with item counts, small enough for any menu (dump of a
+        // big menu, KSystemLog's, outgrows an IPC reply).
+        function summary(): string {
+            const top = root.tree ? (root.tree.children || []) : [];
+            return JSON.stringify({ request: root.request,
+                menus: top.filter(i => i.type !== "separator").map(i => ({ label: i.label,
+                    items: (i.children || []).filter(c => c.type !== "separator").length })),
+                appMenu: root.gtkAppMenu ? (root.gtkAppMenu.children || []).length : 0 });
+        }
         // `hearth-ipc call appmenu click "File/New Tab"`: activate an item of
         // the focused window's menus (or of its app menu: "app/Settings…") by
         // its labels, as choosing it in the menu bar would (tests, modules).
