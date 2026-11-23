@@ -509,6 +509,13 @@ MouseArea {
             // Options (macOS's Options submenu).
             MenuSeparator {}
             MenuHeader { text: "Options" }
+            // A recent app (after the divider, not open): take it off.
+            MenuItem {
+                visible: task.dock && !!task.modelData.recent && !task.running
+                text: "Remove from Dock"
+                icon: "list-remove"
+                onTriggered: { menu.close(); TaskGroups.forgetRecent(task.modelData.key); }
+            }
             MenuItem {
                 visible: !!task.entry || Pins.isPinned(task.modelData.key)
                 readonly property bool pinned: Pins.isPinned(task.modelData.key)

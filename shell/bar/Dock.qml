@@ -453,6 +453,9 @@ PanelWindow {
     // --- drag to reorder / remove ---
     property string dragKey: ""
     property bool dragWasPinned: false
+    // A suggested/recent app (after the divider): dragging it out takes it
+    // off the recent list.
+    property bool dragWasRecent: false
     property point dragPos
     property bool dragOut: false
     property int dragIndex: -1
@@ -476,6 +479,7 @@ PanelWindow {
         const first = dockWin.slots.find(s => s.kind === "app");
         dockWin.dragStart = dockWin.baseStart + (first ? first.base : (dockWin.slots.length ? dockWin.baseLength : 0));
         dockWin.dragWasPinned = Pins.isPinned(key);
+        dockWin.dragWasRecent = !external && TaskGroups.isRecent(key);
         dockWin.dragPins = TaskGroups.groups.filter(g => g.pinned && g.key !== key).length;
         dockWin.dragIcon = icon || "";
         dockWin.dragExternal = !!external;
@@ -554,21 +558,23 @@ PanelWindow {
     property string settleKey: ""
     Timer { id: settleTimer; interval: 50; onTriggered: dockWin.settleKey = "" }
     function drop(p) {
-        const key = dragKey, idx = dragIndex, out = dragOut, wasPinned = dragWasPinned, external = dragExternal;
+        const key = dragKey, idx = dragIndex, out = dragOut, wasPinned = dragWasPinned, external = dragExternal,
+              wasRecent = dragWasRecent;
         if (key && !out && idx >= 0) {
             settleKey = key;
             const shown = TaskGroups.groups.filter(g => g.pinned && g.key !== key).map(g => g.key);
             if (!wasPinned) Pins.pin(key);
             Pins.moveAmong(key, idx, shown);
         }
-        // Dropped outside: a pinned app goes up in smoke (a running one
-        // stays as a running app); an unpinned one flies back.
-        const removed = key && out && wasPinned && !external;
+        // Dropped outside: a kept or recent app goes up in smoke (a running
+        // one stays as a running app); an open app that isn't kept flies back.
+        const removed = key && out && (wasPinned || wasRecent) && !external;
         if (removed) dragOverlay.poofAt(p);
         else if (key && out && !external) dragOverlay.flyBack(p, key);
         cancelDrag();
         if (settleKey) settleTimer.restart();
-        if (removed) Pins.unpin(key);
+        if (removed && wasPinned) Pins.unpin(key);
+        if (removed && wasRecent) TaskGroups.forgetRecent(key);
         if (!hover.hovered) hideTimer.restart();
     }
 
@@ -880,7 +886,7 @@ PanelWindow {
             Item {
                 id: ghost
                 readonly property point at: dragOverlay.map(dockWin.dragPos)
-                readonly property bool removing: dockWin.dragOut && dockWin.dragWasPinned && !dockWin.dragExternal
+                readonly property bool removing: dockWin.dragOut && (dockWin.dragWasPinned || dockWin.dragWasRecent) && !dockWin.dragExternal
                 // (Also for an app dragged in from the Launchpad: the Dock
                 // is above the Launchpad, which can't draw over it.)
                 visible: dockWin.dragKey !== ""

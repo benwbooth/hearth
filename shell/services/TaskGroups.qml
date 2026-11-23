@@ -51,6 +51,13 @@ Singleton {
             .filter(g => g.entry).slice(0, 3);
     }
 
+    // Take an app off the recent list (dragged out of the Dock, or its menu's
+    // Remove from Dock).
+    function forgetRecent(key) {
+        Settings.set("dock.recents", (Settings.dock.recents || []).filter(k => k !== key));
+    }
+    function isRecent(key) { return recentGroups.some(g => g.key === key); }
+
     // Unpinned apps whose last window closed become "recent".
     property var lastRunning: []
     onGroupsChanged: {
