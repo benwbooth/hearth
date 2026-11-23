@@ -208,6 +208,22 @@ in
       });
     };
 
+    # `passwd` changes the keyring's password too: pam_oo7 hands the old
+    # and new password (which pam_unix asked for) to the user's oo7-daemon,
+    # which re-encrypts every keyring that used the old one, so the next
+    # login still unlocks it. NixOS makes pam_unix `sufficient` here, which
+    # ends the stack before anything after it runs (its own gnome_keyring
+    # rule never does); alone it means the same as `required`. root's
+    # `passwd USER` gives no old password: then hearth's unlock dialog asks.
+    security.pam.services.passwd.rules.password = lib.mkIf cfg.keyring.enable {
+      unix.control = lib.mkForce "required";
+      oo7 = {
+        order = config.security.pam.services.passwd.rules.password.unix.order + 50;
+        control = "optional";
+        modulePath = "${cfg.keyring.pamPackage}/lib/security/pam_oo7.so";
+      };
+    };
+
     # Real names and pictures (the greeter can't read the users' homes).
     services.accounts-daemon.enable = lib.mkDefault true;
 
