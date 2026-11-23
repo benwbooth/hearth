@@ -628,7 +628,9 @@ def open_placeholders(menus, dump, win_id=None):
     for label in thin:
         rig("ipc", "call", "appmenu", "openMenu", label, timeout=20)
         t0 = time.time()
-        while time.time() - t0 < 8:
+        # A first read can take several seconds (an unnamed GTK 4 ☰ is
+        # searched for, opened unseen, read three levels deep).
+        while time.time() - t0 < 15:
             time.sleep(1.0)
             try:
                 d = json.loads(rig("ipc", "call", "appmenu", "summary", timeout=20).stdout)
