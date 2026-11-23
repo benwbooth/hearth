@@ -1198,6 +1198,78 @@ class Shortcuts:
         self.alive = False
 
 
+class ElectronMenus:
+    """An Electron app's menu bar from its own code (hearth_electron_menu:
+    the Menu template in its app.asar, labels through its translations),
+    for an Electron app that exports none. Items run their accelerator (or
+    their role's default key) through arbor send-keys. Read in a thread,
+    once per app archive."""
+
+    FIRST_ID = -8000
+    CACHE = {}
+
+    def __init__(self, key, pid, window, sink):
+        self.key, self.window, self.sink, self.alive, self.ids = key, window, sink, True, {}
+        try:
+            import hearth_electron_menu as hem
+        except Exception as e:
+            err(f"electron menus: {e}")
+            return
+        self.hem = hem
+        self.path = hem.app_path(pid)
+        if not self.path:
+            return
+        if self.path in self.CACHE:
+            GLib.idle_add(self.emit)
+        else:
+            import threading
+            threading.Thread(target=self.harvest, daemon=True).start()
+
+    def harvest(self):
+        try:
+            menus = self.hem.menus_for(self.path)
+        except Exception as e:
+            menus = []
+            GLib.idle_add(lambda: err(f"electron menus of {self.path}: {e}") and False)
+        self.CACHE[self.path] = menus
+        GLib.idle_add(self.emit)
+
+    def emit(self):
+        if not self.alive:
+            return False
+        nid = [self.FIRST_ID]
+        self.ids = {}
+
+        def conv(items):
+            out_items = []
+            for it in items:
+                nid[0] -= 1
+                if it == "separator":
+                    out_items.append(item(nid[0], type="separator"))
+                elif "items" in it:
+                    out_items.append(item(nid[0], it["label"], submenu=True, children=conv(it["items"])))
+                else:
+                    self.ids[nid[0]] = it["keys"]
+                    out_items.append(item(nid[0], it["label"], shortcut=it["keys"]))
+            return out_items
+        tops = []
+        for m in self.CACHE.get(self.path) or []:
+            nid[0] -= 1
+            tops.append(item(nid[0], m["title"], submenu=True, children=conv(m["items"])))
+        self.sink("electron", tops)
+        return False
+
+    def click(self, nid):
+        keys = self.ids.get(nid)
+        if keys and self.window:
+            GLib.timeout_add(120, lambda: subprocess.Popen(
+                ["arbor", "msg", "action", "send-keys", "--id", str(self.window), "--keys", keys],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) and False)
+
+    def stop(self):
+        self.alive = False
+
+
 class X11Window:
     """The focused X11 window (xwayland-satellite): resolve, then delegate."""
 
@@ -1213,6 +1285,8 @@ class X11Window:
         self.extras = {}
         self.mpris = Mpris(key, pid, self.set_extra) if pid else None
         self.shortcuts = Shortcuts(key, pid, window, gtk, self.set_extra) \
+            if pid and not is_satellite(pid) and not module_for(appid) else None
+        self.electron = ElectronMenus(key, pid, window, self.set_extra) \
             if pid and not is_satellite(pid) and not module_for(appid) else None
         # A menu module for this app (no native menus to read): its menus.
         found = module_for(appid)
@@ -1264,7 +1338,7 @@ class X11Window:
         if not self.alive:
             return
         self.extras[name] = menus
-        merged = [m for n in ("shortcuts", "mpris") for m in self.extras.get(n, [])]
+        merged = [m for n in ("electron", "shortcuts", "mpris") for m in self.extras.get(n, [])]
         out({"type": "extramenus", "key": self.key, "menus": merged})
 
     def same(self, other):
@@ -1343,6 +1417,8 @@ class X11Window:
             self.mpris.stop()
         if self.shortcuts:
             self.shortcuts.stop()
+        if self.electron:
+            self.electron.stop()
 
     def open(self, nid):
         if self.inner:
@@ -1357,6 +1433,8 @@ class X11Window:
             self.mpris.click(nid)
         elif self.shortcuts and nid in self.shortcuts.ids:
             self.shortcuts.click(nid)
+        elif self.electron and nid in self.electron.ids:
+            self.electron.click(nid)
         elif self.actions and nid in self.actions.ids:
             self.actions.click(nid)
         elif self.inner:

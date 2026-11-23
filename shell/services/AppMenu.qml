@@ -113,7 +113,11 @@ Singleton {
         const extra = extraMenus && extraMenus.key === wanted ? (extraMenus.menus || []) : [];
         if (!extra.length) return ownTree;
         const base = ownTree || { id: 0, label: "", children: [] };
-        return Object.assign({}, base, { children: (base.children || []).concat(extra) });
+        // An extra menu the window's own menus already have (a harvested
+        // File next to a real File) is left out.
+        const have = (base.children || []).map(i => String(i.label || "").toLowerCase());
+        const add = extra.filter(m => !have.includes(String(m.label || "").toLowerCase()));
+        return Object.assign({}, base, { children: (base.children || []).concat(add) });
     }
     readonly property var topLevel: tree
         ? tree.children.filter(i => i.visible && i.type !== "separator" && i.label !== "") : []
