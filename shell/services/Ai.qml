@@ -178,7 +178,7 @@ Singleton {
             const e = findApp(args.name);
             if (!e) return `No app called ${args.name} is installed.`;
             if (Quickshell.env("HEARTH_AI_DRYRUN")) return `Opened ${e.name} (dry run).`;
-            e.execute();
+            Launch.app(e);
             return `Opened ${e.name}.`;
         }
         case "get_weather": {

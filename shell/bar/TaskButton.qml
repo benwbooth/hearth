@@ -56,7 +56,7 @@ MouseArea {
     acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
 
     function launch() {
-        if (entry) entry.execute();
+        if (entry) Launch.app(entry);
         if (dock) { launching = true; bounces = 0; launchTimeout.restart(); if (!bounce.running) bounce.start(); }
     }
     // Launch bounce, macOS style: hops of half an icon, ~0.6 s each, until
@@ -420,7 +420,7 @@ MouseArea {
                     required property var modelData
                     text: modelData.name
                     icon: modelData.icon
-                    onTriggered: { modelData.execute(); menu.close(); }
+                    onTriggered: { Launch.app(modelData, task.entry ? task.entry.id : ""); menu.close(); }
                 }
             }
             MenuItem {

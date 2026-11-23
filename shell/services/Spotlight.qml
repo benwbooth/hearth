@@ -238,7 +238,7 @@ Singleton {
         if (!r) return;
         if (r.key) used(r.key);
         switch (r.kind) {
-        case "app": r.entry.execute(); break;
+        case "app": Launch.app(r.entry); break;
         case "settings": Settings.openRequested(r.pane); break;
         case "action": Help.activate(r.item); break;
         case "file": Quickshell.execDetached(["xdg-open", r.file.path]); break;

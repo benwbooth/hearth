@@ -174,7 +174,7 @@ Row {
             MenuItem {
                 text: "New Window"
                 visible: !!root.entry
-                onTriggered: { appMenu.close(); root.entry.execute(); }
+                onTriggered: { appMenu.close(); Launch.app(root.entry); }
             }
             MenuItem {
                 text: "Close Window"
