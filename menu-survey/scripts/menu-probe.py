@@ -448,6 +448,22 @@ def attempt_windows(attr, before, win, wait_menu, escaped=False):
             best = cur
         if cur["result"] == "menus":
             break
+    if best["result"] != "menus" and escaped == "esc":
+        # Still nothing: a separate first-run window (Vesktop Setup, DBeaver's
+        # Product Configuration, a welcome or what's-new window) that a user
+        # would close once; close it if the app has another window.
+        mine = [w for w in windows() if w["id"] not in before and w.get("app_id") != "org.quickshell"]
+        first_run = re.compile(r"setup|welcome|configuration|wizard|first|what.?s new|getting started|"
+                               r"license|tip of the day|update|news|account", re.I)
+        extra = [w for w in mine if first_run.search(w.get("title") or "")]
+        if extra and len(mine) > len(extra) - 0 and len(mine) >= 2:
+            for w in extra:
+                rig("run", "arbor", "msg", "action", "close-window", "--id", str(w["id"]))
+            time.sleep(3)
+            again = attempt_windows(attr, before | {w["id"] for w in extra}, win, wait_menu, escaped="closed")
+            if again and again["n_items"] > best["n_items"]:
+                again["closed_first_run"] = [w.get("title") for w in extra]
+                best = again
     if best["result"] != "menus" and not escaped:
         # A start screen / welcome dialog in front: Escape once, look again.
         wt = tool("wtype")
@@ -455,7 +471,7 @@ def attempt_windows(attr, before, win, wait_menu, escaped=False):
             rig("run", f"{wt}/bin/wtype", "-k", "Escape")
             time.sleep(2)
             if [w for w in windows() if w["id"] not in before and w.get("app_id") != "org.quickshell"]:
-                again = attempt_windows(attr, before, win, wait_menu, escaped=True)
+                again = attempt_windows(attr, before, win, wait_menu, escaped="esc")
                 if again and again["n_items"] > best["n_items"]:
                     again["after_escape"] = True
                     best = again
