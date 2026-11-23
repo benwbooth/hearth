@@ -35,6 +35,37 @@ Constraints:
 3. **none-needed:** apps with no menus at all (dialog tools, games without
    menus). Recorded, so they don't stay "todo".
 
+## Apps not in the catalog: probe at runtime
+
+Any window, catalog or not, goes through the same chain in hearth-appmenu.
+The first source that gives menus wins, and the route found is remembered
+per app id (with its binary path), so the next window starts there.
+
+1. **Native exports:**
+   - dbusmenu: the window's KDE appmenu address, its X11 properties, or a
+     RegisterWindow from its process (the sandbox's D-Bus proxy for a
+     Flatpak)
+   - GMenuModel: through gtk_shell1 or X11 properties.
+2. **A module**, from the catalog or `~/.config/hearth/menus`.
+3. **AT-SPI:** the app's in-window menu bar (kept, live, or drawn in a web
+   page), else its ☰ button.
+4. **GTK app actions:** Settings…, Keyboard Shortcuts, Help as the app
+   menu.
+5. **Tray icon menu** as the app menu.
+6. **Harvested shortcuts** (to build): a generated menu from what the
+   app documents about itself:
+   - a GTK app's shortcuts window (`help-overlay.ui` /
+     `AdwShortcutsDialog`), read from the binary's GResource with
+     `gresource list /proc/PID/exe`: titles, groups, accelerators, action
+     names
+   - KDE `.rc` files
+   - an Electron app's `Menu.buildFromTemplate` in its `app.asar`.
+
+   Items are `gtk_action` where the action is exported, `keys` otherwise.
+7. **"Make Menus for <App>…"** in the bold menu: the AI agent (MODULES.md
+   §4) writes a module into `~/.config/hearth/menus`, tests it nested, and
+   offers to publish it.
+
 ## Dynamic menus
 
 Menus change while an app runs: recent files, enabled/disabled items,
