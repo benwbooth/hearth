@@ -1072,9 +1072,13 @@ class AtspiMenu:
                 menu = self.wait(lambda: self.page_menu(c))
             else:
                 n = len(self.popups())
+                label = self.item_label(c)
+                labels0 = tuple(self.item_label(x) for x in self.items_of(menu)[:4])
                 if not self.act(c):
                     return None
-                menus = self.wait(lambda: (lambda m: m if len(m) > n else None)(self.popups()))
+                cur = menu
+                menus = self.wait(lambda: (lambda m: m if len(m) > n else None)(self.popups())
+                                  or ([cur] if self.gtk4 and self.slid(cur, label, labels0) else None))
                 menu = menus[-1] if menus else None
         return menu
 
@@ -1310,7 +1314,18 @@ class AtspiMenu:
         c[self.burger_key()] = self.burger
         save_cache(c)
 
-    def read_open(self, menu, path, level, seen=None):
+    def slid(self, menu, label, before):
+        """GTK 4's popover menus open a submenu in place: the same popover
+        slides to a page whose first item is a header with the submenu's
+        label (pressing it slides back)."""
+        try:
+            items = self.items_of(menu)
+            return bool(items) and self.item_label(items[0]) == label and \
+                tuple(self.item_label(c) for c in items[:4]) != before
+        except Exception:
+            return False
+
+    def read_open(self, menu, path, level, seen=None, header=None):
         """Read an open menu and, through it, its submenus (opened one after
         the other: opening a sibling closes the one before). A submenu counts
         as opened once a popup shows that wasn't read yet, by object and by
@@ -1326,6 +1341,11 @@ class AtspiMenu:
 
         seen.append((menu, sig(menu)))
         kids = self.read(menu, path)
+        if header is not None:
+            # A slid-in GTK 4 page: its first item is the way back, not a
+            # command (item indices stay as the page has them).
+            kids = [k for k in kids if not (self.paths.get(k["id"], (None,))[-1] == 0 and k["label"] == header)]
+            self.cache[tuple(path)] = kids
         if level >= 2:
             return
         for it in kids:
@@ -1335,11 +1355,15 @@ class AtspiMenu:
             c = self.item_child(menu, cpath[-1])
             if c is None:
                 continue
+            label = self.item_label(c)
+            labels0 = tuple(self.item_label(x) for x in self.items_of(menu)[:4])
             before = [(m, sig(m)) for m in self.popups()]
 
             def test():
                 for m in reversed(self.popups()):
                     if m is menu:
+                        if self.gtk4 and self.slid(menu, label, labels0):
+                            return menu
                         continue
                     s_ = sig(m)
                     if not any(m is o and s_ == os_ for o, os_ in before):
@@ -1347,13 +1371,20 @@ class AtspiMenu:
                 return None
 
             sub = None
-            for _ in range(2):  # once more: it can be slow to open
+            for _ in range(1 if self.gtk4 else 2):  # once more: it can be slow to open
                 if not self.act(c):
                     break
-                sub = self.wait(test, 25)
+                sub = self.wait(test, 12 if self.gtk4 else 25)
                 if sub is not None:
                     break
-            if sub is not None:
+            if sub is menu:
+                self.read_open(menu, cpath, level + 1, seen, header=label)
+                # Slide back to this page for the next submenu.
+                back = self.item_child(menu, 0)
+                if back is not None:
+                    self.act(back)
+                    self.wait(lambda: tuple(self.item_label(x) for x in self.items_of(menu)[:4]) == labels0, 12)
+            elif sub is not None:
                 self.read_open(sub, cpath, level + 1, seen)
 
     def saved(self, it):
