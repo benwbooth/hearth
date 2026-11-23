@@ -69,11 +69,19 @@ Scope {
 
         // Where every icon goes: items [{ key, a, x, y, row, col }] and
         // section headers [{ title, y }] in content coordinates.
+        // While an app is dragged to a new place, the others make room:
+        // it leaves its group and a gap opens where it will land (dropAt).
+        readonly property var gap: dragApp && dropAt && !dropAt.header && !dragOverDock ? dropAt : null
+        readonly property string gapKey: gap ? dragApp.key : ""
         readonly property var layout: {
             const items = [], heads = [], geo = [];
+            const spots = {};
             let y = 0, row = 0;
             for (const g of Launchpad.groups) {
                 const y0 = y;
+                // The app being moved isn't counted where it came from.
+                const list = gapKey ? g.items.filter(a => a.key !== gapKey) : g.items;
+                const keys = (dragApp ? g.items.filter(a => a.key !== dragApp.key) : g.items).map(a => a.key);
                 if (g.title) {
                     heads.push({ key: "h:" + g.id, id: g.id, title: g.title, depth: g.depth || 0, collapsed: g.collapsed,
                                  count: g.items.length, y: y, custom: !!g.custom, unsorted: !!g.unsorted });
@@ -82,21 +90,27 @@ Scope {
                 const top = y;
                 if (g.collapsed) {
                     y += Math.round(6 * pt);
-                    geo.push({ id: g.id, y0: y0, top: top, rows: 0, keys: g.items.map(a => a.key), collapsed: true, custom: !!g.custom, unsorted: !!g.unsorted });
+                    geo.push({ id: g.id, y0: y0, top: top, rows: 0, keys: keys, slots: [], collapsed: true, custom: !!g.custom, unsorted: !!g.unsorted });
                     continue;
                 }
-                for (let i = 0; i < g.items.length; i++) {
+                // Slots in display order: apps, and null for the gap.
+                const slots = list.map(a => a);
+                if (gap && gap.group === g.id) slots.splice(Math.min(gap.index, slots.length), 0, null);
+                const slotGeo = [];
+                for (let i = 0; i < slots.length; i++) {
                     const c = i % cols, r = Math.floor(i / cols);
-                    items.push({ key: g.items[i].key, a: g.items[i], x: c * cellW, y: y + r * cellH, row: row + r, col: c, group: g.id });
+                    const sx = c * cellW, sy = y + r * cellH;
+                    slotGeo.push({ key: slots[i] ? slots[i].key : null, x: sx, y: sy });
+                    if (!slots[i]) { spots[gapKey] = { x: sx, y: sy, index: -1, gap: true }; continue; }
+                    items.push({ key: slots[i].key, a: slots[i], x: sx, y: sy, row: row + r, col: c, group: g.id });
                 }
                 // An empty group of your own keeps a row to drop apps into.
-                const rows = g.items.length ? Math.ceil(g.items.length / cols) : (g.custom ? 1 : 0);
-                geo.push({ id: g.id, y0: y0, top: top, rows: rows, keys: g.items.map(a => a.key), collapsed: false, custom: !!g.custom, unsorted: !!g.unsorted,
-                           empty: g.items.length === 0 });
+                const rows = slots.length ? Math.ceil(slots.length / cols) : (g.custom ? 1 : 0);
+                geo.push({ id: g.id, y0: y0, top: top, rows: rows, keys: keys, slots: slotGeo, collapsed: false, custom: !!g.custom, unsorted: !!g.unsorted,
+                           empty: slots.length === 0 });
                 y += rows * cellH + (g.title ? Math.round(10 * pt) : 0);
-                row += g.items.length ? rows : 0;
+                row += slots.length ? rows : 0;
             }
-            const spots = {};
             for (let i = 0; i < items.length; i++) spots[items[i].key] = { x: items[i].x, y: items[i].y, index: i };
             return { items: items, heads: heads, geo: geo, height: y, spots: spots };
         }
@@ -207,23 +221,27 @@ Scope {
                 if (h.over(p)) { h.move(a.key, a.icon, p); added = h.drop(p); }
                 else h.leave();
             }
+            settleTimer.restart();
+            // Moved first, so the app goes straight from the gap to its new
+            // place (clearing the drag first sent it home for a moment).
+            const wasCustom = Launchpad.sort === "custom";
+            const moved = !added && a && at && !(h && h.over(p));
+            if (moved) Launchpad.moveApp(a.key, at.group, at.index, at.keys.filter(k => k !== a.key));
             dragApp = null;
             dragOverDock = false;
             dropAt = null;
             autoScroll.dir = 0;
             if (added) toast.show("Added " + a.name + " to the Dock");
-            else if (a && at) {
-                const wasCustom = Launchpad.sort === "custom";
-                Launchpad.moveApp(a.key, at.group, at.index, at.keys.filter(k => k !== a.key));
-                if (!wasCustom) toast.show("Switched to your own arrangement (Custom)");
-            }
+            else if (moved && !wasCustom) toast.show("Switched to your own arrangement (Custom)");
         }
 
         // --- drag to rearrange ---
         // Where a dragged app would land in the grid: { group, index, keys,
-        // x, y } (x/y: the insertion bar, content coordinates), or null.
+        // header } (header: dropped on a group's title), or null.
         // Not while searching (the results have no order of their own).
         property var dropAt: null
+        property bool slideCells: !!dragApp || settleTimer.running
+        Timer { id: settleTimer; interval: 260 }
         function dropTarget(a, p) {
             if (Launchpad.query.trim()) return null;
             const q = flick.contentItem.mapFromItem(null, p.x, p.y);
@@ -232,15 +250,23 @@ Scope {
             if (!geo.length) return null;
             let g = geo[0];
             for (const x of geo) if (x.y0 <= q.y) g = x;
-            const keys = g.keys;
+            const keys = g.keys;   // the group's apps without the dragged one
             if (g.collapsed || g.empty || q.y < g.top)
                 return { group: g.id, index: g.collapsed || q.y < g.top ? 0 : keys.length, keys: keys,
-                         x: 0, y: g.top, collapsed: g.collapsed, header: q.y < g.top || g.collapsed };
+                         collapsed: g.collapsed, header: q.y < g.top || g.collapsed };
+            // The slot under the pointer, in the grid as drawn (gap included):
+            // over the gap it stays; over an app's left half it goes before
+            // it, its right half after it. The gap then sits under the
+            // pointer, so it doesn't flicker back and forth.
             const r = Math.max(0, Math.min(g.rows - 1, Math.floor((q.y - g.top) / cellH)));
-            const c = Math.max(0, Math.min(cols, Math.floor(q.x / cellW + 0.5)));
-            let index = Math.min(keys.length, r * cols + c);
-            const col = index - r * cols;
-            return { group: g.id, index: index, keys: keys, x: col * cellW, y: g.top + r * cellH, header: false };
+            const c = Math.max(0, Math.min(cols - 1, Math.floor(q.x / cellW)));
+            const i = r * cols + c;
+            if (i >= g.slots.length) return { group: g.id, index: keys.length, keys: keys, header: false };
+            const sl = g.slots[i];
+            const before = g.slots.slice(0, i).filter(x => x.key && x.key !== a.key).length;
+            if (!sl.key || sl.key === a.key) return { group: g.id, index: before, keys: keys, header: false };
+            const right = q.x - sl.x > cellW / 2;
+            return { group: g.id, index: before + (right ? 1 : 0), keys: keys, header: false };
         }
         // Dragging near the top or bottom of the grid scrolls it.
         Timer {
@@ -326,7 +352,8 @@ Scope {
             Item {
                 id: content
                 anchors.fill: parent
-                opacity: win.dragApp ? 0.45 : 1
+                // Dimmed only while the app is over the Dock.
+                opacity: win.dragApp && win.dragOverDock ? 0.45 : 1
                 Behavior on opacity { NumberAnimation { duration: 160 } }
 
                 // --- the search field ---
@@ -576,16 +603,6 @@ Scope {
                         border.color: Theme.dark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.1)
                     }
 
-                    // Where a dragged app will land.
-                    Rectangle {
-                        visible: !!win.dropAt && !win.dropAt.header && !!win.dragApp
-                        x: win.dropAt ? win.dropAt.x - width / 2 : 0
-                        y: win.dropAt ? win.dropAt.y + Math.round(8 * win.pt) : 0
-                        width: Math.round(4 * win.pt)
-                        height: win.cellH - Math.round(20 * win.pt)
-                        radius: width / 2
-                        color: Theme.accent
-                    }
                     // An empty group of your own: somewhere to drop apps.
                     Repeater {
                         model: win.layout.geo.filter(g => g.empty && !g.collapsed)
@@ -620,6 +637,10 @@ Scope {
                             enabled: !!spot
                             x: spot ? spot.x : 0
                             y: spot ? spot.y : 0
+                            // Slide aside while an app is dragged among them,
+                            // and into place when it's dropped.
+                            Behavior on x { enabled: win.slideCells; NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                            Behavior on y { enabled: win.slideCells; NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
                             width: win.cellW
                             height: win.cellH
                             hoverEnabled: true
@@ -662,7 +683,8 @@ Scope {
                                 implicitSize: win.isz
                                 rasterSize: win.isz * win.dpr
                                 name: cell.want || win.prefetch ? cell.modelData.icon : ""
-                                opacity: cell.dragging ? 0.3 : 1
+                                // The original hides: the icon under the pointer is it.
+                                opacity: cell.dragging ? 0 : 1
                                 scale: cell.pressed && !cell.dragging ? 0.92 : 1
                                 Behavior on scale { NumberAnimation { duration: 90 } }
                             }
