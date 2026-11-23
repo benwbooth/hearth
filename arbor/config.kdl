@@ -123,6 +123,9 @@ include optional=true "~/.config/hearth/arbor-input.kdl"
 include optional=true "~/.config/hearth/arbor-keyboard.kdl"
 // Per-app window rules (Settings > Window Rules); later rules win.
 include optional=true "~/.config/hearth/arbor-rules.kdl"
+// Minimize effect: Genie, Scale or None (Settings > Dock; missing for
+// Genie, arbor's default).
+include optional=true "~/.config/hearth/arbor-dock.kdl"
 
 hotkey-overlay {
     skip-at-startup

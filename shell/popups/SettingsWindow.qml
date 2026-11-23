@@ -473,9 +473,9 @@ Scope {
             Group {
                 ChoiceRow {
                     label: "Minimize windows using"
-                    note: "Drawn by the compositor (arbor); Hyprland has no minimize animation."
+                    note: "Genie: the window bends into a funnel and pours into its place in the Dock (and back out when you restore it). Scale: it shrinks into the Dock. None: it disappears at once. Drawn by arbor; Hyprland has no minimize animation."
                     key: "dock.minimizeEffect"
-                    options: [{ value: "genie", label: "Genie" }, { value: "scale", label: "Scale" }]
+                    options: [{ value: "genie", label: "Genie" }, { value: "scale", label: "Scale" }, { value: "none", label: "None" }]
                 }
                 Divider {}
                 SwitchRow {

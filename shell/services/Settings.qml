@@ -59,7 +59,7 @@ Singleton {
             showIndicators: true,
             showRecents: true,          // recently used, unpinned apps
             recents: [],                // kept by the dock
-            minimizeEffect: "scale",    // "scale" | "genie"
+            minimizeEffect: "genie",    // "genie" | "scale" | "none" (drawn by arbor)
             minimizeIntoApp: false
         },
         notifications: {

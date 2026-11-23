@@ -328,6 +328,71 @@ PanelWindow {
         }
     }
 
+    // --- where windows minimize to (arbor's Genie / Scale effect) ---
+    // Each window's dock slot, in this dock surface's coordinates at rest
+    // (no magnification, shown): the window's own tile when it is minimized
+    // and minimized windows get tiles, the place the next tile will appear
+    // for the others (the Dock grows by a tile, and by the divider before
+    // the first one, staying centred), else the app's icon. arbor finds the
+    // surface by its namespace, so side docks below the menu bar line up.
+    readonly property var minimizeTargets: {
+        if (!Compositor.isArbor) return [];
+        const out = [];
+        const ic = iconSize;
+        const cross = edge === "bottom" ? height - margin - thickness + (thickness - ic) / 2
+                    : edge === "left" ? margin + (thickness - ic) / 2
+                    : width - margin - thickness + (thickness - ic) / 2;
+        const r = (id, along) => ({ window_id: id, x: vertical ? cross : along, y: vertical ? along : cross, width: ic, height: ic });
+        const iconAt = base => baseStart + base + (cell - ic) / 2;
+        const idOf = t => { const w = Compositor.windowForToplevel(t); return w ? Number(w.id) : -1; };
+        const done = new Set();
+        for (const sl of slots) {
+            if (sl.kind !== "min") continue;
+            const id = idOf(sl.toplevel);
+            if (id < 0 || done.has(id)) continue;
+            done.add(id);
+            out.push(r(id, iconAt(sl.base)));
+        }
+        let next = NaN;
+        if (!cfg.minimizeIntoApp) {
+            const hasMin = slots.some(sl => sl.kind === "min");
+            const grow = cell + (hasMin ? 0 : sepLen);
+            next = Math.round((axisLength - baseLength - grow) / 2) + baseLength + (hasMin ? 0 : sepLen) + (cell - ic) / 2;
+        }
+        for (const sl of slots) {
+            if (sl.kind !== "app") continue;
+            for (const t of sl.group.windows) {
+                const id = idOf(t);
+                if (id < 0 || done.has(id)) continue;
+                done.add(id);
+                out.push(r(id, isNaN(next) ? iconAt(sl.base) : next));
+            }
+        }
+        return out;
+    }
+    // Sent when they change (debounced; arbor keeps them per output).
+    property string sentTargets: ""
+    property bool targetsUnsupported: false
+    onMinimizeTargetsChanged: targetsTimer.restart()
+    Timer { id: targetsTimer; interval: 50; onTriggered: dockWin.sendTargets(dockWin.minimizeTargets) }
+    function sendTargets(list) {
+        if (!Compositor.isArbor || targetsUnsupported || !screen) return;
+        const req = { output: screen.name, namespace: "hearth-dock", edge: edge, targets: list };
+        const json = JSON.stringify(req);
+        if (json === sentTargets) return;
+        sentTargets = json;
+        Compositor.arborRequest({ SetDockTargets: req }, rep => {
+            if (rep && rep.Err !== undefined) {
+                // An arbor from before SetDockTargets: windows shrink toward
+                // the bottom edge instead.
+                if (/unknown variant|SetDockTargets/.test(rep.Err)) dockWin.targetsUnsupported = true;
+                else console.warn("hearth: dock targets:", rep.Err);
+                dockWin.sentTargets = "";
+            }
+        });
+    }
+    Component.onDestruction: sendTargets([])
+
     // --- drag to reorder / remove ---
     property string dragKey: ""
     property bool dragWasPinned: false
