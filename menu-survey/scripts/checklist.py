@@ -196,10 +196,44 @@ def summary():
     print("  solutions:", ", ".join(f"{k} {v}" for k, v in sorted(sol.items(), key=lambda x: -x[1])))
 
 
+def markdown():
+    """The report's tables, from checklist.tsv (measured apps only)."""
+    with open(TSV) as f:
+        rows = [r for r in csv.DictReader(f, delimiter="\t", quoting=csv.QUOTE_NONE)]
+    measured = [r for r in rows if r["status"] != "retest" or r["gap"].startswith(("blocked", "harness"))]
+    tot = sum(float(r["pop"]) for r in measured) or 1
+    print(f"Measured apps: {len(measured)} of {len(rows)}.\n")
+    print("| Status | Apps | Share of installs |\n|---|---:|---:|")
+    for st in ("done", "partial", "todo", "retest", "blocked"):
+        xs = [r for r in measured if r["status"] == st]
+        if xs:
+            print(f"| {st} | {len(xs)} | {100 * sum(float(r['pop']) for r in xs) / tot:.1f}% |")
+    print("\n| Gap | Apps | Share | Examples |\n|---|---:|---:|---|")
+    gaps = {}
+    for r in measured:
+        if r["gap"]:
+            gaps.setdefault(r["gap"], []).append(r)
+    for g, xs in sorted(gaps.items(), key=lambda kv: -sum(float(r["pop"]) for r in kv[1])):
+        ex = ", ".join(r["attr"].replace("kdePackages.", "").replace("flathub:", "") for r in xs[:5])
+        print(f"| {g} | {len(xs)} | {100 * sum(float(r['pop']) for r in xs) / tot:.1f}% | {ex} |")
+    print("\n| Toolkit | Apps | Done | Partial |\n|---|---:|---:|---:|")
+    tks = {}
+    for r in measured:
+        tks.setdefault(r["toolkit"] or "unknown", []).append(r)
+    for tk, xs in sorted(tks.items(), key=lambda kv: -len(kv[1])):
+        d = sum(1 for r in xs if r["status"] == "done")
+        p_ = sum(1 for r in xs if r["status"] == "partial")
+        print(f"| {tk} | {len(xs)} | {100 * d / len(xs):.0f}% | {100 * p_ / len(xs):.0f}% |")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--summary", action="store_true")
+    ap.add_argument("--markdown", action="store_true")
     a = ap.parse_args()
+    if a.markdown:
+        markdown()
+        return
     if not a.summary:
         rebuild()
     summary()
