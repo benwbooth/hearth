@@ -21,7 +21,13 @@ import os
 import sqlite3
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-DB = os.path.join(ROOT, "data", "survey.sqlite")
+# MENU_SURVEY_LOCAL=1: this machine's installed apps too (data/local, gitignored),
+# into data/local/survey.sqlite and results.tsv.
+LOCAL = os.environ.get("MENU_SURVEY_LOCAL") == "1"
+OUTDIR = os.path.join(ROOT, "data", "local" if LOCAL else "")
+APPS_FILES = [os.path.join(ROOT, "data", "apps.tsv")] + ([os.path.join(ROOT, "data", "local", "installed_apps.tsv")] if LOCAL else [])
+PROBE_GLOBS = [os.path.join(ROOT, "data", "probe*.jsonl")] + ([os.path.join(ROOT, "data", "local", "probe*.jsonl")] if LOCAL else [])
+DB = os.path.join(OUTDIR, "survey.sqlite")
 
 
 def outcome(r):
@@ -48,14 +54,12 @@ def main():
                          after_escape int, flatpak int, flatpak_talk text, via_flathub text, toolkit text,
                          shot text, error text, log_tail text, seq int);
     """)
-    with open(os.path.join(ROOT, "data", "apps.tsv")) as f:
-        rd = csv.DictReader(f, delimiter="\t", quoting=csv.QUOTE_NONE)
-        for r in rd:
-            db.execute("insert or ignore into apps values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                       (int(r["rank"]), r["attr"], int(r["include"]), r["source"], r["kind"], float(r["pop"]),
-                        float(r["arch"]), float(r["debian"]), float(r["flathub_pct"]),
-                        int(float(r["flathub_installs"] or 0)), r["flathub"], int(r["unfree"] == "1"),
-                        r["store"], r["desktops"], r["aliases"], r["runtime"], r["note"], r["desc"]))
+    for r in (r for fn in APPS_FILES for r in csv.DictReader(open(fn), delimiter="\t", quoting=csv.QUOTE_NONE)):
+        db.execute("insert or ignore into apps values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                   (int(r["rank"]), r["attr"], int(r["include"]), r["source"], r["kind"], float(r["pop"]),
+                    float(r["arch"]), float(r["debian"]), float(r["flathub_pct"]),
+                    int(float(r["flathub_installs"] or 0)), r["flathub"], int(r["unfree"] == "1"),
+                    r["store"], r["desktops"], r["aliases"], r["runtime"], r["note"], r["desc"]))
     tk = {}
     for l in open(os.path.join(ROOT, "data", "classified.jsonl")):
         j = json.loads(l)
@@ -75,7 +79,7 @@ def main():
                        (j["attr"], int(bool(j.get("shortcuts_window"))), j.get("shortcut_items", 0),
                         j.get("accelerators", 0), int(bool(j.get("primary_menu_ui")))))
     seq = 0
-    for fn in sorted(glob.glob(os.path.join(ROOT, "data", "probe*.jsonl"))):
+    for fn in sorted([f for g in PROBE_GLOBS for f in glob.glob(g)]):
         for l in open(fn):
             try:
                 r = json.loads(l)
@@ -117,7 +121,7 @@ def main():
     db.commit()
     cur = db.execute("select * from results")
     cols = [d[0] for d in cur.description]
-    with open(os.path.join(ROOT, "data", "results.tsv"), "w") as f:
+    with open(os.path.join(OUTDIR, "results.tsv"), "w") as f:
         f.write("\t".join(cols) + "\n")
         for row in cur:
             f.write("\t".join("" if v is None else str(v).replace("\t", " ").replace("\n", " ") for v in row) + "\n")

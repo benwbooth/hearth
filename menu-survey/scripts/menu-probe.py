@@ -482,7 +482,8 @@ def attempt(attr, argv, variant, extra_env, extra_args, wait_win=50, wait_menu=1
     SCOPE["unit"] = f"menuprobe-{os.getpid()}-{SCOPE['n']}.scope"
     proc = subprocess.Popen(["systemd-run", "--user", "--scope", "--quiet", "--collect", "--unit", SCOPE["unit"],
                              "-p", "MemoryMax=8G", "setsid", RIG, "run", "env", *envargs, *argv, *extra_args], env=ENV,
-                            stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+                            stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                            cwd=env["HOME"])  # apps drop logs/configs in their cwd
     t0 = time.time()
     win = None
     while time.time() - t0 < wait_win:
@@ -801,6 +802,8 @@ def store_delete(outs):
 
 
 def probe(attr):
+    if attr.startswith("installed:"):
+        return probe_installed(attr)
     if attr.startswith("flathub:"):
         return probe_flatpak(attr)
     src = APPS.get(attr, {}).get("source", "nixpkgs")
@@ -834,14 +837,49 @@ def probe_store(attr, outs, err):
     argv, did = desktop_exec(out)
     if not argv:
         return [dict(attr=attr, variant="exec", result="no-entry", store=out)]
-    tk = toolkit_of(attr)
+    return probe_argv(attr, argv, toolkit_of(attr), dict(store=out, desktop=did))
+
+
+INSTALLED = {}
+
+
+def probe_installed(attr):
+    """An app installed on this machine (data/installed_exec.tsv, from
+    installed_apps.py): run from the installed copy. Nothing is downloaded,
+    built, uninstalled or deleted."""
+    argv = INSTALLED.get(attr)
+    if not argv:
+        return [dict(attr=attr, variant="exec", result="no-entry")]
+    note = APPS.get(attr, {}).get("note", "")
+    m = re.search(r"\(catalog: ([^)]+)\)", note)
+    tk = toolkit_of(m.group(1)) if m else ""
+    if argv[0] == "flatpak":
+        # Ben's own installations (system and user); the fresh HOME would
+        # otherwise hide the user one.
+        fid = argv[1]
+        rows = [attempt(attr, ["env", "FLATPAK_USER_DIR=" + os.path.expanduser("~/.local/share/flatpak"),
+                               "flatpak", "run", fid], "session", {}, [])]
+        r = rows[0]
+        r["hearth"] = HEARTH_PKG or "installed"
+        if r.get("result") != "no-window" and not (r.get("inspect") or {}).get("atspi", {}).get("found"):
+            r["inspect"] = r.get("inspect") or inspect(r.get("window"))
+        r.update(toolkit=tk, flatpak=True, installed=True)
+        late_check(rows)
+        rows[-1]["shot"] = shot(attr)
+        cleanup()
+        return rows
+    rows = probe_argv(attr, argv, tk, dict(installed=True))
+    return rows
+
+
+def probe_argv(attr, argv, tk, extra):
     rows = []
     r = attempt(attr, argv, "session", {}, [])
     r["hearth"] = HEARTH_PKG or "installed"
     if r.get("result") != "no-window" and len([m for m in r.get("menus", []) if not m.endswith(":0")]) < 2 \
             and not (r.get("inspect") or {}).get("atspi", {}).get("found"):
         r["inspect"] = r.get("inspect") or inspect(r.get("window"))
-    r.update(store=out, desktop=did, toolkit=tk)
+    r.update(extra, toolkit=tk)
     rows.append(r)
     if r["result"] != "menus":
         levers = []
@@ -872,6 +910,20 @@ def probe_store(attr, outs, err):
     return rows
 
 
+LOCAL = os.path.join(ROOT, "data", "local")  # this machine's installed apps (gitignored)
+
+
+def app_rows():
+    for fn in (os.path.join(ROOT, "data", "apps.tsv"), os.path.join(LOCAL, "installed_apps.tsv")):
+        try:
+            with open(fn) as f:
+                hdr = f.readline().rstrip("\n").split("\t")
+                for line in f:
+                    yield dict(zip(hdr, line.rstrip("\n").split("\t")))
+        except OSError:
+            continue
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--from", dest="start", type=int, default=1)
@@ -884,16 +936,13 @@ def main():
     ap.add_argument("--sources", default="nixpkgs", help="comma list: nixpkgs,nixpkgs-unfree,nixpkgs-uncached,flathub")
     a = ap.parse_args()
     done = set()
-    for fn in glob.glob(os.path.join(ROOT, "data", "probe*.jsonl")):
+    for fn in glob.glob(os.path.join(ROOT, "data", "probe*.jsonl")) + glob.glob(os.path.join(LOCAL, "probe*.jsonl")):
         done |= {json.loads(l)["attr"] for l in open(fn)}
     if a.attrs:
         todo = a.attrs.split(",")
     else:
         todo = []
-        with open(os.path.join(ROOT, "data", "apps.tsv")) as f:
-            hdr = f.readline().rstrip("\n").split("\t")
-            for line in f:
-                r = dict(zip(hdr, line.rstrip("\n").split("\t")))
+        for r in app_rows():
                 APPS[r["attr"]] = r
                 # Prebuilt only: nixpkgs from the binary cache, Flathub. Unfree
                 # nixpkgs packages are never in the cache: not a source.
@@ -903,15 +952,21 @@ def main():
                 todo.append(r["attr"])
         todo = [t for t in todo if t not in done][:a.count][a.offset::a.stride]
     if a.attrs:
-        with open(os.path.join(ROOT, "data", "apps.tsv")) as f:
-            hdr = f.readline().rstrip("\n").split("\t")
+        for r in app_rows():
+            APPS[r["attr"]] = r
+    try:
+        with open(os.path.join(LOCAL, "installed_exec.tsv")) as f:
             for line in f:
-                r = dict(zip(hdr, line.rstrip("\n").split("\t")))
-                APPS[r["attr"]] = r
+                k, _, v = line.rstrip("\n").partition("\t")
+                INSTALLED[k] = json.loads(v)
+    except OSError:
+        pass
     print(f"{len(todo)} apps to probe", file=sys.stderr, flush=True)
     orphan_sweep()  # a previous run's apps (stopped or crashed worker)
-    with open(OUT, "a") as f:
+    os.makedirs(LOCAL, exist_ok=True)
+    with open(OUT, "a") as pub, open(os.path.join(LOCAL, f"probe{WORKER}.jsonl"), "a") as loc:
         for attr in todo:
+            f = loc if attr.startswith("installed:") else pub
             t = time.time()
             if not rig_alive():
                 rig("stop")

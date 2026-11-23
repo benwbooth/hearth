@@ -8,3 +8,4 @@ __pycache__/
 data/survey.sqlite
 data/probe*.log
 data/scan.log
+data/local/

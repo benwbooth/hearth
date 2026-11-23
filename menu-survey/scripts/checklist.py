@@ -36,7 +36,11 @@ import sqlite3
 import time
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-TSV = os.path.join(ROOT, "checklist.tsv")
+# MENU_SURVEY_LOCAL=1: this machine's installed apps too, into
+# data/local/checklist.tsv (gitignored; run build_db.py the same way first).
+LOCAL = os.environ.get("MENU_SURVEY_LOCAL") == "1"
+TSV = os.path.join(ROOT, "data", "local", "checklist.tsv") if LOCAL else os.path.join(ROOT, "checklist.tsv")
+DBFILE = os.path.join(ROOT, "data", "local" if LOCAL else "", "survey.sqlite")
 COLS = ["rank", "attr", "source", "toolkit", "pop", "measured", "route", "solution", "status",
         "gap", "checked", "notes"]
 AUTO = {"", "todo", "retest", "partial", "none-needed", "blocked"}  # statuses the measurements may overwrite
@@ -46,7 +50,8 @@ def load_probes():
     """Latest session row per app from data/probe*.jsonl (with inspect)."""
     import glob, json
     rows = {}
-    for fn in sorted(glob.glob(os.path.join(ROOT, "data", "probe*.jsonl"))):
+    for fn in sorted(glob.glob(os.path.join(ROOT, "data", "probe*.jsonl"))
+                     + (glob.glob(os.path.join(ROOT, "data", "local", "probe*.jsonl")) if LOCAL else [])):
         for l in open(fn):
             try:
                 j = json.loads(l)
@@ -144,7 +149,7 @@ def machine_row(r):
 
 
 def rebuild():
-    db = sqlite3.connect(os.path.join(ROOT, "data", "survey.sqlite"))
+    db = sqlite3.connect(DBFILE)
     db.row_factory = sqlite3.Row
     rows = [machine_row(r) for r in db.execute("select * from results order by rank")]
     probes = load_probes()
