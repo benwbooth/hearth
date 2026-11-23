@@ -20,6 +20,9 @@ Columns
             todo        needs a solution (general fix or module)
             retest      not measured yet, or the harness couldn't run it
             blocked     can't be tested here (root, hardware, account)
+  gap       for apps not done: the general mechanism missing, named so that
+            every app with the same gap is fixed together (e.g.
+            kirigami-drawer, swt-late-menubar, mpris, gtk4-shortcuts-window)
   checked   date of the last verification
   notes     free text
 
@@ -35,7 +38,7 @@ import time
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 TSV = os.path.join(ROOT, "checklist.tsv")
 COLS = ["rank", "attr", "source", "toolkit", "pop", "measured", "route", "solution", "status",
-        "checked", "notes"]
+        "gap", "checked", "notes"]
 AUTO = {"", "todo", "retest", "partial"}  # statuses the measurements may overwrite
 
 
@@ -53,7 +56,7 @@ def machine_row(r):
         status, solution = "retest", "todo"
     return {"rank": r["rank"], "attr": r["attr"], "source": r["source"], "toolkit": r["toolkit"] or "",
             "pop": f"{r['pop']:.3f}", "measured": today, "route": r["route_today"] or "",
-            "solution": solution, "status": status,
+            "solution": solution, "status": status, "gap": "",
             "checked": time.strftime("%Y-%m-%d") if today in ("full", "burger", "none") else "", "notes": ""}
 
 
@@ -72,11 +75,12 @@ def rebuild():
         if o and o.get("status") not in AUTO:
             # Hand-set (done by a module, blocked, none-needed...): keep it,
             # refresh only the measured facts.
-            for k in ("solution", "status", "checked", "notes"):
+            for k in ("solution", "status", "gap", "checked", "notes"):
                 r[k] = o.get(k, r[k])
         elif o:
-            if o.get("notes"):
-                r["notes"] = o["notes"]
+            for k in ("notes", "gap"):
+                if o.get(k):
+                    r[k] = o[k]
             if o.get("solution", "todo") not in ("todo", "") and not o["solution"].startswith("general:"):
                 r["solution"] = o["solution"]
         out.append(r)

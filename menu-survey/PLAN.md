@@ -1,9 +1,14 @@
 # Every app with a menu gets a global menu
 
 Goal (Ben, 2026-11-22): every app that has menus shows them in hearth's
-menu bar, live. Progress is tracked per app in `checklist.tsv`
-(`scripts/checklist.py`; rebuilt from the nested measurements without
-touching hand-set solutions).
+menu bar, live. **The product is the runtime system:** hearth-appmenu
+probes any running app, in the catalog or not, and builds the best menus it
+can from what the app exposes. The checklist (`checklist.tsv`) walks the
+whole app list (~4,900) to find where the runtime system falls short. Each
+app that fails is a test case for a *general* mechanism that also covers
+every other app like it. Per-app modules are the last resort, for what no
+general mechanism can reach, and they mark a gap the runtime system should
+eventually close.
 
 Constraints:
 - No patching of apps or packages, and no `LD_LIBRARY_PATH` or other
@@ -11,6 +16,23 @@ Constraints:
 - The logic lives in arbor and hearth.
 - Tests are nested only (private bus, never the live session).
 - Prebuilt packages only; nothing is compiled to test.
+
+## Working through the list
+
+For each app, in popularity order:
+1. **Measure it:** the nested probe. What did the runtime chain find, and
+   what does the app expose? (menu bar or ☰ on AT-SPI, exported actions,
+   MPRIS, shortcuts in its resources, tray, D-Bus services)
+2. **If it falls short, classify the gap,** not the app, e.g.:
+   - "Kirigami global drawer not read"
+   - "SWT menu bar exported empty until the workbench is up"
+   - "media player without menus, has MPRIS"
+   - "GTK4 shortcuts window not harvested"
+
+   The checklist's `gap` column names it.
+3. **Fix the gap generally** in hearth or arbor, re-run every app with that
+   gap, and mark them `general:<mechanism>`.
+4. **Only if no general mechanism can exist,** write a module, and note why.
 
 ## How an app is solved
 
@@ -35,7 +57,7 @@ Constraints:
 3. **none-needed:** apps with no menus at all (dialog tools, games without
    menus). Recorded, so they don't stay "todo".
 
-## Apps not in the catalog: probe at runtime
+## The runtime chain (every window, catalog or not)
 
 Any window, catalog or not, goes through the same chain in hearth-appmenu.
 The first source that gives menus wins, and the route found is remembered
@@ -52,7 +74,14 @@ per app id (with its binary path), so the next window starts there.
 4. **GTK app actions:** Settings…, Keyboard Shortcuts, Help as the app
    menu.
 5. **Tray icon menu** as the app menu.
-6. **Harvested shortcuts** (to build): a generated menu from what the
+6. **MPRIS** (to build): any media player on the bus
+   (`org.mpris.MediaPlayer2.*`, matched by pid) gets a Playback menu:
+   - Play/Pause, Stop, Next, Previous
+   - Shuffle and Loop as checkmarks
+   - Raise/Quit and the volume.
+
+   It's live through PropertiesChanged.
+7. **Harvested shortcuts** (to build): a generated menu from what the
    app documents about itself:
    - a GTK app's shortcuts window (`help-overlay.ui` /
      `AdwShortcutsDialog`), read from the binary's GResource with
@@ -62,7 +91,7 @@ per app id (with its binary path), so the next window starts there.
    - an Electron app's `Menu.buildFromTemplate` in its `app.asar`.
 
    Items are `gtk_action` where the action is exported, `keys` otherwise.
-7. **"Make Menus for <App>…"** in the bold menu: the AI agent (MODULES.md
+8. **"Make Menus for <App>…"** in the bold menu: the AI agent (MODULES.md
    §4) writes a module into `~/.config/hearth/menus`, tests it nested, and
    offers to publish it.
 
