@@ -37,6 +37,7 @@ Scope {
         case "desktop": showDesktop(); break;
         case "lock": Session.run("lock"); break;
         case "launcher": Quickshell.execDetached(["vicinae", "toggle"]); break;
+        case "launchpad": Launchpad.toggle(); break;
         case "notifications": Notifications.toggleCenter(); break;
         case "displayoff":
             if (Compositor.isArbor) Compositor.arborAction("PowerOffMonitors", {});

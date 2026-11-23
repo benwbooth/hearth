@@ -15,7 +15,7 @@ import "services"
 ShellRoot {
     // Touch singletons that own IPC targets (or start daemons): singletons
     // are created on first use, so e.g. `session` (Super+L) wouldn't exist.
-    Component.onCompleted: { void Notifications; void Session; void AppMenu; void Help; void Mouse; void Power; void Keyboard; void Lock; void Displays; void WindowRules; void Binds; void Clipboard; void Spotlight; void Voice; void Ai; void About; void ColorScheme; void TrayWindows; void DockMinimize; }
+    Component.onCompleted: { void Notifications; void Session; void AppMenu; void Help; void Mouse; void Power; void Keyboard; void Lock; void Displays; void WindowRules; void Binds; void Clipboard; void Spotlight; void Voice; void Ai; void About; void ColorScheme; void TrayWindows; void DockMinimize; void Launchpad; }
     // The wallpaper (services/Wallpaper.qml): hearth's own background
     // surface on every screen.
     Variants {
@@ -55,6 +55,7 @@ ShellRoot {
     DisplayConfirm {}
     HelpWindow {}
     SpotlightWindow {}
+    LaunchpadWindow {}
     VoiceOverlay {}
     AboutWindow {}
     PolkitDialog {}

@@ -14,6 +14,7 @@ ColumnLayout {
         { value: "overview", label: "Mission Control", note: "See all your windows at once (the overview)." },
         { value: "desktop", label: "Show Desktop", note: "Move to an empty desktop; again to come back." },
         { value: "lock", label: "Lock Screen", note: "Lock right away; your password opens it." },
+        { value: "launchpad", label: "Launchpad", note: "Every installed app in a full-screen grid." },
         { value: "launcher", label: "Launcher", note: "Search apps, files and more." },
         { value: "notifications", label: "Notification Center", note: "Your notifications and Do Not Disturb." },
         { value: "displayoff", label: "Put Display to Sleep", note: "Turn the screens off; move the mouse to wake them." }

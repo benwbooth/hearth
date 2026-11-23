@@ -362,9 +362,20 @@ Scope {
                     key: "dock.minimizeIntoApp"
                 }
             }
+            Group {
+                SwitchRow { label: "Show Launchpad in the Dock"; note: "The first icon in the Dock opens the Launchpad: every installed app in a full-screen grid (also F4, a hot corner or Help)."; key: "dock.showLaunchpad" }
+                Divider {}
+                ChoiceRow {
+                    label: "Launchpad: arrange apps"
+                    note: "By kind: sections such as Internet & Chat, Office, Games and Development (from each app's own category). A to Z: one list by name."
+                    key: "launchpad.group"
+                    options: [{ value: "category", label: "By kind" }, { value: "name", label: "A to Z" }]
+                }
+                SliderRow { label: "Launchpad icon size"; note: "How big the app icons in the Launchpad are."; key: "launchpad.iconSize"; from: 56; to: 144; step: 4; suffix: " px" }
+            }
             Label {
                 Layout.fillWidth: true
-                text: "Drag an app to reorder it, drag it out of the Dock to remove it, or right-click it for Keep in Dock."
+                text: "Drag an app to reorder it, drag it out of the Dock until it says Remove to remove it, or right-click it for Keep in Dock / Remove from Dock. Drag apps from the Launchpad onto the Dock to add them."
                 color: Theme.fgDim
                 wrapMode: Text.Wrap
                 elide: Text.ElideNone

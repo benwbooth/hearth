@@ -181,6 +181,7 @@ Singleton {
         { value: "spawn \"hearth-ipc\" \"call\" \"spotlight\" \"toggle\"", label: "Search (apps, files, settings)", group: "Apps & Launcher" },
         { value: "spawn \"hearth-ipc\" \"call\" \"voice\" \"toggle\"", label: "Voice assistant (start/stop listening)", group: "Apps & Launcher" },
         { value: "spawn \"vicinae\" \"toggle\"", label: "Search apps (launcher)", group: "Apps & Launcher" },
+        { value: "spawn \"hearth-ipc\" \"call\" \"launchpad\" \"toggle\"", label: "Launchpad (all apps)", group: "Apps & Launcher" },
         { value: "spawn \"hearth-ipc\" \"call\" \"notifications\" \"toggle\"", label: "Notification Center", group: "System" },
         { value: "power-off-monitors", label: "Turn the displays off", group: "System" },
         { value: "show-hotkey-overlay", label: "arbor's shortcut list", group: "System" }

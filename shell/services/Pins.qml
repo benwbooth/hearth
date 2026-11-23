@@ -44,6 +44,22 @@ Singleton {
         ids = rest;
         save();
     }
+    // Move to the `visibleIndex`th place among the pins the Dock shows
+    // (`shown`: their keys in order, without `id`). The saved list also has
+    // pins whose app isn't installed (they show again once it is), so a
+    // plain index into it put dropped apps a few places too early.
+    function moveAmong(id, visibleIndex, shown) {
+        const rest = ids.filter(x => x !== id);
+        const before = visibleIndex < shown.length ? shown[visibleIndex] : null;
+        let at = before ? rest.indexOf(before) : -1;
+        if (at < 0) {
+            const last = shown.length ? rest.indexOf(shown[shown.length - 1]) : -1;
+            at = last >= 0 ? last + 1 : rest.length;
+        }
+        rest.splice(at, 0, id);
+        ids = rest;
+        save();
+    }
     function save() { file.setText(JSON.stringify({ pins: root.ids }, null, 2)); }
 
     FileView {

@@ -197,7 +197,7 @@ Singleton {
         { id: "users", label: "Users & Accounts", icon: "system-users", words: "account picture avatar name password" },
         { id: "appearance", label: "Appearance", icon: "preferences-desktop-theme-global", words: "dark light mode accent colour color theme transparency glass font cursor pointer" },
         { id: "menubar", label: "Menu Bar", icon: "preferences-desktop", words: "clock date top bar icons" },
-        { id: "dock", label: "Desktop & Dock", icon: "preferences-system-windows", words: "dock magnification hide size" },
+        { id: "dock", label: "Desktop & Dock", icon: "preferences-system-windows", words: "dock magnification hide size launchpad apps grid" },
         { id: "layout", label: "Layout", icon: "view-split-top-bottom", words: "panel mac classic" },
         { id: "wallpaper", label: "Wallpaper", icon: "preferences-desktop-wallpaper", words: "background desktop picture slideshow" },
         { id: "lockscreen", label: "Lock Screen", icon: "system-lock-screen", words: "password lock fingerprint" },

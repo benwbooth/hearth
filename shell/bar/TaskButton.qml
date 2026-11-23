@@ -389,19 +389,37 @@ MouseArea {
         else { previewShow.stop(); previewHide.restart(); }
     }
 
-    // Right-click menu.
+    // Right-click menu, grouped like macOS's Dock menu: the app's windows;
+    // what it can open (its jump list, New Window); this window's controls;
+    // Options (keep / remove, login, Files, workspace); then Quit.
+    // Desktop's workspace rule for this app (Options > Assign To).
+    readonly property string ruleAppId: windows.length && windows[0].appId ? windows[0].appId
+                                        : entry ? (entry.startupClass || entry.id) : modelData.key
+    readonly property int ruleIndex: WindowRules.rules.findIndex(r => r.appId === ruleAppId)
+    readonly property string assigned: ruleIndex >= 0 ? (WindowRules.rules[ruleIndex].workspace || "") : ""
+    property bool assignOpen: false
+    Connections { target: menu; function onOpenChanged() { if (!menu.open) task.assignOpen = false; } }
+    function assignTo(ws) {
+        let i = ruleIndex;
+        if (i < 0) {
+            if (!ws) return;
+            i = WindowRules.add(ruleAppId, entry ? entry.name : ruleAppId, entry ? entry.icon : "");
+        }
+        WindowRules.update(i, "workspace", ws);
+    }
     BarPopup {
         id: menu
         anchorItem: task
         padding: Theme.menuPadding
         Column {
-            width: Math.round(220 * Theme.pt)
+            width: Math.round(230 * Theme.pt)
             spacing: 0
             // Rows line up past the checkmark/icon column.
             readonly property bool menuGutter: true
             MenuHeader {
                 text: task.entry ? task.entry.name : task.modelData.key
             }
+            // The app's windows (macOS lists them first).
             Repeater {
                 model: task.windows.length > 1 ? task.windows : []
                 MenuItem {
@@ -413,7 +431,7 @@ MouseArea {
                 }
             }
             MenuSeparator { visible: task.windows.length > 1 }
-            // Jump list (the app's desktop actions), as in KDE and macOS.
+            // What the app can open: its jump list (desktop actions), New Window.
             Repeater {
                 model: task.entry ? task.entry.actions : []
                 MenuItem {
@@ -426,12 +444,18 @@ MouseArea {
             MenuItem {
                 visible: !!task.entry
                 text: task.running ? "New Window" : "Open"
-                icon: "list-add"
+                icon: task.running ? "window-new" : "system-run"
                 onTriggered: { task.launch(); menu.close(); }
             }
 
-            // Window actions.
+            // Its windows.
             MenuSeparator { visible: task.running }
+            MenuItem {
+                visible: task.running && task.dock
+                text: "Show All Windows"
+                icon: "view-grid"
+                onTriggered: { menu.close(); ShellState.overviewRequested(); }
+            }
             MenuItem {
                 visible: task.running
                 readonly property bool allMin: task.windows.every(w => w.minimized)
@@ -482,19 +506,19 @@ MouseArea {
                 }
             }
 
-            // Options (macOS's Options submenu, KDE's pin / edit entries).
+            // Options (macOS's Options submenu).
             MenuSeparator {}
             MenuHeader { text: "Options" }
             MenuItem {
-                visible: !!task.entry
+                visible: !!task.entry || Pins.isPinned(task.modelData.key)
                 readonly property bool pinned: Pins.isPinned(task.modelData.key)
-                text: task.dock ? "Keep in Dock" : "Pin to Taskbar"
-                checkable: true
-                checked: pinned
+                text: pinned ? (task.dock ? "Remove from Dock" : "Unpin from Taskbar")
+                             : (task.dock ? "Keep in Dock" : "Pin to Taskbar")
+                icon: pinned ? "list-remove" : "list-add"
                 onTriggered: {
+                    menu.close();
                     if (pinned) Pins.unpin(task.modelData.key);
                     else Pins.pin(task.modelData.key);
-                    menu.close();
                 }
             }
             MenuItem {
@@ -506,6 +530,33 @@ MouseArea {
             }
             MenuItem {
                 visible: !!task.entry
+                text: "Show in Files"
+                icon: "system-file-manager"
+                onTriggered: { menu.close(); Launchpad.showInFiles(task.modelData.key); }
+            }
+            // Assign To: open this app's windows on a named workspace (a
+            // window rule, Settings > Window Rules).
+            MenuItem {
+                id: assignItem
+                readonly property var named: Compositor.workspaces.filter(ws => !ws.special && ws.name && ws.name !== String(ws.idx))
+                                                .map(ws => ws.name).filter((n, i, a) => a.indexOf(n) === i)
+                visible: Compositor.isArbor && named.length > 0
+                text: (task.assignOpen ? "▾  " : "▸  ") + "Assign To" + (task.assigned ? ": " + task.assigned : "")
+                icon: "virtual-desktops"
+                onTriggered: task.assignOpen = !task.assignOpen
+            }
+            Repeater {
+                model: task.assignOpen && assignItem.visible ? [""].concat(assignItem.named) : []
+                MenuItem {
+                    required property string modelData
+                    text: "      " + (modelData || "None (any workspace)")
+                    checkable: true
+                    checked: task.assigned === modelData
+                    onTriggered: { menu.close(); task.assignTo(modelData); }
+                }
+            }
+            MenuItem {
+                visible: !!task.entry
                 text: "Edit Application…"
                 icon: "document-edit"
                 onTriggered: { menu.close(); Quickshell.execDetached(["sh", "-c", 'id="$1"; d="${XDG_DATA_HOME:-$HOME/.local/share}/applications"; mkdir -p "$d"; '
@@ -513,13 +564,8 @@ MouseArea {
                     + 'exec tessera --new-window --run "${EDITOR:-nano} \"$d/$id.desktop\""', "sh", task.modelData.key]); }
             }
 
+            // Quit.
             MenuSeparator { visible: task.running }
-            MenuItem {
-                visible: task.running && task.dock
-                text: "Show All Windows"
-                icon: "view-grid"
-                onTriggered: { menu.close(); ShellState.overviewRequested(); }
-            }
             MenuItem {
                 visible: task.windows.length > 0
                 text: task.dock ? "Quit" : task.windows.length > 1 ? `Close all ${task.windows.length} windows` : "Close"

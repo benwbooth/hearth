@@ -12,7 +12,10 @@ import ".."
 // pointer; auto-hides (shown when the pointer touches the screen edge,
 // hidden `autohideDelay` ms after it leaves, kept up while one of its menus
 // or previews is open). Drag a pinned icon to reorder it, drag it out of the
-// dock to remove it, drag a running app among the pins to keep it.
+// dock to remove it (a "Remove" label shows while it's far enough out, and
+// it goes up in a puff of smoke), drag a running app among the pins to keep
+// it. The first icon opens the Launchpad (popups/LaunchpadWindow.qml), whose
+// apps can be dragged in here to keep them.
 // All of it is set in Settings > Dock (services/Settings.qml `dockWin.*`).
 PanelWindow {
     id: dockWin
@@ -23,7 +26,8 @@ PanelWindow {
     readonly property string edge: ["left", "right"].indexOf(cfg.position) >= 0 ? cfg.position : "bottom"
     readonly property bool vertical: edge !== "bottom"
     // The set size, shrunk when every app wouldn't fit along the edge.
-    readonly property int appCount: TaskGroups.groups.length + (cfg.showRecents ? TaskGroups.recentGroups.length : 0)
+    readonly property int appCount: TaskGroups.groups.length + (cfg.showRecents ? TaskGroups.recentGroups.length : 0) + (showLaunchpad ? 1 : 0)
+    readonly property bool showLaunchpad: cfg.showLaunchpad !== false
     readonly property int fitSize: Math.floor(((vertical ? height : width) - 60 - 2 * 17) / Math.max(1, appCount)) - 10
     readonly property int iconSize: Math.max(20, Math.min(128, cfg.size, fitSize))
     // macOS 26 proportions (README "Look"): icons ~17% apart (macOS icon
@@ -54,13 +58,19 @@ PanelWindow {
         right: dockWin.edge !== "left"
         top: dockWin.vertical
     }
-    implicitHeight: vertical ? 0 : winThickness
+    // Side docks: the full height below the menu bar. (0, "fill between the
+    // anchors", gave a 1 px tall surface under arbor, so side docks were a
+    // sliver at the top of the screen.)
+    implicitHeight: vertical ? (screen ? screen.height : 800) : winThickness
     implicitWidth: vertical ? winThickness : 0
     exclusionMode: autohide ? ExclusionMode.Ignore : ExclusionMode.Normal
     exclusiveZone: autohide ? 0 : margin + thickness
     color: "transparent"
     WlrLayershell.namespace: "hearth-dock"
-    WlrLayershell.layer: WlrLayer.Top
+    // Above the Launchpad (a full-screen Top surface) while it's open on
+    // this screen, so apps can be dragged from it into the Dock.
+    readonly property bool launchpadHere: Launchpad.open && (!Launchpad.screenName || !screen || Launchpad.screenName === screen.name)
+    WlrLayershell.layer: launchpadHere ? WlrLayer.Overlay : WlrLayer.Top
     // While one of its menus is open the dock takes the keyboard under the
     // pointer and hands keys to the menu (arrows, Return, Esc, type-ahead),
     // like the menu bar.
@@ -98,10 +108,9 @@ PanelWindow {
     // Always up in the overview, like macOS's Mission Control.
     // Out while a window pours into it or out of it (minimize / restore),
     // like macOS.
-    readonly property bool shown: !autohide || held || menuOpen || previews > 0 || dragKey !== "" || Compositor.overviewOpen || minimizePeek
+    readonly property bool shown: !autohide || held || menuOpen || previews > 0 || dragKey !== "" || Compositor.overviewOpen || minimizePeek || launchpadHere
     // True once the slide-in has finished (the name label waits for it).
     property bool settled: false
-    Component.onCompleted: { settled = shown; targetsTimer.restart(); }
 
     // A window on this screen was minimized or restored: show the Dock for
     // the length of arbor's effect (it starts at the same moment, aimed at
@@ -171,7 +180,9 @@ PanelWindow {
         // coordinates along the dock), as if dragged there; dragEnd drops it.
         function dragAt(key: string, x: real, out: bool): void {
             const t = { modelData: { key: key }, entry: DesktopEntries.byId(key) };
-            const p = dockWin.vertical ? Qt.point(dockWin.width / 2, x) : Qt.point(x, out ? 0 : dockWin.height - dockWin.margin - dockWin.thickness / 2);
+            const off = out ? dockWin.margin + dockWin.thickness + dockWin.outDistance + 20 : dockWin.margin + dockWin.thickness / 2;
+            const p = !dockWin.vertical ? Qt.point(x, dockWin.height - off)
+                    : Qt.point(dockWin.edge === "left" ? off : dockWin.width - off, x);
             if (dockWin.dragKey !== key) dockWin.dragHost.begin(t, p);
             else dockWin.dragHost.move(t, p);
         }
@@ -180,7 +191,7 @@ PanelWindow {
         function state(): string {
             return JSON.stringify({ shown: dockWin.shown, held: dockWin.held, hovered: hover.hovered, pointer: dockWin.pointer,
                                     frame: [frameMask.x, frameMask.y, frameMask.width, frameMask.height],
-                                    win: [dockWin.width, dockWin.height], previews: dockWin.previews, hot: (() => { const o = []; for (let k = 0; k < rep.count; k++) { const it = rep.itemAt(k); if (it && it.task && it.task.containsMouse) o.push(it.modelData.key + "@" + Math.round(it.x) + "+" + Math.round(it.width)); } return o; })(), drag: [dockWin.dragKey, dockWin.dragIndex, dockWin.dragOut] });
+                                    win: [dockWin.width, dockWin.height], previews: dockWin.previews, layer: dockWin.launchpadHere ? "overlay" : "top", hot: (() => { const o = []; for (let k = 0; k < rep.count; k++) { const it = rep.itemAt(k); if (it && it.task && it.task.containsMouse) o.push(it.modelData.key + "@" + Math.round(it.x) + "+" + Math.round(it.width)); } return o; })(), drag: [dockWin.dragKey, dockWin.dragIndex, dockWin.dragOut] });
         }
     }
 
@@ -213,12 +224,13 @@ PanelWindow {
     // where it would land, so the neighbours slide aside live.
     readonly property var slots: {
         const out = [];
+        if (showLaunchpad) out.push({ key: "launchpad", kind: "launchpad" });
         const all = TaskGroups.groups;
         const pinned = all.filter(g => g.pinned);
         const rest = all.filter(g => !g.pinned).concat(cfg.showRecents ? TaskGroups.recentGroups : []);
         for (const g of pinned) out.push({ key: g.key, kind: "app", group: g, pinned: true });
         if (rest.length) {
-            if (out.length) out.push({ key: "sep:apps", kind: "sep" });
+            if (out.some(s => s.kind === "app")) out.push({ key: "sep:apps", kind: "sep" });
             for (const g of rest) out.push({ key: g.key, kind: "app", group: g, pinned: false });
         }
         if (!cfg.minimizeIntoApp) {
@@ -325,7 +337,7 @@ PanelWindow {
         for (let i = 0; i < slots.length; i++) {
             const s = slots[i];
             const isPin = s.kind === "app" && s.pinned;
-            if (!gapDone && (!isPin || (s.key !== collapse && pinIdx === gapAt))) { acc += cell; gapDone = true; }
+            if (!gapDone && s.kind !== "launchpad" && (!isPin || (s.key !== collapse && pinIdx === gapAt))) { acc += cell; gapDone = true; }
             const len = s.key === collapse ? 0 : s.len;
             const a = F(s.base + acc), b = F(s.base + acc + len);
             pos.push(baseStart + a);
@@ -344,7 +356,7 @@ PanelWindow {
         if (!hover.hovered || dragKey !== "") return -1;
         const p = livePointer + baseStart;
         for (let i = 0; i < slots.length; i++)
-            if (slots[i].kind === "app" && p >= geo.pos[i] && p < geo.pos[i] + geo.len[i]) return i;
+            if ((slots[i].kind === "app" || slots[i].kind === "launchpad") && p >= geo.pos[i] && p < geo.pos[i] + geo.len[i]) return i;
         return -1;
     }
 
@@ -424,7 +436,6 @@ PanelWindow {
             }
         });
     }
-    Component.onDestruction: sendTargets([])
     // arbor restarted in place (this shell survives through its Wayland
     // proxy): the new arbor starts with no slots, so send them again once
     // the event stream is back (and the window list with it).
@@ -448,36 +459,93 @@ PanelWindow {
     property real dragStart: 0      // where the first pin starts, at drag start
     property int dragPins: 0        // pins other than the dragged one
     property string dragIcon: ""
+    // Dragged in from the Launchpad: it draws the icon under the pointer
+    // until it reaches the Dock, then the drag overlay below does (the Dock
+    // is above the Launchpad); no Remove label or smoke for these.
+    property bool dragExternal: false
     property var seen: ({})          // keys that have had a delegate
+    // How far past the slab's inner edge an icon must be dragged to come
+    // out of the Dock (macOS asks for about an icon's length).
+    readonly property real outDistance: Math.max(48, iconSize * 0.9)
+    // This surface's top-left on its screen (the drag overlay and the
+    // Launchpad are full-screen surfaces; side docks sit below the menu
+    // bar, so their top is the screen's bottom minus their height).
+    readonly property point origin: Qt.point(edge === "right" && screen ? screen.width - width : 0,
+                                             screen ? screen.height - height : 0)
+    function beginDrag(key, icon, p, external) {
+        const first = dockWin.slots.find(s => s.kind === "app");
+        dockWin.dragStart = dockWin.baseStart + (first ? first.base : (dockWin.slots.length ? dockWin.baseLength : 0));
+        dockWin.dragWasPinned = Pins.isPinned(key);
+        dockWin.dragPins = TaskGroups.groups.filter(g => g.pinned && g.key !== key).length;
+        dockWin.dragIcon = icon || "";
+        dockWin.dragExternal = !!external;
+        dockWin.dragPos = p;
+        dockWin.dragIndex = -1;
+        dockWin.dragOut = false;
+        dockWin.dragKey = key;
+        moveDrag(p);
+    }
+    function moveDrag(p) {
+        dockWin.dragPos = p;
+        const off = dockWin.edge === "left" ? p.x - (dockWin.margin + dockWin.thickness)
+                  : dockWin.edge === "right" ? (dockWin.width - dockWin.margin - dockWin.thickness) - p.x
+                  : (dockWin.height - dockWin.margin - dockWin.thickness) - p.y;
+        dockWin.dragOut = off > dockWin.outDistance;
+        const along = (dockWin.vertical ? p.y : p.x) - dockWin.dragStart;
+        const idx = Math.floor(along / dockWin.cell + 0.5);
+        // Unpinned apps only join the pins when dropped among them; one
+        // dragged in from the Launchpad joins wherever it's dropped.
+        const inPins = along < (dockWin.dragPins + 0.5) * dockWin.cell;
+        dockWin.dragIndex = dockWin.dragWasPinned || inPins || dockWin.dragExternal ? Math.max(0, Math.min(dockWin.dragPins, idx)) : -1;
+    }
+    function cancelDrag() { dragKey = ""; dragIndex = -1; dragOut = false; dragExternal = false; }
     readonly property var dragHost: ({
         begin: (task, p) => {
-            const key = task.modelData.key;
-            const first = dockWin.slots.find(s => s.kind === "app");
-            dockWin.dragStart = dockWin.baseStart + (first ? first.base : 0);
-            dockWin.dragWasPinned = Pins.isPinned(key);
-            dockWin.dragPins = TaskGroups.groups.filter(g => g.pinned && g.key !== key).length;
-            dockWin.dragIcon = task.entry ? task.entry.icon : "";
-            dockWin.dragPos = p;
-            dockWin.dragIndex = -1;
-            dockWin.dragOut = false;
-            dockWin.dragKey = key;
-            dockWin.dragHost.move(task, p);
+            dockWin.held = true;
+            dockWin.beginDrag(task.modelData.key, task.entry ? task.entry.icon : "", p, false);
         },
-        move: (task, p) => {
-            dockWin.dragPos = p;
-            const off = dockWin.edge === "left" ? p.x - (dockWin.margin + dockWin.thickness)
-                      : dockWin.edge === "right" ? (dockWin.width - dockWin.margin - dockWin.thickness) - p.x
-                      : (dockWin.height - dockWin.margin - dockWin.thickness) - p.y;
-            dockWin.dragOut = off > 60;
-            const along = (dockWin.vertical ? p.y : p.x) - dockWin.dragStart;
-            const idx = Math.floor(along / dockWin.cell + 0.5);
-            // Unpinned apps only join the pins when dropped among them.
-            const inPins = along < (dockWin.dragPins + 0.5) * dockWin.cell;
-            dockWin.dragIndex = dockWin.dragWasPinned || inPins ? Math.max(0, Math.min(dockWin.dragPins, idx)) : -1;
-        },
+        move: (task, p) => dockWin.moveDrag(p),
         end: (task, p) => dockWin.drop(p),
-        cancel: task => { dockWin.dragKey = ""; dockWin.dragIndex = -1; dockWin.dragOut = false; }
+        cancel: task => dockWin.cancelDrag()
     })
+    // The Launchpad's drag, in screen coordinates (Launchpad.dockHosts).
+    readonly property var externalHost: ({
+        screenName: () => dockWin.screen ? dockWin.screen.name : "",
+        // Over the Dock (its slab, with some slack): drag there.
+        over: sp => {
+            const p = Qt.point(sp.x - dockWin.origin.x, sp.y - dockWin.origin.y);
+            const slack = dockWin.cell;
+            return p.x >= frameMask.x - slack && p.x <= frameMask.x + frameMask.width + slack
+                && p.y >= frameMask.y - slack && p.y <= frameMask.y + frameMask.height + slack;
+        },
+        move: (key, icon, sp) => {
+            const p = Qt.point(sp.x - dockWin.origin.x, sp.y - dockWin.origin.y);
+            if (dockWin.dragKey !== key) dockWin.beginDrag(key, icon, p, true);
+            else dockWin.moveDrag(p);
+        },
+        leave: () => { if (dockWin.dragExternal) dockWin.cancelDrag(); },
+        // Returns true when the app was added (or moved) here.
+        drop: sp => {
+            if (!dockWin.dragExternal) return false;
+            const ok = !dockWin.dragOut && dockWin.dragIndex >= 0;
+            dockWin.drop(Qt.point(sp.x - dockWin.origin.x, sp.y - dockWin.origin.y));
+            return ok;
+        }
+    })
+    Component.onCompleted: { settled = shown; targetsTimer.restart(); registerHost(); }
+    onScreenChanged: registerHost()
+    function registerHost() {
+        const h = Object.assign({}, Launchpad.dockHosts);
+        for (const k in h) if (h[k] === externalHost) delete h[k];
+        if (screen) h[screen.name] = externalHost;
+        Launchpad.dockHosts = h;
+    }
+    Component.onDestruction: {
+        sendTargets([]);
+        const h = Object.assign({}, Launchpad.dockHosts);
+        for (const k in h) if (h[k] === externalHost) delete h[k];
+        Launchpad.dockHosts = h;
+    }
 
     // The dropped app reorders first, while its slot is still hidden, and
     // then appears in place: clearing the drag first put it back in its old
@@ -486,17 +554,22 @@ PanelWindow {
     property string settleKey: ""
     Timer { id: settleTimer; interval: 50; onTriggered: dockWin.settleKey = "" }
     function drop(p) {
-        const key = dragKey, idx = dragIndex, out = dragOut;
+        const key = dragKey, idx = dragIndex, out = dragOut, wasPinned = dragWasPinned, external = dragExternal;
         if (key && !out && idx >= 0) {
             settleKey = key;
-            if (!dragWasPinned) Pins.pin(key);
-            Pins.move(key, idx);
+            const shown = TaskGroups.groups.filter(g => g.pinned && g.key !== key).map(g => g.key);
+            if (!wasPinned) Pins.pin(key);
+            Pins.moveAmong(key, idx, shown);
         }
-        dragKey = "";
-        dragIndex = -1;
-        dragOut = false;
+        // Dropped outside: a pinned app goes up in smoke (a running one
+        // stays as a running app); an unpinned one flies back.
+        const removed = key && out && wasPinned && !external;
+        if (removed) dragOverlay.poofAt(p);
+        else if (key && out && !external) dragOverlay.flyBack(p, key);
+        cancelDrag();
         if (settleKey) settleTimer.restart();
-        if (key && out && dragWasPinned) { Pins.unpin(key); poof.at(p); }
+        if (removed) Pins.unpin(key);
+        if (!hover.hovered) hideTimer.restart();
     }
 
     // Tests: HEARTH_DOCK_TRACE=1 logs the drawn layout every frame
@@ -556,7 +629,7 @@ PanelWindow {
             onIdxChanged: if (idx >= 0) {
                 const sl = dockWin.slots[idx];
                 const g = sl && sl.group;
-                text = g && g.entry ? g.entry.name : (sl ? sl.key : "");
+                text = sl && sl.kind === "launchpad" ? "Launchpad" : g && g.entry ? g.entry.name : (sl ? sl.key : "");
                 const open = g && g.windows && g.windows.length > 0;
                 sub = !g || open ? "" : (g.entry && g.entry.comment ? g.entry.comment : "Click to open · right-click for options");
             }
@@ -714,7 +787,8 @@ PanelWindow {
                     anchors.fill: parent
                     sourceComponent: slot.modelData.kind === "app" ? appComp
                                    : slot.modelData.kind === "sep" ? sepComp
-                                   : slot.modelData.kind === "min" ? minComp : null
+                                   : slot.modelData.kind === "min" ? minComp
+                                   : slot.modelData.kind === "launchpad" ? launchpadComp : null
                 }
                 Component {
                     id: appComp
@@ -746,6 +820,10 @@ PanelWindow {
                     }
                 }
                 Component {
+                    id: launchpadComp
+                    LaunchpadTile { zoom: dockWin.geo.zoom[slot.index] ?? 1 }
+                }
+                Component {
                     id: minComp
                     MinimizedTile {
                         toplevel: slot.modelData.toplevel
@@ -754,54 +832,153 @@ PanelWindow {
                 }
             }
         }
+    }
 
-        // The icon being dragged, and the poof when one is dropped outside.
-        Icon {
-            visible: dockWin.dragKey !== ""
-            name: dockWin.dragIcon
-            implicitSize: dockWin.iconSize
-            x: dockWin.dragPos.x - width / 2
-            y: dockWin.dragPos.y - height / 2
-            opacity: dockWin.dragOut ? 0.5 : 0.9
-            Icon {
-                visible: dockWin.dragOut
-                anchors.right: parent.right
-                anchors.top: parent.top
-                implicitSize: 18
-                name: "list-remove"
-            }
+    // The icon being dragged, its "Remove" label and the puff of smoke, in
+    // a full-screen overlay that takes no input: drawn inside the Dock's own
+    // surface they vanished as soon as the pointer left it (the drag still
+    // removed the app, but nothing showed it: "drag off doesn't work").
+    PanelWindow {
+        id: dragOverlay
+        screen: dockWin.screen
+        visible: dockWin.dragKey !== "" || poofAnim.running || backAnim.running
+        anchors { top: true; bottom: true; left: true; right: true }
+        exclusionMode: ExclusionMode.Ignore
+        color: "transparent"
+        WlrLayershell.namespace: "hearth-dock-drag"
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+        mask: Region {}
+
+        // Dock surface point -> overlay point.
+        function map(p) { return Qt.point(p.x + dockWin.origin.x, p.y + dockWin.origin.y); }
+        function poofAt(p) {
+            const q = map(p);
+            poof.x = q.x - poof.width / 2;
+            poof.y = q.y - poof.height / 2;
+            poofIcon.name = dockWin.dragIcon;
+            poofAnim.restart();
         }
+        // An app that can't be removed (running, not kept) flies home.
+        function flyBack(p, key) {
+            const i = dockWin.slots.findIndex(sl => sl.key === key);
+            if (i < 0) return;
+            const q = map(p);
+            const along = (dockWin.geo.pos[i] ?? 0) + dockWin.cell / 2;
+            const home = map(dockWin.vertical ? Qt.point(dockWin.edge === "left" ? dockWin.margin + dockWin.thickness / 2
+                                                                                  : dockWin.width - dockWin.margin - dockWin.thickness / 2, along)
+                                              : Qt.point(along, dockWin.height - dockWin.margin - dockWin.thickness / 2));
+            backIcon.name = dockWin.dragIcon;
+            backAnim.fromX = q.x; backAnim.fromY = q.y; backAnim.toX = home.x; backAnim.toY = home.y;
+            backAnim.restart();
+        }
+
         Item {
-            id: poof
-            width: dockWin.iconSize
-            height: dockWin.iconSize
-            opacity: 0
-            function at(p) {
-                x = Math.max(0, Math.min(dockWin.width - width, p.x - width / 2));
-                y = Math.max(0, Math.min(dockWin.height - height, p.y - height / 2));
-                anim.restart();
-            }
-            Repeater {
-                model: 6
-                Rectangle {
-                    required property int index
-                    readonly property real a: index * Math.PI / 3
-                    width: 10 + poof.spread * 6
-                    height: width
-                    radius: width / 2
-                    color: Theme.dark ? "#d8dde3" : "#9aa3ad"
-                    x: poof.width / 2 - width / 2 + Math.cos(a) * poof.spread * 18
-                    y: poof.height / 2 - height / 2 + Math.sin(a) * poof.spread * 18
+            anchors.fill: parent
+            transform: Translate { x: 0.001; y: 0.001 }
+
+            Item {
+                id: ghost
+                readonly property point at: dragOverlay.map(dockWin.dragPos)
+                readonly property bool removing: dockWin.dragOut && dockWin.dragWasPinned && !dockWin.dragExternal
+                // (Also for an app dragged in from the Launchpad: the Dock
+                // is above the Launchpad, which can't draw over it.)
+                visible: dockWin.dragKey !== ""
+                x: at.x - width / 2
+                y: at.y - height / 2
+                width: dockWin.iconSize
+                height: dockWin.iconSize
+                Icon {
+                    anchors.fill: parent
+                    implicitSize: dockWin.iconSize
+                    rasterSize: dockWin.iconSize * (dragOverlay.devicePixelRatio || 1)
+                    name: dockWin.dragIcon
+                    opacity: ghost.removing ? 0.8 : 1
+                    scale: ghost.removing ? 0.9 : 1
+                    Behavior on opacity { NumberAnimation { duration: 150 } }
+                    Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                }
+                // macOS: "Remove" over the icon once it's far enough out.
+                GlassFrame {
+                    id: removePill
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.bottom: parent.top
+                    anchors.bottomMargin: Math.round(6 * Theme.pt)
+                    width: removeText.implicitWidth + 2 * Math.round(10 * Theme.pt)
+                    height: removeText.implicitHeight + Math.round(8 * Theme.pt)
+                    radius: Math.round(6 * Theme.pt)
+                    tint: Theme.glassTip
+                    shadowBlur: 12
+                    shadowY: 3
+                    opacity: ghost.removing ? 1 : 0
+                    visible: opacity > 0
+                    Behavior on opacity { NumberAnimation { duration: 140 } }
+                    Label {
+                        id: removeText
+                        anchors.centerIn: parent
+                        text: "Remove"
+                        font.pointSize: Theme.menuFontSize
+                        font.letterSpacing: Theme.menuTracking
+                    }
                 }
             }
-            property real spread: 0
+
+            // Puff of smoke: the icon shrinks away into a few soft puffs
+            // that swell and fade.
+            Item {
+                id: poof
+                width: dockWin.iconSize * 2
+                height: width
+                visible: poofAnim.running
+                property real t: 0
+                Icon {
+                    id: poofIcon
+                    x: (parent.width - width) / 2
+                    y: (parent.height - height) / 2
+                    implicitSize: dockWin.iconSize
+                    opacity: Math.max(0, 1 - poof.t * 3)
+                    scale: Math.max(0.01, 0.9 - poof.t)
+                }
+                // Irregular puffs (angle, distance, size), a cloud rather
+                // than a ring; they drift up a little as they swell.
+                Repeater {
+                    model: [[0, 0, 1.35], [0.3, 0.30, 0.9], [1.4, 0.26, 1.05], [2.3, 0.34, 0.8], [3.0, 0.22, 1.1],
+                            [3.9, 0.32, 0.85], [4.7, 0.24, 1.0], [5.5, 0.33, 0.75], [1.0, 0.42, 0.6], [4.3, 0.44, 0.6]]
+                    Rectangle {
+                        required property var modelData
+                        readonly property real a: modelData[0]
+                        readonly property real dist: dockWin.iconSize * (modelData[1] + 0.32 * poof.t)
+                        readonly property real size: dockWin.iconSize * modelData[2] * (0.3 + 0.4 * poof.t)
+                        width: size
+                        height: size
+                        radius: size / 2
+                        x: poof.width / 2 - size / 2 + Math.cos(a) * dist
+                        y: poof.height / 2 - size / 2 + Math.sin(a) * dist * 0.8 - dockWin.iconSize * 0.3 * poof.t
+                        color: Theme.dark ? "#e8ebef" : "#c3c9d0"
+                        opacity: (poof.t < 0.15 ? poof.t / 0.15 : 1 - (poof.t - 0.15) / 0.85) * (modelData[2] > 1 ? 0.55 : 0.75)
+                    }
+                }
+                // Tests: HEARTH_DOCK_SLOW=10 plays it ten times slower (screenshots).
+                NumberAnimation { id: poofAnim; target: poof; property: "t"; from: 0; to: 1; duration: 520 * (Number(Quickshell.env("HEARTH_DOCK_SLOW")) || 1); easing.type: Easing.OutQuad }
+            }
+
+            Icon {
+                id: backIcon
+                visible: backAnim.running
+                implicitSize: dockWin.iconSize
+                property real cx: 0
+                property real cy: 0
+                x: cx - width / 2
+                y: cy - height / 2
+            }
             ParallelAnimation {
-                id: anim
-                NumberAnimation { target: poof; property: "spread"; from: 0; to: 1; duration: 350; easing.type: Easing.OutQuad }
-                SequentialAnimation {
-                    NumberAnimation { target: poof; property: "opacity"; from: 0; to: 1; duration: 60 }
-                    NumberAnimation { target: poof; property: "opacity"; to: 0; duration: 290 }
-                }
+                id: backAnim
+                property real fromX: 0
+                property real fromY: 0
+                property real toX: 0
+                property real toY: 0
+                NumberAnimation { target: backIcon; property: "cx"; from: backAnim.fromX; to: backAnim.toX; duration: 260; easing.type: Easing.OutCubic }
+                NumberAnimation { target: backIcon; property: "cy"; from: backAnim.fromY; to: backAnim.toY; duration: 260; easing.type: Easing.OutCubic }
             }
         }
     }
@@ -836,8 +1013,67 @@ PanelWindow {
             }
             MenuSeparator {}
             MenuItem {
+                text: "Open Launchpad"
+                icon: "view-app-grid-symbolic"
+                onTriggered: { dockMenu.close(); Launchpad.show(); }
+            }
+            MenuItem {
+                text: "Show Launchpad in Dock"
+                checkable: true
+                checked: dockWin.showLaunchpad
+                onTriggered: { dockMenu.close(); Settings.set("dock.showLaunchpad", !dockWin.showLaunchpad); }
+            }
+            MenuItem {
                 text: "Dock Settings…"
                 onTriggered: { dockMenu.close(); Settings.openRequested("dock"); }
+            }
+        }
+    }
+
+    // The Launchpad's icon: a dark tile with a grid of coloured squares,
+    // drawn here so it's crisp at any size and zoom.
+    component LaunchpadTile: MouseArea {
+        id: lp
+        property real zoom: 1
+        hoverEnabled: true
+        acceptedButtons: Qt.LeftButton
+        onClicked: Launchpad.toggle()
+        Item {
+            readonly property real size: dockWin.iconSize * lp.zoom
+            width: size
+            height: size
+            x: !dockWin.vertical ? (parent.width - width) / 2
+             : dockWin.edge === "left" ? (dockWin.thickness - dockWin.iconSize) / 2
+             : (dockWin.thickness + dockWin.iconSize) / 2 - width
+            y: dockWin.vertical ? (parent.height - height) / 2 : (dockWin.thickness + dockWin.iconSize) / 2 - height
+            opacity: lp.pressed ? 0.7 : 1
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: parent.width * 0.06
+                radius: width * 0.23
+                gradient: Gradient {
+                    GradientStop { position: 0; color: "#5a5f6b" }
+                    GradientStop { position: 1; color: "#2a2d34" }
+                }
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, 0.18)
+                Grid {
+                    id: dots
+                    anchors.centerIn: parent
+                    columns: 3
+                    readonly property real d: parent.width * 0.19
+                    spacing: parent.width * 0.07
+                    Repeater {
+                        model: ["#ff5f57", "#febc2e", "#28c840", "#0a84ff", "#bf5af2", "#ff9f0a", "#64d2ff", "#ff375f", "#30d158"]
+                        Rectangle {
+                            required property string modelData
+                            width: dots.d
+                            height: dots.d
+                            radius: dots.d * 0.3
+                            color: modelData
+                        }
+                    }
+                }
             }
         }
     }
@@ -848,7 +1084,39 @@ PanelWindow {
         property real zoom: 1
         readonly property var entry: toplevel ? DesktopEntries.heuristicLookup(toplevel.appId) : null
         hoverEnabled: true
-        onClicked: if (toplevel) toplevel.activate()
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        onClicked: mouse => {
+            if (mouse.button === Qt.RightButton) tileMenu.toggle();
+            else if (toplevel) toplevel.activate();
+        }
+        // Right-click: the window's own menu (macOS shows the app's).
+        BarPopup {
+            id: tileMenu
+            anchorItem: tile
+            padding: Theme.menuPadding
+            Column {
+                width: Math.round(220 * Theme.pt)
+                readonly property bool menuGutter: true
+                MenuHeader { text: tile.toplevel ? tile.toplevel.title : "" }
+                MenuItem {
+                    text: "Restore"
+                    icon: "window-restore"
+                    onTriggered: { tileMenu.close(); if (tile.toplevel) tile.toplevel.activate(); }
+                }
+                MenuItem {
+                    visible: !!tile.entry
+                    text: "New Window"
+                    icon: "list-add"
+                    onTriggered: { tileMenu.close(); Launch.app(tile.entry); }
+                }
+                MenuSeparator {}
+                MenuItem {
+                    text: "Close"
+                    icon: "window-close"
+                    onTriggered: { tileMenu.close(); if (tile.toplevel) tile.toplevel.close(); }
+                }
+            }
+        }
         // Built at the largest size and scaled, so magnifying doesn't
         // re-capture the snapshot or reload the icon every frame.
         Rectangle {
@@ -879,8 +1147,8 @@ PanelWindow {
         }
         Tooltip {
             anchorItem: tile
-            text: tile.toplevel ? tile.toplevel.title : ""
-            hovered: tile.containsMouse
+            text: tile.toplevel ? tile.toplevel.title + " · click to restore, right-click for options" : ""
+            hovered: tile.containsMouse && !tileMenu.open
         }
     }
 }

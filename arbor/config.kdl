@@ -167,6 +167,7 @@ binds {
     // Spotlight (hearth): apps, files, settings, calculator. Voice
     // assistant: speak after pressing, it stops when you stop talking.
     Mod+Space hotkey-overlay-title="Search" { spawn "hearth-ipc" "call" "spotlight" "toggle"; }
+    F4 hotkey-overlay-title="Launchpad (all apps)" { spawn "hearth-ipc" "call" "launchpad" "toggle"; }
     Mod+Alt+Space hotkey-overlay-title="Voice assistant" { spawn "hearth-ipc" "call" "voice" "toggle"; }
     Alt+Space hotkey-overlay-title="Launcher" { spawn "vicinae" "toggle"; }
     Alt+F1 { spawn "vicinae" "toggle"; }

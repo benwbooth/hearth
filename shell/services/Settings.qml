@@ -61,7 +61,13 @@ Singleton {
             showRecents: true,          // recently used, unpinned apps
             recents: [],                // kept by the dock
             minimizeEffect: "genie",    // "genie" | "scale" | "none" (drawn by arbor)
-            minimizeIntoApp: false
+            minimizeIntoApp: false,
+            showLaunchpad: true         // a Launchpad icon at the start of the Dock
+        },
+        // Launchpad (popups/LaunchpadWindow.qml): every installed app.
+        launchpad: {
+            group: "category",          // "category" (sections like Internet, Games...) | "name" (A to Z)
+            iconSize: 88                // px
         },
         notifications: {
             timeout: 6,                 // s a banner stays
@@ -71,7 +77,7 @@ Singleton {
             group: true                 // stack Notification Center by app
         },
         // Hot corners (services/HotCorners.qml): "none" | "overview" |
-        // "desktop" | "lock" | "launcher" | "notifications" | "displayoff"
+        // "desktop" | "lock" | "launcher" | "launchpad" | "notifications" | "displayoff"
         hotCorners: {
             topLeft: "none",
             topRight: "none",
@@ -177,6 +183,7 @@ Singleton {
     readonly property var appearance: { void root.data; return Object.assign({}, defaults.appearance, data.appearance || {}); }
     readonly property var menubar: { void root.data; return Object.assign({}, defaults.menubar, data.menubar || {}); }
     readonly property var dock: { void root.data; return Object.assign({}, defaults.dock, data.dock || {}); }
+    readonly property var launchpad: { void root.data; return Object.assign({}, defaults.launchpad, data.launchpad || {}); }
     readonly property var notifications: { void root.data; return Object.assign({}, defaults.notifications, data.notifications || {}); }
     readonly property var hotCorners: { void root.data; return Object.assign({}, defaults.hotCorners, data.hotCorners || {}); }
     readonly property var power: { void root.data; return Object.assign({}, defaults.power, data.power || {}); }
