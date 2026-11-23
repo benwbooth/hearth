@@ -262,6 +262,7 @@ class AtspiMenu:
     def __init__(self, key, title, pid, window=0):
         self.key, self.title, self.pid = key, title, int(pid or 0)
         self.window = int(window or 0)  # arbor's id, for ClickWindow / ClosePopups
+        self.refreshed = 0.0  # when the ☰ was last read again (unseen, on open)
         self.alive, self.busy, self.lazy = True, False, False
         self.app = self.mb = self.frame = self.trigger = None
         self.toolkit = ""
@@ -925,12 +926,16 @@ class AtspiMenu:
             if o.get_child_count() > 0:
                 self.emit()  # just read it again (states change)
                 return
-            # Never opened yet: open it in the app once, read, close.
-            if not self.act(o):
-                return
-            self.wait(lambda: o.get_child_count() > 0)
-            if o.get_state_set().contains(Atspi.StateType.EXPANDED):
-                self.act(o)
+            # Never opened yet: open it in the app once (unseen), read, close.
+            self.probe(True)
+            try:
+                if not self.act(o):
+                    return
+                self.wait(lambda: o.get_child_count() > 0)
+                if o.get_state_set().contains(Atspi.StateType.EXPANDED):
+                    self.act(o)
+            finally:
+                self.probe(False)
             self.emit()
             return
         if self.kind == "burger" and self.holds_items(self.trigger):
@@ -943,19 +948,36 @@ class AtspiMenu:
             return
         if self.kind == "burger":
             if path in self.cache:
-                self.emit()  # from the cache: the app's ☰ isn't touched
+                self.emit()  # at once, from the cache
+                # Then read again, unseen (arbor ProbeWindow), so items the
+                # app changed (recent files, toggles) show while it's open;
+                # at most every 10 s.
+                if time.monotonic() - self.refreshed > 10:
+                    self.refreshed = time.monotonic()
+                    self.busy = True
+                    self.probe(True)
+                    try:
+                        self.learn_burger()
+                    finally:
+                        self.probe(False)
+                        self.busy = False
+                    self.emit()
                 return
             if not self.tree_read:
-                # Once: the whole ☰ in one look (titles, every submenu),
-                # kept on disk; later opens come from the cache.
+                # The whole ☰ in one look (titles, every submenu), kept on
+                # disk; later opens show the cache, then read it again.
                 self.busy = True
+                self.probe(True)
                 try:
                     self.learn_burger()
                 finally:
+                    self.probe(False)
                     self.busy = False
+                self.refreshed = time.monotonic()
                 self.emit()
                 return
         self.busy = True
+        self.probe(True)
         try:
             if path == (-2,):
                 self.learn_burger()
@@ -965,8 +987,16 @@ class AtspiMenu:
                     self.read(menu, path)
                 self.close_all(path)
         finally:
+            self.probe(False)
             self.busy = False
         self.emit()
+
+    def probe(self, on):
+        """arbor ProbeWindow around a read that opens the app's menu: its
+        popups aren't drawn and don't take the keyboard, so the read is
+        unseen. (An older arbor ignores it: the menu flashes as before.)"""
+        if self.window:
+            arbor("probe-window", "--id", str(self.window), "--seconds", "3" if on else "0")
 
     def learn_burger(self):
         """Read the whole ☰ in one look: are its items submenus (they
