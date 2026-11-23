@@ -27,8 +27,11 @@ start() { u=$1; W=$2; shift 2
     -p StandardOutput=append:$PWD/data/probe$W.log -p StandardError=append:$PWD/data/probe$W.log --working-directory=$PWD \
     -E PATH="$PATH" -E HOME="$HOME" -E XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" -E DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" \
     -E MENU_PROBE_WORKER=$W -E MENU_PROBE_DEVLOOP=1 python3 -I scripts/menu-probe.py --count 5000 --keep-rig "$@"; }
-start w0 "" --stride 3 --offset 0; start w1 1 --stride 3 --offset 1; start w2 2 --stride 3 --offset 2
-start w3 3 --sources flathub,nixpkgs-uncached
+# Two on nixpkgs, two on Flathub (Flathub has as many apps left and each
+# takes longer: install, first-run screens).
+start w0 "" --stride 2 --offset 0; start w1 1 --stride 2 --offset 1
+start w2 2 --sources flathub,nixpkgs-uncached --stride 2 --offset 0
+start w3 3 --sources flathub,nixpkgs-uncached --stride 2 --offset 1
 # Apps installed on this machine (installed_apps.py): run from Ben's own copies.
 start w4 4 --sources installed
 systemctl --user list-units 'hearth-menu-probe-*' --no-pager --plain --no-legend | awk '{print $1,$3,$4}'
