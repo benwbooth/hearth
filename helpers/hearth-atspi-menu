@@ -276,7 +276,8 @@ def BUTTON_ROLES():
 
 BURGER_NAMES = {"menu", "main menu", "application menu", "app menu", "open menu",
                 "open application menu", "open main menu", "show menu", "menu button",
-                "hamburger menu", "more options", "options menu",
+                "hamburger menu", "more options", "options menu", "more actions", "primary menu",
+                "main menu button", "application menu button", "...", "…", "⋮", "☰",
                 # Kirigami's global drawer: a side panel of the app's actions
                 # (read as a "drawer", see learn_drawer).
                 "open drawer", "show drawer"}
@@ -532,7 +533,7 @@ class AtspiMenu:
             except Exception:
                 pass
             return False  # keep looking: collect them all
-        self.search(A, frame, test, web=False)
+        self.search(A, frame, test, web=True)  # deep: libadwaita split views nest past 14
         return max(found, key=lambda t: t[0])[1] if found else None
 
     @staticmethod
