@@ -17,11 +17,14 @@ BarButton {
     active: menu.open
     menuPopup: menu
     onClicked: if (!menuPress) menu.toggle()
+    overflowKey: "help"
+    visible: !overflowed
+    function overflowActivate() { menu.open = true; }
 
     BarPopup {
         id: menu
         menuBarMenu: true
-        anchorItem: root
+        anchorItem: root.popupAnchor
         padding: Theme.menuPadding
         keyboardFocus: WlrKeyboardFocus.OnDemand
         onOpenChanged: if (open) { field.text = ""; focusSoon.restart(); }

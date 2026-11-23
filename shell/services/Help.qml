@@ -129,6 +129,7 @@ Singleton {
         { title: "Settings: appearance, light/dark mode, accent colour", pane: "appearance" },
         { title: "Settings: transparency and blur", pane: "appearance" },
         { title: "Settings: menu bar, clock, logo", pane: "menubar" },
+        { title: "Menu bar too full (laptop, many app icons): what doesn't fit moves into the ⌃ menu at its right; choose what may move in Settings", pane: "menubar" },
         { title: "Settings: Dock size, magnification, position, hiding", pane: "dock" },
         { title: "Settings: switch between Mac layout and classic panel", pane: "layout" },
         { title: "Settings: wallpaper: pictures of the day (Bing, NASA, Wikimedia, Spotlight, Earth View…), dynamic, video, shaders, Wallpaper Engine, slideshows", pane: "wallpaper" },

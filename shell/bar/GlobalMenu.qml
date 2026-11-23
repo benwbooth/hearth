@@ -53,6 +53,18 @@ Row {
         }
         return w <= root.maxWidth;
     }
+    // Every title's width, shown or not: the menu bar gives its status
+    // items the room left after these (MenuBar.qml's overflow).
+    readonly property real naturalWidth: {
+        void AppMenu.topLevel;
+        let w = appTitle.visible ? appTitle.implicitWidth : 0;
+        for (let i = 0; i < topRep.count; i++) {
+            const it = topRep.itemAt(i);
+            w += it ? it.implicitWidth : 0;
+        }
+        if (root.hasWindow && !root.appHasWindowMenu) w += winTitle.implicitWidth;
+        return w;
+    }
 
 
     // Windows of the focused app, as Compositor windows (arbor ids).

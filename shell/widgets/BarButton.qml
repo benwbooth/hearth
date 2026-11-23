@@ -41,6 +41,13 @@ MouseArea {
     property string tooltip: ""
     property string tooltipSub: ""
     property bool active: false
+    // Menu bar overflow (bar/MenuBar.qml): an item whose `overflowKey` the
+    // row it sits in lists in `overflowKeys` has moved into the "more"
+    // chevron's dropdown; its popup then opens under that chevron.
+    property string overflowKey: ""
+    readonly property var overflowHost: parent && parent.overflowKeys !== undefined ? parent : null
+    readonly property bool overflowed: overflowKey !== "" && !!overflowHost && overflowHost.overflowKeys.indexOf(overflowKey) >= 0
+    readonly property Item popupAnchor: overflowed && overflowHost.overflowAnchor ? overflowHost.overflowAnchor : root
     // Bar windows may set `barHeight` / `barIconSize` (the thin menu bar).
     readonly property var hostWindow: root.QsWindow.window
     readonly property int hostHeight: hostWindow && hostWindow.barHeight ? hostWindow.barHeight : Theme.barHeight

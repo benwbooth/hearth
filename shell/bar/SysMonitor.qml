@@ -295,6 +295,16 @@ done`]
         return g ? g.tempC : 0;
     }
 
+    // One line for the menu bar's overflow dropdown (MenuBar.qml), when the
+    // graphs don't fit on a narrow screen.
+    readonly property string compactText: {
+        tick;
+        const g = gpuIndexes.length ? gpuFiles.objectAt(gpuIndexes[0]) : null;
+        let t = "CPU " + Math.round(cpuUsage) + "%  ·  Mem " + Math.round(memPercent) + "%";
+        if (g) t += "  ·  GPU " + Math.round(g.usage) + "%";
+        return t;
+    }
+
     // ---- formatting --------------------------------------------------------
     function fmtRate(bytes) {
         bytes = Number(bytes) || 0;

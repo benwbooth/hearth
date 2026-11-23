@@ -215,6 +215,71 @@ PanelWindow {
         return null;
     }
 
+    // --- fitting the status items (right side) on narrow screens ---
+    // The app's menus come first (like macOS): the status items get the
+    // room left after every title. What doesn't fit moves into the tray's
+    // chevron dropdown, in this order: app tray icons (from the left), the
+    // wide widgets, then the less important indicators. The clock, Control
+    // Center, Spotlight, notifications, battery, network and sound stay,
+    // unless Settings > Menu Bar lets them go (menubar.overflow: key ->
+    // true "may move" / false "always stays").
+    readonly property var overflowOrder: ["sysmonitor", "workspaces", "weather", "devapps", "ai", "media", "clipboard",
+        "zones", "rdp", "printers", "drives", "keyboard", "brightness", "bluetooth", "help", "camera", "recording"]
+    readonly property var overflowPinned: ["volume", "network", "battery", "notifications", "spotlight", "controlcenter", "clock"]
+    // Pinned ones Settings can let go (the others have no dropdown form).
+    readonly property var overflowReleasable: ["volume", "network", "battery"]
+    function mayOverflow(key) {
+        const o = (Settings.menubar.overflow || {})[key];
+        return o !== undefined ? !!o : overflowPinned.indexOf(key) < 0;
+    }
+    readonly property real statusRoom: {
+        const leftEnd = left.x + globalMenu.x + globalMenu.naturalWidth + Math.round(12 * Theme.pt);
+        return items.width - right.anchors.rightMargin - leftEnd;
+    }
+    readonly property var statusEntries: [
+        { key: "workspaces", w: workspaces.implicitWidth + workspaces.Layout.rightMargin, on: workspaces.present },
+        { key: "sysmonitor", w: sysMonitor.implicitWidth, on: !!Settings.menubar.showSysMonitor },
+        { key: "devapps", w: devApps.implicitWidth, on: devApps.present },
+        { key: "help", w: help.implicitWidth, on: true },
+        { key: "spotlight", w: spotlight.implicitWidth, on: spotlight.visible },
+        { key: "controlcenter", w: controlCenter.implicitWidth, on: controlCenter.visible },
+        { key: "ai", w: assistant.implicitWidth, on: assistant.present },
+        { key: "clock", w: clock.implicitWidth, on: clock.visible }
+    ].concat(tray.entries)
+    readonly property var overflow: {
+        const room = statusRoom;
+        const entries = statusEntries;
+        const sniN = tray.shownItems.length, sniW = Theme.menuBarItemWidth;
+        let total = sniN * sniW;
+        for (const e of entries) if (e.on) total += e.w;
+        if (total + (tray.hiddenItems.length > 0 ? tray.chevronWidth : 0) <= room) return { keys: [], sni: 0 };
+        total += tray.chevronWidth;
+        const keys = [];
+        let sni = 0;
+        if (mayOverflow("trayicons")) while (sni < sniN && total > room) { sni++; total -= sniW; }
+        // Unlisted items next, the normally pinned ones last (only when
+        // Settings lets them go).
+        const known = overflowOrder.concat(overflowPinned);
+        const order = overflowOrder.concat(entries.map(e => e.key).filter(k => known.indexOf(k) < 0), overflowReleasable);
+        for (const k of order) {
+            if (total <= room) break;
+            const e = entries.find(x => x.key === k);
+            if (!e || !e.on || !mayOverflow(k)) continue;
+            keys.push(k);
+            total -= e.w;
+        }
+        // Taking out a wide item can leave room for things that went
+        // before it: back they come, the most important first.
+        for (let i = keys.length - 1; i >= 0; i--) {
+            const e = entries.find(x => x.key === keys[i]);
+            if (total + e.w <= room) { total += e.w; keys.splice(i, 1); }
+        }
+        while (sni > 0 && total + sniW <= room) { sni--; total += sniW; }
+        // Nothing left in the dropdown: the chevron goes too.
+        if (sni === 0 && keys.length === 0 && tray.hiddenItems.length === 0) return { keys: [], sni: 0 };
+        return { keys: keys, sni: sni };
+    }
+
     Item {
         id: content
         width: parent.width
@@ -329,7 +394,7 @@ PanelWindow {
                 SystemMenu {}
                 // Menus that would run into the status items are left out
                 // (macOS drops them too); the space ends 12 pt before them.
-                GlobalMenu { maxWidth: right.x - left.x - x - Math.round(12 * Theme.pt) }
+                GlobalMenu { id: globalMenu; maxWidth: right.x - left.x - x - Math.round(12 * Theme.pt) }
             }
 
             RowLayout {
@@ -339,22 +404,40 @@ PanelWindow {
                 height: parent.height
                 spacing: 0
                 transform: Translate { x: 0.001; y: 0.001 }
+                // Items that don't fit go into the tray's chevron dropdown
+                // (BarButton.overflowed reads these).
+                readonly property var overflowKeys: bar.overflow.keys
+                readonly property Item overflowAnchor: tray.overflowAnchor
 
                 // A map of the workspaces: click one to go there.
                 Workspaces {
-                    visible: Settings.menubar.showWorkspaces !== false
+                    id: workspaces
+                    readonly property bool present: Settings.menubar.showWorkspaces !== false
+                    visible: present && bar.overflow.keys.indexOf("workspaces") < 0
                     screen: bar.screen
                     menuBarItem: true
                     Layout.rightMargin: Math.round(8 * Theme.pt)
                 }
-                SysMonitor { visible: Settings.menubar.showSysMonitor }
-                DevApps { iconSize: Theme.menuBarIconSize; implicitWidth: Theme.menuBarItemWidth }
-                Tray {}
-                HelpMenu {}
-                SpotlightButton {}
-                ControlCenter {}
-                AssistantMenu {}
-                Clock {}
+                SysMonitor {
+                    id: sysMonitor
+                    visible: !!Settings.menubar.showSysMonitor && bar.overflow.keys.indexOf("sysmonitor") < 0
+                }
+                DevApps { id: devApps; ipcName: "devapps"; iconSize: Theme.menuBarIconSize; implicitWidth: Theme.menuBarItemWidth }
+                Tray {
+                    id: tray
+                    overflowKeys: bar.overflow.keys
+                    sniOverflow: bar.overflow.sni
+                    outsideItems: [{ key: "workspaces", item: workspaces }, { key: "sysmonitor", item: sysMonitor },
+                                   { key: "devapps", item: devApps }]
+                        .filter(e => bar.overflow.keys.indexOf(e.key) >= 0)
+                        .concat([{ key: "help", item: help }, { key: "ai", item: assistant }]
+                            .filter(e => e.item.overflowed))
+                }
+                HelpMenu { id: help }
+                SpotlightButton { id: spotlight }
+                ControlCenter { id: controlCenter }
+                AssistantMenu { id: assistant }
+                Clock { id: clock }
             }
         }
     }

@@ -19,8 +19,13 @@ BarButton {
     signal middleClicked()
     signal scrolled(int delta)
 
-    // Menu bar settings can hide an indicator by its ipcName.
-    visible: shown && (ipcName === "" || (Settings.menubar.hiddenIndicators || []).indexOf(ipcName) < 0)
+    // Menu bar settings can hide an indicator by its ipcName; on a narrow
+    // screen it can move into the overflow dropdown (BarButton.overflowed).
+    readonly property bool present: shown && (ipcName === "" || (Settings.menubar.hiddenIndicators || []).indexOf(ipcName) < 0)
+    overflowKey: ipcName
+    visible: present && !overflowed
+    // Chosen from the overflow dropdown: the popup, under the chevron.
+    function overflowActivate() { if (popupContent) pop.open = true; }
     active: pop.open
     menuPopup: root.popupContent ? pop : null
 
@@ -34,7 +39,7 @@ BarButton {
     Connections {
         target: ShellState
         function onOpenIndicator(name) {
-            if (name === root.ipcName && root.ipcHere && root.popupContent && root.visible) pop.open = true;
+            if (name === root.ipcName && root.ipcHere && root.popupContent && root.present) pop.open = true;
         }
     }
 
@@ -48,7 +53,7 @@ BarButton {
 
     BarPopup {
         id: pop
-        anchorItem: root
+        anchorItem: root.popupAnchor
         // Kept while the popup fades out (visible outlasts open).
         Loader {
             active: pop.visible

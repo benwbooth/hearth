@@ -353,6 +353,50 @@ Scope {
                 Divider {}
                 SwitchRow { label: "Show seconds"; key: "menubar.showSeconds" }
             }
+            Label { text: "When the menu bar is full"; font.weight: Font.DemiBold }
+            Label {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                color: Theme.fgDim
+                text: "On a small screen, items that don't fit next to the app's menus move into the ⌃ menu at the right of the menu bar. Switch an item off to keep it in the bar."
+            }
+            Group {
+                Repeater {
+                    model: [
+                        { id: "trayicons", label: "App icons (Slack, Teams…)", def: true },
+                        { id: "sysmonitor", label: "System monitor", def: true },
+                        { id: "workspaces", label: "Workspace map", def: true },
+                        { id: "weather", label: "Weather", def: true },
+                        { id: "devapps", label: "Dev apps", def: true },
+                        { id: "ai", label: "Assistant", def: true },
+                        { id: "help", label: "Help", def: true },
+                        { id: "media", label: "Now Playing", def: true }, { id: "clipboard", label: "Clipboard", def: true },
+                        { id: "zones", label: "Window zones", def: true }, { id: "rdp", label: "Remote desktop", def: true },
+                        { id: "printers", label: "Printers", def: true }, { id: "drives", label: "Drives", def: true },
+                        { id: "keyboard", label: "Keyboard", def: true }, { id: "brightness", label: "Brightness", def: true },
+                        { id: "bluetooth", label: "Bluetooth", def: true }, { id: "camera", label: "Camera in use", def: true },
+                        { id: "recording", label: "Screen recording", def: true },
+                        { id: "volume", label: "Sound", def: false }, { id: "network", label: "Network", def: false },
+                        { id: "battery", label: "Battery", def: false }
+                    ]
+                    Row_ {
+                        id: ovf
+                        required property var modelData
+                        label: modelData.label
+                        note: modelData.id === "trayicons" ? "Moved first, starting from the left." : ""
+                        Toggle {
+                            readonly property var rules: Settings.menubar.overflow || {}
+                            checked: rules[ovf.modelData.id] !== undefined ? !!rules[ovf.modelData.id] : ovf.modelData.def
+                            onToggled: c => {
+                                const r = Object.assign({}, rules);
+                                if (c === ovf.modelData.def) delete r[ovf.modelData.id];
+                                else r[ovf.modelData.id] = c;
+                                Settings.set("menubar.overflow", r);
+                            }
+                        }
+                    }
+                }
+            }
             Label { text: "Menu bar items"; font.weight: Font.DemiBold }
             Group {
                 Repeater {

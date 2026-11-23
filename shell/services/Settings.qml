@@ -40,7 +40,11 @@ Singleton {
             showDate: true,
             showWeekday: true,
             showSeconds: false,
-            hiddenIndicators: []        // ipcNames from bar/Tray.qml
+            hiddenIndicators: [],       // ipcNames from bar/Tray.qml
+            // Short of room (laptop): which items may move into the chevron
+            // dropdown (true) or always stay (false); unset: bar/MenuBar.qml's
+            // defaults (keys: trayicons, workspaces, sysmonitor, ipcNames...)
+            overflow: {}
         },
         dock: {
             size: 54,                   // icon px (macOS's 48 pt default)

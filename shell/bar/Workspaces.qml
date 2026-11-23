@@ -19,7 +19,8 @@ Row {
     readonly property real monH: screen ? screen.height : 1080
     readonly property real itemH: menuBarItem ? Theme.menuBarHeight : Theme.barHeight
     readonly property real boxH: menuBarItem ? Theme.menuBarHeight - Math.round(6 * Theme.pt) : Theme.barHeight - 12
-    readonly property color fg: Theme.barFg
+    // The bar's text colour; the overflow dropdown passes its own.
+    property color fg: Theme.barFg
     function tint(a) { return Qt.rgba(fg.r, fg.g, fg.b, a); }
     readonly property real boxW: Math.round(boxH * monW / monH)
 
