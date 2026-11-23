@@ -116,6 +116,10 @@ SESSION_ENV = {
     "GTK_A11Y": "atspi",
     "QT_LINUX_ACCESSIBILITY_ALWAYS_ON": "1",
     "ACCESSIBILITY_ENABLED": "1",
+    # No sound server in the rig: games that refuse to start without an
+    # audio device (Quadrapassel's OpenAL) get dummy ones.
+    "ALSOFT_DRIVERS": "null",
+    "SDL_AUDIODRIVER": "dummy",
 }
 TOOLS = {}
 

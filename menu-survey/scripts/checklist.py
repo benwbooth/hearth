@@ -62,9 +62,23 @@ def gap_of(measured, toolkit, p):
     Shared names group every app a single fix would cover."""
     if measured == "full":
         return ""
-    if measured in ("no-window", "untested"):
-        return "harness-no-window" if measured == "no-window" else ""
     p = p or {}
+    if measured in ("no-window", "untested"):
+        if measured != "no-window":
+            return ""
+        # Why it opened no window in the rig, from its log: most are limits
+        # of a private test session, not of hearth.
+        log = " ".join(p.get("log_tail") or []).lower()
+        for pat, gap in (("only supported under gnome", "blocked:gnome-only"),
+                         ("cannot open display", "blocked:needs-root"),
+                         ("pkexec", "blocked:needs-root"),
+                         ("jack", "blocked:needs-jack"),
+                         ("was not provided by any .service files", "blocked:needs-session-service"),
+                         ("cannot connect to d-bus service", "blocked:needs-session-service"),
+                         ("already running", "harness-single-instance")):
+            if pat in log:
+                return gap
+        return "harness-no-window"
     if measured == "burger":
         return "burger-only"
     w = p.get("window") or {}
