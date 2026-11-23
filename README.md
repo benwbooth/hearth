@@ -285,6 +285,37 @@ mac layout). Pieces:
   whose process has a tray icon (StatusNotifierItem) with a dbusmenu gets
   that menu as its bold app menu (Teams); a real menu found later replaces
   it.
+- Menus built from what the app exposes, for windows that export none
+  (no per-app data, no app patching). They're added to whatever else the
+  window has; a menu already there by title isn't added twice:
+  - MPRIS: a media player (its process owns an `org.mpris.MediaPlayer2.*`
+    name) gets a live Playback menu: Play/Pause, Stop, Next, Previous,
+    Shuffle, Repeat, Show Player.
+  - Harvested shortcuts: a GTK app's shortcuts window
+    (`AdwShortcutsDialog` / `GtkShortcutsWindow`, read from its binary's
+    GResource with `gresource`) becomes File / Edit / View / Go menus of
+    its documented commands. They run through the named action, or their
+    accelerator via arbor `send-keys`.
+  - Exported actions: a GTK window without a shortcuts window gets its
+    `org.gtk.Actions` as menus, labelled from the action names, with live
+    checkmarks for stateful ones.
+  - Electron: `helpers/hearth_electron_menu.py` reads the app's own
+    `Menu.buildFromTemplate` template from its `app.asar` (labels through
+    its English translations). Items run their accelerator, or their
+    role's default key, via `send-keys`.
+  - Flatpak apps too: binaries through `/proc/PID/exe`, app files
+    through `/proc/PID/root`.
+- Menu modules (`menus/*.yaml`, `~/.config/hearth/menus/`): declarative
+  menus for apps nothing else reaches; format in `menus/README.md` and
+  `menu-survey/MODULES.md`.
+- Reads that open the app's own menu (Electron, ☰) run under arbor
+  `ProbeWindow`: the app's popup isn't drawn and doesn't take the keyboard.
+  A ☰ from the cache shows at once and is read again (unseen, at most every
+  10 s) so it stays current.
+- `hearth-ipc call appmenu click "File/New Window"` activates an item by
+  its labels; `dump` shows the merged menus.
+- Coverage across nixpkgs and Flathub, per app, with gaps:
+  `menu-survey/` (`checklist.tsv`, `PLAN.md`).
 - The registrar keeps its registrations in
   `$XDG_RUNTIME_DIR/hearth-appmenu-registrar.json` across hearth restarts
   (apps register once, when their window opens).
