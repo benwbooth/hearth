@@ -66,7 +66,8 @@ Singleton {
         },
         // Launchpad (popups/LaunchpadWindow.qml): every installed app.
         launchpad: {
-            group: "category",          // "category" (sections like Internet, Games...) | "name" (A to Z)
+            sort: "kind",               // "kind" (sections like Internet, Games...) | "name" (A to Z) | "used" | "custom"
+            custom: null,               // { groups: [{ id, title, parent, apps: [desktop ids] }] } (services/Launchpad.qml)
             iconSize: 88,               // px
             collapsed: []               // section ids folded shut (click a section's title)
         },

@@ -385,9 +385,9 @@ Scope {
                 Divider {}
                 ChoiceRow {
                     label: "Launchpad: arrange apps"
-                    note: "By kind: sections such as Internet & Chat, Office, Games and Development (from each app's own category). A to Z: one list by name."
-                    key: "launchpad.group"
-                    options: [{ value: "category", label: "By kind" }, { value: "name", label: "A to Z" }]
+                    note: "By Kind: sections such as Internet & Chat, Games and Development. By Name: A to Z. Most Used: what you open most first. Custom: your own groups and subgroups; drag apps to rearrange them (that switches to Custom), right-click a group's title to rename, add, move or delete groups."
+                    key: "launchpad.sort"
+                    options: Launchpad.sortModes
                 }
                 SliderRow { label: "Launchpad icon size"; note: "How big the app icons in the Launchpad are."; key: "launchpad.iconSize"; from: 56; to: 144; step: 4; suffix: " px" }
             }

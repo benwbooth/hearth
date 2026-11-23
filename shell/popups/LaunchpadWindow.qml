@@ -70,27 +70,45 @@ Scope {
         // Where every icon goes: items [{ key, a, x, y, row, col }] and
         // section headers [{ title, y }] in content coordinates.
         readonly property var layout: {
-            const items = [], heads = [];
+            const items = [], heads = [], geo = [];
             let y = 0, row = 0;
             for (const g of Launchpad.groups) {
-                if (g.title) { heads.push({ key: "h:" + g.id, id: g.id, title: g.title, collapsed: g.collapsed, count: g.items.length, y: y }); y += headH; }
-                if (g.collapsed) { y += Math.round(6 * pt); continue; }
+                const y0 = y;
+                if (g.title) {
+                    heads.push({ key: "h:" + g.id, id: g.id, title: g.title, depth: g.depth || 0, collapsed: g.collapsed,
+                                 count: g.items.length, y: y, custom: !!g.custom, unsorted: !!g.unsorted });
+                    y += headH;
+                }
+                const top = y;
+                if (g.collapsed) {
+                    y += Math.round(6 * pt);
+                    geo.push({ id: g.id, y0: y0, top: top, rows: 0, keys: g.items.map(a => a.key), collapsed: true, custom: !!g.custom, unsorted: !!g.unsorted });
+                    continue;
+                }
                 for (let i = 0; i < g.items.length; i++) {
                     const c = i % cols, r = Math.floor(i / cols);
-                    items.push({ key: g.items[i].key, a: g.items[i], x: c * cellW, y: y + r * cellH, row: row + r, col: c });
+                    items.push({ key: g.items[i].key, a: g.items[i], x: c * cellW, y: y + r * cellH, row: row + r, col: c, group: g.id });
                 }
-                const rows = Math.ceil(g.items.length / cols);
+                // An empty group of your own keeps a row to drop apps into.
+                const rows = g.items.length ? Math.ceil(g.items.length / cols) : (g.custom ? 1 : 0);
+                geo.push({ id: g.id, y0: y0, top: top, rows: rows, keys: g.items.map(a => a.key), collapsed: false, custom: !!g.custom, unsorted: !!g.unsorted,
+                           empty: g.items.length === 0 });
                 y += rows * cellH + (g.title ? Math.round(10 * pt) : 0);
-                row += rows;
+                row += g.items.length ? rows : 0;
             }
             const spots = {};
             for (let i = 0; i < items.length; i++) spots[items[i].key] = { x: items[i].x, y: items[i].y, index: i };
-            return { items: items, heads: heads, height: y, spots: spots };
+            return { items: items, heads: heads, geo: geo, height: y, spots: spots };
         }
 
         // Loading the icons out of view waits until the visible ones are in.
         property bool prefetch: false
         Timer { running: true; interval: 4000; onTriggered: win.prefetch = true }
+
+        // The group whose title is being edited.
+        property string renaming: ""
+        function closeMenus() { menu.close(); sortMenu.close(); groupMenu.close(); }
+        readonly property bool anyMenu: menu.visible || sortMenu.visible || groupMenu.visible
 
         // --- selection (keyboard) ---
         property int sel: 0
@@ -176,12 +194,14 @@ Scope {
             dragPos = p;
             const h = dockHost;
             dragOverDock = !!h && h.over(p);
+            dropAt = dragOverDock ? null : dropTarget(a, p);
+            autoScroll.dir = dragOverDock ? 0 : (p.y < flick.y + 40 ? -1 : p.y > flick.y + flick.height - 40 ? 1 : 0);
             if (!h) return;
             if (dragOverDock) h.move(a.key, a.icon, p);
             else h.leave();
         }
         function dragEnd(p) {
-            const h = dockHost, a = dragApp;
+            const h = dockHost, a = dragApp, at = dropAt;
             let added = false;
             if (h && a) {
                 if (h.over(p)) { h.move(a.key, a.icon, p); added = h.drop(p); }
@@ -189,7 +209,50 @@ Scope {
             }
             dragApp = null;
             dragOverDock = false;
+            dropAt = null;
+            autoScroll.dir = 0;
             if (added) toast.show("Added " + a.name + " to the Dock");
+            else if (a && at) {
+                const wasCustom = Launchpad.sort === "custom";
+                Launchpad.moveApp(a.key, at.group, at.index, at.keys.filter(k => k !== a.key));
+                if (!wasCustom) toast.show("Switched to your own arrangement (Custom)");
+            }
+        }
+
+        // --- drag to rearrange ---
+        // Where a dragged app would land in the grid: { group, index, keys,
+        // x, y } (x/y: the insertion bar, content coordinates), or null.
+        // Not while searching (the results have no order of their own).
+        property var dropAt: null
+        function dropTarget(a, p) {
+            if (Launchpad.query.trim()) return null;
+            const q = flick.contentItem.mapFromItem(null, p.x, p.y);
+            if (p.y < flick.y || p.y > flick.y + flick.height) return null;
+            const geo = layout.geo;
+            if (!geo.length) return null;
+            let g = geo[0];
+            for (const x of geo) if (x.y0 <= q.y) g = x;
+            const keys = g.keys;
+            if (g.collapsed || g.empty || q.y < g.top)
+                return { group: g.id, index: g.collapsed || q.y < g.top ? 0 : keys.length, keys: keys,
+                         x: 0, y: g.top, collapsed: g.collapsed, header: q.y < g.top || g.collapsed };
+            const r = Math.max(0, Math.min(g.rows - 1, Math.floor((q.y - g.top) / cellH)));
+            const c = Math.max(0, Math.min(cols, Math.floor(q.x / cellW + 0.5)));
+            let index = Math.min(keys.length, r * cols + c);
+            const col = index - r * cols;
+            return { group: g.id, index: index, keys: keys, x: col * cellW, y: g.top + r * cellH, header: false };
+        }
+        // Dragging near the top or bottom of the grid scrolls it.
+        Timer {
+            id: autoScroll
+            property int dir: 0
+            interval: 16
+            repeat: true
+            running: dir !== 0 && !!win.dragApp
+            onTriggered: {
+                flick.contentY = win.clampY(flick.contentY + dir * 14);
+                if (win.dragApp) win.dropAt = win.dropTarget(win.dragApp, win.dragPos);
+            }
         }
 
         // --- open / close motion ---
@@ -252,7 +315,7 @@ Scope {
             MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
-                onClicked: { if (menu.visible) menu.close(); else Launchpad.hide(); }
+                onClicked: { if (win.anyMenu) win.closeMenus(); else Launchpad.hide(); }
             }
             WheelHandler {
                 target: null
@@ -309,7 +372,7 @@ Scope {
                         }
                         Keys.onPressed: e => {
                             const n = win.layout.items.length;
-                            if (menu.visible && e.key === Qt.Key_Escape) { menu.close(); e.accepted = true; return; }
+                            if (win.anyMenu && e.key === Qt.Key_Escape) { win.closeMenus(); e.accepted = true; return; }
                             switch (e.key) {
                             case Qt.Key_Right: win.sel = Math.min(n - 1, win.sel + 1); break;
                             case Qt.Key_Left: win.sel = Math.max(0, win.sel - 1); break;
@@ -329,6 +392,42 @@ Scope {
                             e.accepted = true;
                         }
                     }
+                }
+
+                // How the apps are arranged (By Kind, By Name, Most Used, Custom).
+                MouseArea {
+                    id: sortButton
+                    x: fieldGlass.x + fieldGlass.width + Math.round(10 * win.pt)
+                    y: fieldGlass.y
+                    width: sortGlass.width
+                    height: fieldGlass.height
+                    hoverEnabled: true
+                    onClicked: {
+                        hoverCard.hide();
+                        if (sortMenu.visible) sortMenu.close();
+                        else { win.closeMenus(); sortMenu.openAt(Qt.point(x, y + height + 6)); }
+                    }
+                    GlassFrame {
+                        id: sortGlass
+                        width: sortRow.implicitWidth + Math.round(24 * win.pt)
+                        height: parent.height
+                        radius: height / 2
+                        tint: Theme.glassColor(Theme.dark ? Qt.rgba(0.2, 0.205, 0.22, 1) : Qt.rgba(0.97, 0.97, 0.975, 1), 0.7)
+                        shadowBlur: 14
+                        shadowY: 3
+                        Row {
+                            id: sortRow
+                            anchors.centerIn: parent
+                            spacing: Math.round(6 * win.pt)
+                            Icon { anchors.verticalCenter: parent.verticalCenter; implicitSize: Math.round(16 * win.pt); name: "view-sort"; fallback: "view-sort-ascending" }
+                            Label {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: (Launchpad.sortModes.find(m => m.value === Launchpad.sort) || { label: "" }).label + "  ▾"
+                                color: sortButton.containsMouse ? Theme.fg : Theme.fgSecondary
+                            }
+                        }
+                    }
+                    Tooltip { anchorItem: sortButton; text: "Arrange apps: by kind, by name, most used, or your own groups"; hovered: sortButton.containsMouse && !sortMenu.visible }
                 }
 
                 // --- the apps ---
@@ -351,27 +450,41 @@ Scope {
                     MouseArea {
                         width: flick.contentWidth
                         height: Math.max(flick.height, flick.contentHeight)
-                        onClicked: { if (menu.visible) menu.close(); else Launchpad.hide(); }
+                        onClicked: { if (win.anyMenu) win.closeMenus(); else Launchpad.hide(); }
                     }
 
                     Repeater {
                         model: ScriptModel { values: win.layout.heads; objectProp: "key" }
-                        // A section's title: click to fold it shut or open.
+                        // A group's title: click to fold it shut or open;
+                        // right-click to rename, add, move or delete groups;
+                        // drop an app on it to put it in that group.
                         MouseArea {
                             id: head
                             required property var modelData
-                            x: 0
+                            readonly property bool renaming: win.renaming === modelData.id
+                            readonly property bool dropHere: !!win.dropAt && win.dropAt.header && win.dropAt.group === modelData.id
+                            // A new or renamed group scrolls into view.
+                            onRenamingChanged: if (renaming) win.scrollTo(Math.max(0, modelData.y - win.headH))
+                            Component.onCompleted: if (renaming) win.scrollTo(Math.max(0, modelData.y - win.headH))
+                            x: (modelData.depth || 0) * Math.round(22 * win.pt)
                             y: modelData.y
-                            width: headRow.implicitWidth + Math.round(20 * win.pt)
+                            width: (renaming ? Math.round(260 * win.pt) : headRow.implicitWidth) + Math.round(20 * win.pt)
                             height: win.headH
                             hoverEnabled: true
-                            onClicked: { hoverCard.hide(); Launchpad.toggleSection(modelData.id); }
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton
+                            onClicked: mouse => {
+                                hoverCard.hide();
+                                if (mouse.button === Qt.RightButton) groupMenu.openFor(modelData, head.mapToItem(stage, mouse.x, mouse.y));
+                                else if (!renaming) Launchpad.toggleSection(modelData.id);
+                            }
                             Rectangle {
                                 anchors.fill: parent
                                 anchors.topMargin: Math.round(4 * win.pt)
                                 anchors.bottomMargin: Math.round(4 * win.pt)
                                 radius: height / 2
-                                color: head.containsMouse ? (Theme.dark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06)) : "transparent"
+                                color: head.dropHere ? Theme.accentDim
+                                     : head.containsMouse ? (Theme.dark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06)) : "transparent"
+                                border.color: head.dropHere ? Theme.accent : "transparent"
                             }
                             Row {
                                 id: headRow
@@ -385,11 +498,61 @@ Scope {
                                     font.pointSize: Theme.fontSize
                                 }
                                 Label {
+                                    visible: !head.renaming
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: head.modelData.title
                                     color: head.containsMouse ? Theme.fg : Theme.fgSecondary
-                                    font.pointSize: Theme.fontSize + 1
+                                    font.pointSize: (head.modelData.depth ? Theme.fontSize : Theme.fontSize + 1)
                                     font.weight: Font.DemiBold
+                                }
+                                // Renaming: type the new name, Enter keeps it,
+                                // Esc leaves it as it was.
+                                Rectangle {
+                                    visible: head.renaming
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: Math.round(230 * win.pt)
+                                    height: renameInput.implicitHeight + Math.round(8 * win.pt)
+                                    radius: Math.round(6 * win.pt)
+                                    color: Theme.dark ? Qt.rgba(1, 1, 1, 0.1) : Qt.rgba(0, 0, 0, 0.06)
+                                    border.color: Theme.accent
+                                    TextInput {
+                                        id: renameInput
+                                        anchors.fill: parent
+                                        anchors.leftMargin: Math.round(6 * win.pt)
+                                        anchors.rightMargin: Math.round(6 * win.pt)
+                                        verticalAlignment: TextInput.AlignVCenter
+                                        renderType: Text.NativeRendering
+                                        color: Theme.fg
+                                        selectionColor: Theme.accentDim
+                                        selectedTextColor: Theme.fg
+                                        font.family: Theme.fontFamily
+                                        font.pointSize: Theme.fontSize + 1
+                                        font.weight: Font.DemiBold
+                                        clip: true
+                                        property bool done: false
+                                        function finish(keep) {
+                                            if (done) return;
+                                            done = true;
+                                            if (keep && text.trim()) Launchpad.renameGroup(head.modelData.id, text);
+                                            win.renaming = "";
+                                            field.forceActiveFocus();
+                                        }
+                                        Connections {
+                                            target: head
+                                            function onRenamingChanged() {
+                                                if (!head.renaming) return;
+                                                renameInput.done = false;
+                                                renameInput.text = head.modelData.title;
+                                                renameInput.selectAll();
+                                                renameInput.forceActiveFocus();
+                                            }
+                                        }
+                                        Component.onCompleted: if (head.renaming) { text = head.modelData.title; selectAll(); forceActiveFocus(); }
+                                        Keys.onReturnPressed: finish(true)
+                                        Keys.onEnterPressed: finish(true)
+                                        Keys.onEscapePressed: finish(false)
+                                        onActiveFocusChanged: if (!activeFocus && head.renaming) finish(true)
+                                    }
                                 }
                                 Label {
                                     anchors.verticalCenter: parent.verticalCenter
@@ -411,6 +574,36 @@ Scope {
                         radius: Math.round(14 * win.pt)
                         color: Theme.dark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.08)
                         border.color: Theme.dark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.1)
+                    }
+
+                    // Where a dragged app will land.
+                    Rectangle {
+                        visible: !!win.dropAt && !win.dropAt.header && !!win.dragApp
+                        x: win.dropAt ? win.dropAt.x - width / 2 : 0
+                        y: win.dropAt ? win.dropAt.y + Math.round(8 * win.pt) : 0
+                        width: Math.round(4 * win.pt)
+                        height: win.cellH - Math.round(20 * win.pt)
+                        radius: width / 2
+                        color: Theme.accent
+                    }
+                    // An empty group of your own: somewhere to drop apps.
+                    Repeater {
+                        model: win.layout.geo.filter(g => g.empty && !g.collapsed)
+                        Rectangle {
+                            required property var modelData
+                            x: Math.round(8 * win.pt)
+                            y: modelData.top + Math.round(8 * win.pt)
+                            width: win.gridW - Math.round(16 * win.pt)
+                            height: win.cellH - Math.round(16 * win.pt)
+                            radius: Math.round(14 * win.pt)
+                            color: "transparent"
+                            border.color: Theme.dark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.15)
+                            Label {
+                                anchors.centerIn: parent
+                                text: "Drag apps here"
+                                color: Theme.fgDim
+                            }
+                        }
                     }
 
                     Repeater {
@@ -524,7 +717,7 @@ Scope {
                 tint: Theme.glassTip
                 shadowBlur: 12
                 shadowY: 3
-                Label { id: dragHint; anchors.centerIn: parent; text: "Drop on the Dock to keep it there"; font.pointSize: Theme.menuFontSize }
+                Label { id: dragHint; anchors.centerIn: parent; text: Launchpad.query.trim() ? "Drop on the Dock to keep it there" : "Drop between apps to move it · on the Dock to keep it there"; font.pointSize: Theme.menuFontSize }
             }
 
             // Right-click menu.
@@ -537,6 +730,8 @@ Scope {
                 radius: Theme.menuRadius
                 function openFor(a, p) {
                     hoverCard.hide();
+                    sortMenu.close();
+                    groupMenu.close();
                     app = a;
                     x = Math.max(8, Math.min(win.sw - width - 8, p.x));
                     y = Math.max(8, Math.min(win.sh - height - 8, p.y));
@@ -629,7 +824,7 @@ Scope {
                     interval: 550
                     onTriggered: {
                         const c = hoverCard.anchorCell;
-                        if (!hoverCard.pending || !c || menu.visible || win.dragApp || !Launchpad.open) return;
+                        if (!hoverCard.pending || !c || win.anyMenu || win.dragApp || !Launchpad.open || win.renaming) return;
                         hoverCard.app = hoverCard.pending;
                         hoverCard.fileInfo = "";
                         // Beside the icon, on whichever side has room.
@@ -757,6 +952,106 @@ Scope {
                 }
             }
 
+            // Arrange menu (the sort button).
+            PadMenu {
+                id: sortMenu
+                pt: win.pt
+                areaW: win.sw
+                areaH: win.sh
+                MenuHeader { text: "Arrange Apps" }
+                Repeater {
+                    model: Launchpad.sortModes
+                    MenuItem {
+                        required property var modelData
+                        text: modelData.label
+                        checkable: true
+                        checked: Launchpad.sort === modelData.value
+                        onTriggered: {
+                            sortMenu.close();
+                            if (modelData.value === "custom") Launchpad.ensureCustom();
+                            else Launchpad.setSort(modelData.value);
+                        }
+                    }
+                }
+                MenuSeparator {}
+                MenuItem {
+                    text: "New Group"
+                    icon: "folder-new"
+                    onTriggered: { sortMenu.close(); win.renaming = Launchpad.addGroup("New Group", "", ""); }
+                }
+                MenuItem {
+                    visible: Launchpad.custom.groups.length > 0
+                    text: "Start Over (Forget My Groups)"
+                    icon: "edit-reset"
+                    onTriggered: { sortMenu.close(); Launchpad.resetCustom(); Launchpad.setSort("kind"); toast.show("Back to By Kind; your groups are gone"); }
+                }
+            }
+
+            // A group's menu (right-click its title).
+            PadMenu {
+                id: groupMenu
+                pt: win.pt
+                areaW: win.sw
+                areaH: win.sh
+                property var g: null
+                readonly property bool own: !!g && Launchpad.sort === "custom" && !g.unsorted
+                function openFor(h, p) { win.closeMenus(); g = h; openAt(p); }
+                MenuHeader { text: groupMenu.g ? groupMenu.g.title : "" }
+                MenuItem {
+                    text: groupMenu.g && groupMenu.g.collapsed ? "Expand" : "Collapse"
+                    onTriggered: { const id = groupMenu.g.id; groupMenu.close(); Launchpad.toggleSection(id); }
+                }
+                MenuSeparator {}
+                MenuItem {
+                    visible: !!groupMenu.g && !groupMenu.g.unsorted
+                    text: "Rename…"
+                    icon: "edit-rename"
+                    onTriggered: {
+                        const g = groupMenu.g;
+                        groupMenu.close();
+                        Launchpad.ensureCustom();
+                        win.renaming = g.id;
+                    }
+                }
+                MenuItem {
+                    text: "New Group"
+                    icon: "folder-new"
+                    onTriggered: { const g = groupMenu.g; groupMenu.close(); win.renaming = Launchpad.addGroup("New Group", "", g && !g.unsorted ? g.id : ""); }
+                }
+                MenuItem {
+                    visible: !!groupMenu.g && !groupMenu.g.unsorted
+                    text: "New Subgroup"
+                    icon: "folder-new"
+                    onTriggered: { const g = groupMenu.g; groupMenu.close(); win.renaming = Launchpad.addGroup("New Group", g.id, ""); }
+                }
+                MenuSeparator { visible: groupMenu.own }
+                MenuItem {
+                    visible: groupMenu.own
+                    text: "Move Up"
+                    icon: "go-up"
+                    onTriggered: { const id = groupMenu.g.id; groupMenu.close(); Launchpad.moveGroup(id, -1); }
+                }
+                MenuItem {
+                    visible: groupMenu.own
+                    text: "Move Down"
+                    icon: "go-down"
+                    onTriggered: { const id = groupMenu.g.id; groupMenu.close(); Launchpad.moveGroup(id, 1); }
+                }
+                MenuSeparator { visible: !!groupMenu.g && !groupMenu.g.unsorted }
+                MenuItem {
+                    visible: !!groupMenu.g && !groupMenu.g.unsorted
+                    text: "Delete Group"
+                    icon: "edit-delete"
+                    onTriggered: {
+                        const g = groupMenu.g;
+                        groupMenu.close();
+                        Launchpad.ensureCustom();
+                        Launchpad.deleteGroup(g.id);
+                        toast.show("Deleted “" + g.title + "”: its apps moved " + (g.depth ? "to the group above" : "to New Apps"));
+                    }
+                }
+            }
+
             // A short note after adding or removing an app.
             GlassFrame {
                 id: toast
@@ -776,6 +1071,40 @@ Scope {
                 Label { id: toastText; anchors.centerIn: parent; text: toast.text; font.pointSize: Theme.menuFontSize }
                 Timer { id: toastTimer; interval: 1800; onTriggered: toast.opacity = 0 }
             }
+        }
+    }
+
+    // A menu drawn inside the Launchpad (a popup window can't sit over it
+    // as nicely): solid glass, closes on a click outside (the Launchpad's
+    // own handlers call close()).
+    component PadMenu: GlassFrame {
+        id: pm
+        property real pt: 1
+        property real areaW: 1000
+        property real areaH: 800
+        default property alias content: pmCol.data
+        visible: false
+        width: Math.round(230 * pt)
+        height: pmCol.implicitHeight + 2 * Theme.menuPadding
+        radius: Theme.menuRadius
+        function openAt(p) {
+            x = Math.max(8, Math.min(areaW - width - 8, p.x));
+            y = Math.max(8, Math.min(areaH - height - 8, p.y));
+            visible = true;
+        }
+        function close() { visible = false; }
+        MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton }
+        Rectangle {
+            anchors.fill: parent
+            radius: pm.radius
+            color: Theme.dark ? Qt.rgba(0.13, 0.135, 0.15, 0.94) : Qt.rgba(0.97, 0.97, 0.975, 0.94)
+        }
+        Column {
+            id: pmCol
+            x: Theme.menuPadding
+            y: Theme.menuPadding
+            width: pm.width - 2 * Theme.menuPadding
+            readonly property bool menuGutter: true
         }
     }
 }
