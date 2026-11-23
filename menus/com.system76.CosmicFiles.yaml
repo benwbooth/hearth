@@ -1,0 +1,71 @@
+# COSMIC Files draws its File/Edit/View/Sort menu bar itself (libcosmic, no
+# accessibility in this build), so hearth can't read it. This mirrors it with
+# the items that have a key binding (upstream src/menu.rs, src/key_bind.rs).
+# Items without one (New File, Open With, Move/Copy To, Sort) need AT-SPI.
+schema: hearth-menu-module/1
+id: com.system76.CosmicFiles
+version: 1
+app:
+  match:
+    app_id: [com.system76.CosmicFiles]
+    desktop: [com.system76.CosmicFiles.desktop]
+    flatpak: [com.system76.CosmicFiles]
+    nixpkgs: [cosmic-files]
+  versions: ">=1.0"
+  locales: [en]
+provenance:
+  generator: hand-written from upstream source (pop-os/cosmic-files master, 2026-11-22)
+  inputs: [source:key_bind.rs, source:menu.rs]
+menus:
+  - title: File
+    items:
+      - { label: New Tab, shortcut: Ctrl+T, do: { keys: Ctrl+T } }
+      - { label: New Window, shortcut: Ctrl+N, do: { keys: Ctrl+N } }
+      - { label: New Folder, shortcut: Ctrl+Shift+N, do: { keys: Ctrl+Shift+N } }
+      - { label: Open, shortcut: Return, do: { keys: Return } }
+      - { label: Open in New Tab, shortcut: Ctrl+Return, do: { keys: Ctrl+Return } }
+      - { label: Open in New Window, shortcut: Shift+Return, do: { keys: Shift+Return } }
+      - separator
+      - { label: Rename…, shortcut: F2, do: { keys: F2 } }
+      - separator
+      - { label: Reload Folder, shortcut: F5, do: { keys: F5 } }
+      - separator
+      - { label: Add to Sidebar, shortcut: Ctrl+D, do: { keys: Ctrl+D } }
+      - separator
+      - { label: Move to Trash, shortcut: Del, do: { keys: Del } }
+      - separator
+      - { label: Close Tab, shortcut: Ctrl+W, do: { keys: Ctrl+W } }
+  - title: Edit
+    items:
+      - { label: Cut, shortcut: Ctrl+X, do: { keys: Ctrl+X } }
+      - { label: Copy, shortcut: Ctrl+C, do: { keys: Ctrl+C } }
+      - { label: Copy Path, shortcut: Ctrl+Shift+C, do: { keys: Ctrl+Shift+C } }
+      - { label: Paste, shortcut: Ctrl+V, do: { keys: Ctrl+V } }
+      - { label: Select All, shortcut: Ctrl+A, do: { keys: Ctrl+A } }
+      - separator
+      - { label: Find, shortcut: Ctrl+F, do: { keys: Ctrl+F } }
+  - title: View
+    items:
+      - { label: Zoom In, shortcut: Ctrl+=, do: { keys: Ctrl+= } }
+      - { label: Default Size, shortcut: Ctrl+0, do: { keys: Ctrl+0 } }
+      - { label: Zoom Out, shortcut: Ctrl+-, do: { keys: Ctrl+- } }
+      - separator
+      - { label: List View, shortcut: Ctrl+1, do: { keys: Ctrl+1 } }
+      - { label: Grid View, shortcut: Ctrl+2, do: { keys: Ctrl+2 } }
+      - separator
+      - { label: Show Hidden Files, shortcut: Ctrl+H, do: { keys: Ctrl+H } }
+      - { label: Show Details, shortcut: Ctrl+Space, do: { keys: Ctrl+Space } }
+      - { label: Gallery Preview, shortcut: Space, do: { keys: Space } }
+      - separator
+      - { label: Settings…, shortcut: "Ctrl+,", do: { keys: "Ctrl+," } }
+  - title: Go
+    items:
+      - { label: Back, shortcut: Alt+Left, do: { keys: Alt+Left } }
+      - { label: Forward, shortcut: Alt+Right, do: { keys: Alt+Right } }
+      - { label: Enclosing Folder, shortcut: Alt+Up, do: { keys: Alt+Up } }
+      - separator
+      - { label: Location…, shortcut: Ctrl+L, do: { keys: Ctrl+L } }
+  - title: Window
+    items:
+      - { label: Next Tab, shortcut: Ctrl+Tab, do: { keys: Ctrl+Tab } }
+      - { label: Previous Tab, shortcut: Ctrl+Shift+Tab, do: { keys: Ctrl+Shift+Tab } }

@@ -39,6 +39,7 @@
 
     python = pkgs.python3.withPackages (p: [
       p.dbus-python p.pygobject3
+      p.pyyaml                           # hearth-appmenu: menu modules (menus/*.yaml)
       p.websockets                       # hearth-voice: the WhisperLive server
       (p.toPythonModule recoll)          # hearth-search: recoll's Python API
     ]);
@@ -109,7 +110,7 @@
         mkdir -p $out/share/hearth $out/bin
         # arbor/: the arbor config devloop installs live into
         # ~/.config/hearth/arbor/ with each new hearth (no nixos-rebuild).
-        cp -r shell helpers hypr vicinae arbor $out/share/hearth/
+        cp -r shell helpers hypr vicinae arbor menus $out/share/hearth/
         # Built-in user pictures (avatars/CREDITS.md), for Settings > Users &
         # Accounts and the login screen: $out/share/hearth/avatars.
         cp -r avatars $out/share/hearth/

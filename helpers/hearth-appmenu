@@ -22,7 +22,8 @@ stdin (one command per line):
   {"cmd": "watch", "key": K, "kind": "gtk", "bus": B, "menubar": P,
    "appmenu": P, "app": P, "win": P}
   {"cmd": "watch", "key": K, "kind": "x11", "title": T, "pid": N, "window": ID,
-   "gbus": B, "gapp": P, "gwin": P}   (g*: a GTK window's actions, no menus)
+   "gbus": B, "gapp": P, "gwin": P,   (g*: a GTK window's actions, no menus)
+   "appid": A}   (a menu module for app id A replaces the lookup; see ModuleMenu)
       (any window without an address: "none" unless pid is the satellite)
   {"cmd": "unwatch"}
   {"cmd": "open", "id": N}     a (sub)menu is about to show
@@ -717,16 +718,223 @@ class AppActions:
             g.stop()
 
 
+# ---------------------------------------------------------------- modules
+
+# Menu modules (menu-survey/MODULES.md): declarative menus for apps that
+# export none, from hearth's catalog (share/hearth/menus) and the user's
+# ~/.config/hearth/menus (which wins, file by file). Data only: the action
+# kinds below are all a module can do, each aimed at the focused window.
+MODULE_DIRS = [
+    os.path.normpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "menus")),
+    os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "hearth", "menus"),
+]
+MODULE_SCHEMA = "hearth-menu-module/1"
+ACTION_KINDS = {"keys", "gtk_action", "open_help"}
+ITEM_KEYS = {"id", "label", "shortcut", "do", "enabled", "checked", "items", "separator", "place", "safe", "names"}
+_modules = {"stamp": None, "by_key": {}}
+
+
+def _module_files():
+    files = {}
+    for d in MODULE_DIRS:
+        try:
+            for f in sorted(os.listdir(d)):
+                if f.endswith((".yaml", ".yml", ".json")):
+                    files[f.rsplit(".", 1)[0]] = os.path.join(d, f)  # later dirs win
+        except OSError:
+            pass
+    return files
+
+
+def _check_items(items, depth=0):
+    if not isinstance(items, list) or depth > 4:
+        raise ValueError("items must be a list (at most 4 levels)")
+    for it in items:
+        if it == "separator" or (isinstance(it, dict) and it.get("separator")):
+            continue
+        if not isinstance(it, dict) or not isinstance(it.get("label"), str):
+            raise ValueError(f"item without a label: {it!r}"[:200])
+        bad = set(it) - ITEM_KEYS
+        if bad:
+            raise ValueError(f"unknown item keys {sorted(bad)} in {it['label']!r}")
+        if "items" in it:
+            _check_items(it["items"], depth + 1)
+        elif not isinstance(it.get("do"), dict) or len(it["do"]) != 1 or set(it["do"]) - ACTION_KINDS:
+            raise ValueError(f"{it['label']!r}: 'do' must be one of {sorted(ACTION_KINDS)}")
+        else:
+            kind, arg = next(iter(it["do"].items()))
+            if not isinstance(arg, str) or len(arg) > 200:
+                raise ValueError(f"{it['label']!r}: bad {kind} argument")
+            if kind == "open_help" and not arg.startswith("https://"):
+                raise ValueError(f"{it['label']!r}: open_help takes an https:// URL")
+
+
+def load_module(path):
+    with open(path) as f:
+        if os.path.getsize(path) > 256 * 1024:
+            raise ValueError("module over 256 KB")
+        text = f.read()
+    if path.endswith(".json"):
+        m = json.loads(text)
+    else:
+        import yaml  # python3Packages.pyyaml (flake.nix)
+        m = yaml.safe_load(text)
+    if not isinstance(m, dict) or m.get("schema") != MODULE_SCHEMA:
+        raise ValueError(f"not a {MODULE_SCHEMA} file")
+    if not isinstance(m.get("menus"), list):
+        raise ValueError("no menus")
+    for menu in m["menus"]:
+        if not isinstance(menu, dict) or not isinstance(menu.get("title"), str):
+            raise ValueError("a menu needs a title")
+        _check_items(menu.get("items", []))
+    return m
+
+
+def module_for(app_id):
+    """The module whose app.match names this app id (or desktop/flatpak
+    id), reloading the catalog when a file changed."""
+    if not app_id:
+        return None
+    files = _module_files()
+    stamp = tuple(sorted((k, v, os.path.getmtime(v)) for k, v in files.items() if os.path.exists(v)))
+    if stamp != _modules["stamp"]:
+        by_key = {}
+        for name, path in files.items():
+            try:
+                m = load_module(path)
+            except Exception as e:  # a broken module must not take the menu bar down
+                err(f"menu module {path}: {e}")
+                continue
+            match = (m.get("app") or {}).get("match") or {}
+            keys = {name}
+            for k in ("app_id", "desktop", "flatpak"):
+                v = match.get(k) or []
+                keys |= set(v if isinstance(v, list) else [v])
+            for k in keys:
+                by_key[str(k).lower().removesuffix(".desktop")] = (m, path)
+        _modules.update(stamp=stamp, by_key=by_key)
+    return _modules["by_key"].get(app_id.lower().removesuffix(".desktop"))
+
+
+class ModuleMenu:
+    """A window's menus from its module. Items act on that window only:
+    keys through arbor (SendKeys: the window is focused, the chord goes
+    straight to it), GTK actions over org.gtk.Actions on the window's own
+    bus name, help pages in the browser. Enabled/checked states follow the
+    app's GTK actions where the module names one (live: Changed signals)."""
+
+    FIRST_ID = -5000
+
+    def __init__(self, key, module, path, window, gtk=None):
+        self.key, self.module, self.path, self.window, self.alive = key, module, path, window, True
+        gbus, gapp, gwin = gtk or ("", "", "")
+        self.bus, self.groups, self.actions = gbus, {}, {}
+        for prefix, p in (("app", gapp), ("win", gwin)):
+            if gbus and p:
+                try:
+                    self.groups[prefix] = ActionGroup(self, p)
+                except dbus.DBusException as e:
+                    err(e)
+        self.rebuild()
+
+    def request(self):
+        return {"cmd": "watch", "key": self.key, "kind": "module", "path": self.path}
+
+    def same(self, other):
+        return isinstance(other, ModuleMenu) and other.key == self.key and other.path == self.path
+
+    def _state(self, name):
+        prefix, _, act = name.partition(".")
+        g = self.groups.get(prefix)
+        return g.actions.get(act) if g else None
+
+    def _convert(self, items, counter):
+        out = []
+        for it in items:
+            if it == "separator" or (isinstance(it, dict) and it.get("separator")):
+                out.append(item(counter[0], type="separator"))
+                counter[0] -= 1
+                continue
+            nid = counter[0]
+            counter[0] -= 1
+            kw = {"shortcut": it.get("shortcut", "")}
+            if "items" in it:
+                kw["submenu"] = True
+                kw["children"] = self._convert(it["items"], counter)
+            else:
+                kind, arg = next(iter(it["do"].items()))
+                self.actions[nid] = (kind, arg)
+                if kind == "gtk_action":
+                    st = self._state(arg)
+                    if st is not None:
+                        kw["enabled"] = st[0]
+                        if st[2]:  # a stateful action: a checkmark
+                            kw["toggleType"] = "checkmark"
+                            kw["toggleState"] = 1 if bool(st[2][0]) else 0
+                    elif self.groups:
+                        kw["enabled"] = False  # the app doesn't have it (any more)
+            out.append(item(nid, it["label"], **kw))
+        return out
+
+    def rebuild(self):
+        if not self.alive:
+            return
+        self.actions = {}
+        counter = [self.FIRST_ID]
+        tops = []
+        for menu in self.module["menus"]:
+            nid = counter[0]
+            counter[0] -= 1
+            tops.append(item(nid, menu["title"], submenu=True,
+                             children=self._convert(menu.get("items", []), counter)))
+        out({"type": "menu", "key": self.key, "source": "module", "menu": item(0, children=tops)})
+
+    def click(self, nid):
+        kind, arg = self.actions.get(nid, (None, None))
+        if kind == "keys" and self.window:
+            # After hearth's menu has closed and given the keyboard back.
+            GLib.timeout_add(120, lambda: subprocess.Popen(
+                ["arbor", "msg", "action", "send-keys", "--id", str(self.window), "--keys", arg],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) and False)
+        elif kind == "gtk_action":
+            prefix, _, act = arg.partition(".")
+            g = self.groups.get(prefix)
+            if g:
+                g.iface.Activate(act, dbus.Array([], signature="v"), dbus.Dictionary({}, signature="sv"),
+                                 reply_handler=lambda *a: None, error_handler=err)
+        elif kind == "open_help":
+            subprocess.Popen(["xdg-open", arg], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def open(self, nid):
+        pass
+
+    def close(self, nid):
+        pass
+
+    def stop(self):
+        self.alive = False
+        for g in self.groups.values():
+            g.stop()
+
+
 class X11Window:
     """The focused X11 window (xwayland-satellite): resolve, then delegate."""
 
-    def __init__(self, key, title, pid=0, window=0, gtk=None):
+    def __init__(self, key, title, pid=0, window=0, gtk=None, appid=""):
         self.key, self.title = key, title
         self.inner, self.xid, self.alive, self.tries = None, 0, True, 0
         # A GTK window with actions but no menus (arbor's gtk_menu without
         # a menu bar): its app actions, besides whatever is found below.
         gbus, gapp, gwin = gtk or ("", "", "")
         self.actions = AppActions(key, gbus, gapp, gwin) if gbus and (gapp or gwin) else None
+        # A menu module for this app (no native menus to read): its menus.
+        found = module_for(appid)
+        self.module = None
+        if found:
+            self.module = ModuleMenu(key, found[0], found[1], window, gtk)
+            self.inner = self.module
+            self.pid, self.window, self.wayland = pid, window, False
+            return
         self.wayland = bool(pid) and not is_satellite(pid)
         self.pid, self.window = pid, window
         if self.wayland:
@@ -741,6 +949,10 @@ class X11Window:
         place of an X11 id: the registration from this window's process is
         its menu. Otherwise its in-window menu bar over AT-SPI (Firefox,
         Electron with a ☰ or a menu bar drawn in the page...)."""
+        if getattr(self, "module", None):
+            self.module.rebuild()
+            return False
+
         reg = registered_for_pid(self.pid)
         if reg:
             if isinstance(self.inner, DbusMenu) and (self.inner.service, self.inner.path) == reg:
@@ -765,6 +977,9 @@ class X11Window:
         return isinstance(other, X11Window) and other.key == self.key
 
     def resolve(self):
+        if getattr(self, "module", None):
+            self.module.rebuild()
+            return False
         if not self.alive:
             return False
         if self.wayland:
@@ -1111,7 +1326,7 @@ def watch(c):
             current.resolve()
             return
         new = X11Window(key, c.get("title", ""), c.get("pid", 0), c.get("window", 0),
-                        (c.get("gbus", ""), c.get("gapp", ""), c.get("gwin", "")))
+                        (c.get("gbus", ""), c.get("gapp", ""), c.get("gwin", "")), c.get("appid", ""))
     else:
         return
     if current and current.same(new) and getattr(current, "key", None) == key:

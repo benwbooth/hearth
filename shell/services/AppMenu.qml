@@ -66,7 +66,7 @@ Singleton {
         if (Compositor.isArbor && w.pid)
             return { key: "x\n" + w.id, kind: "x11", pid: w.pid, title: w.title, window: Number(w.id),
                      gbus: (g && g.unique_bus_name) || "", gapp: (g && g.application_object_path) || "",
-                     gwin: (g && g.window_object_path) || "" };
+                     gwin: (g && g.window_object_path) || "", appid: w.appId || "" };
         return null;
     }
     // Like macOS, an app's menu bar stays while one of its windows without

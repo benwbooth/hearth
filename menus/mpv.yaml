@@ -1,0 +1,67 @@
+# mpv has no menus, only keys (its default input.conf). These are its
+# documented default bindings, as macOS-style menus.
+schema: hearth-menu-module/1
+id: mpv
+version: 1
+app:
+  match:
+    app_id: [mpv, io.mpv.Mpv]
+    desktop: [mpv.desktop]
+    flatpak: [io.mpv.Mpv]
+    nixpkgs: [mpv]
+  versions: ">=0.35"
+  locales: [en]
+provenance:
+  generator: hand-written from mpv's default input.conf (mpv.io/manual, 0.42)
+  inputs: [docs:input.conf]
+menus:
+  - title: Playback
+    items:
+      - { label: Play/Pause, shortcut: Space, do: { keys: Space } }
+      - separator
+      - { label: Seek Back 5 Seconds, shortcut: Left, do: { keys: Left } }
+      - { label: Seek Forward 5 Seconds, shortcut: Right, do: { keys: Right } }
+      - { label: Seek Back 1 Minute, shortcut: Down, do: { keys: Down } }
+      - { label: Seek Forward 1 Minute, shortcut: Up, do: { keys: Up } }
+      - { label: Previous Frame, shortcut: ",", do: { keys: "," } }
+      - { label: Next Frame, shortcut: ".", do: { keys: "." } }
+      - separator
+      - { label: Slower, shortcut: "[", do: { keys: "[" } }
+      - { label: Faster, shortcut: "]", do: { keys: "]" } }
+      - { label: Normal Speed, shortcut: Backspace, do: { keys: Backspace } }
+      - separator
+      - { label: Set A-B Loop Point, shortcut: L, do: { keys: l } }
+      - { label: Loop File, shortcut: Shift+L, do: { keys: Shift+L } }
+      - separator
+      - { label: Previous in Playlist, shortcut: "<", do: { keys: "<" } }
+      - { label: Next in Playlist, shortcut: ">", do: { keys: ">" } }
+      - separator
+      - { label: Quit and Remember Position, shortcut: Shift+Q, do: { keys: Shift+Q } }
+  - title: Audio
+    items:
+      - { label: Mute, shortcut: M, do: { keys: m } }
+      - { label: Volume Down, shortcut: "9", do: { keys: "9" } }
+      - { label: Volume Up, shortcut: "0", do: { keys: "0" } }
+      - separator
+      - { label: Next Audio Track, shortcut: "#", do: { keys: "#" } }
+  - title: Video
+    items:
+      - { label: Fullscreen, shortcut: F, do: { keys: f } }
+      - { label: Stay on Top, shortcut: Shift+T, do: { keys: Shift+T } }
+      - separator
+      - { label: Screenshot, shortcut: S, do: { keys: s } }
+      - { label: Screenshot Without Subtitles, shortcut: Shift+S, do: { keys: Shift+S } }
+      - separator
+      - { label: Show Progress, shortcut: O, do: { keys: o } }
+      - { label: Statistics, shortcut: I, do: { keys: i } }
+  - title: Subtitles
+    items:
+      - { label: Show/Hide Subtitles, shortcut: V, do: { keys: v } }
+      - { label: Next Subtitle Track, shortcut: J, do: { keys: j } }
+      - { label: Previous Subtitle Track, shortcut: Shift+J, do: { keys: Shift+J } }
+      - separator
+      - { label: Subtitle Delay −0.1 s, shortcut: Z, do: { keys: z } }
+      - { label: Subtitle Delay +0.1 s, shortcut: Shift+Z, do: { keys: Shift+Z } }
+  - title: Help
+    items:
+      - { label: mpv Manual, do: { open_help: "https://mpv.io/manual/stable/" } }
