@@ -27,8 +27,11 @@ README.md first.
 - Quickshell has no generic DBus. Shell out with `Process` (nmcli, udisksctl,
   busctl, ddcutil...) or add a small relay in `helpers/` (python3 with
   dbus-python + gi is in the runtime PATH) that prints JSON lines.
-- Give each Indicator an `ipcName` (set in `bar/Tray.qml`) so
-  `hearth-ipc call indicator-<name> toggle` opens it.
+- Give each Indicator an `ipcName` (set in `bar/MenuBar.qml` and
+  `bar/PanelIndicators.qml`) so `hearth-ipc call indicator-<name> toggle`
+  opens it. A new menu bar item also gets an entry (same id) in
+  `services/BarItems.qml`'s catalog, which Settings > Menu Bar lists and
+  the bar's order, show/hide and overflow come from.
 - Runtime tools must be in `runtimeDeps` in flake.nix.
 
 ## API reference

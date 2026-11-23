@@ -238,6 +238,7 @@ PanelWindow {
     Connections {
         target: BarItems
         function onOrderChanged() { Qt.callLater(bar.applyOrder); }
+        function onMenuRequested(id) { if (ShellState.isActiveScreen(bar.screen) && bar.itemById[id] && bar.itemById[id].visible) bar.openItemMenu(id); }
     }
     Component.onCompleted: Qt.callLater(applyOrder)
     // Whether an item could show at all right now (not hidden, and its

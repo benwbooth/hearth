@@ -18,7 +18,7 @@ import Quickshell.Io
 //   hearth-ipc call menubar items
 //   hearth-ipc call menubar place weather hidden     (bar | overflow | hidden)
 //   hearth-ipc call menubar move weather 0
-//   hearth-ipc call menubar settings clock
+//   hearth-ipc call menubar settings clock | menu weather
 //   hearth-ipc call menubar edit | done | reset
 Singleton {
     id: root
@@ -241,6 +241,8 @@ Singleton {
     property bool editing: false
     // Settings > Menu Bar scrolls to and highlights this item when it opens.
     property string focusId: ""
+    // An item's right-click menu, on the active screen's bar (IPC, tests).
+    signal menuRequested(string id)
     function openSettings(id) {
         focusId = id || "";
         Settings.openRequested("menubar");
@@ -258,6 +260,7 @@ Singleton {
         }
         // Settings > Menu Bar, scrolled to this item with its options open.
         function settings(id: string): void { root.openSettings(id); }
+        function menu(id: string): void { root.menuRequested(id); }
         function edit(): void { root.editing = true; }
         function done(): void { root.editing = false; }
         function reset(): void { root.resetAll(); }
