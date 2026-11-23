@@ -414,7 +414,7 @@ class AtspiMenu:
                         kind = "web"
                 trigger = None
                 if kind is None:
-                    trigger = self.search(A, f, self.is_burger, web=True)
+                    trigger = self.search(A, f, self.is_burger, web=True) or self.unnamed_burger(A, f)
                     if trigger is None:
                         continue
                     kind = "burger"
@@ -468,6 +468,29 @@ class AtspiMenu:
             return self.to_surface(o, e.x, e.y)[1] < 120
         except Exception:
             return True
+
+    def unnamed_burger(self, A, frame):
+        """A ☰ without a name: many GTK 4 apps give their icon-only menu
+        button no accessible name (GNOME Sound Recorder, Tweaks, 2048, Lights
+        Off, LACT). A button that opens a popup (HAS_POPUP) in the window's
+        top 120 px with no name; of several, the rightmost (where a header
+        bar keeps its ☰)."""
+        found = []
+
+        def test(o, r):
+            if r not in (A.Role.PUSH_BUTTON, A.Role.TOGGLE_BUTTON) or (o.get_name() or "").strip():
+                return False
+            if not o.get_state_set().contains(A.StateType.HAS_POPUP):
+                return False
+            try:
+                e = o.get_component_iface().get_extents(A.CoordType.WINDOW)
+                if self.to_surface(o, e.x, e.y)[1] < 120:
+                    found.append((e.x, o))
+            except Exception:
+                pass
+            return False  # keep looking: collect them all
+        self.search(A, frame, test, web=False)
+        return max(found, key=lambda t: t[0])[1] if found else None
 
     @staticmethod
     def holds_items(o):
