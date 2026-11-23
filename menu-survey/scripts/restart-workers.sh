@@ -18,7 +18,7 @@ for fn in glob.glob("data/probe*.jsonl"):
     open(fn, "w").write("".join(json.dumps(r) + "\n" for r in keep))
 print(n, "requeued")
 PY
-for d in "" 1 2 3; do MENU_RIG_DIR=$XDG_RUNTIME_DIR/menu-rig-survey$d ~/.config/Claude/side-session-notes/local_3249e068-f6b4-44ca-966b-72365fe5da97/menu-rig.sh stop 2>/dev/null; done
+for d in "" 1 2 3; do MENU_RIG_DIR=$XDG_RUNTIME_DIR/menu-rig-survey$d scripts/menu-rig.sh stop 2>/dev/null; done
 start() { u=$1; W=$2; shift 2
   for i in $(seq 30); do systemctl --user list-units --all --plain --no-legend "hearth-menu-probe-$u.service" | grep -q . || break; sleep 2; done
   systemd-run --user --quiet --unit=hearth-menu-probe-$u --collect -p Nice=5 -p CPUWeight=50 -p MemoryMax=24G \

@@ -36,7 +36,7 @@ import sys
 import time
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-RIG = os.path.expanduser("~/.config/Claude/side-session-notes/local_3249e068-f6b4-44ca-966b-72365fe5da97/menu-rig.sh")
+RIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "menu-rig.sh")  # hearth gets DISPLAY
 WORKER = os.environ.get("MENU_PROBE_WORKER", "")
 RIGDIR = os.path.join(os.environ["XDG_RUNTIME_DIR"], "menu-rig-survey" + WORKER)
 ENV = dict(os.environ, MENU_RIG_DIR=RIGDIR)
@@ -77,11 +77,33 @@ def hearth_typelibs():
         return ""
 
 
+def x11_app_pid(pid):
+    """For a window through xwayland-satellite (pid = the satellite), the X
+    client's own pid: _NET_WM_PID of the active X window."""
+    try:
+        if "xwayland-sat" not in open(f"/proc/{pid}/comm").read():
+            return pid
+    except OSError:
+        return pid
+    xp = tool("xprop", "xorg.xprop")
+    disp = arbor_display()
+    if not xp or not disp:
+        return pid
+    r = rig("run", "env", f"DISPLAY={disp}", f"{xp}/bin/xprop", "-root", "_NET_ACTIVE_WINDOW")
+    m = re.search(r"(0x[0-9a-f]+)", r.stdout)
+    if not m:
+        return pid
+    r = rig("run", "env", f"DISPLAY={disp}", f"{xp}/bin/xprop", "-id", m.group(1), "_NET_WM_PID")
+    m = re.search(r"= (\d+)", r.stdout)
+    return int(m.group(1)) if m else pid
+
+
 def inspect(win):
     """What the app exposes (atspi-inspect.py), shortcuts window, MPRIS."""
     pid = (win or {}).get("pid") or 0
     if not pid:
         return {}
+    pid = x11_app_pid(pid)
     r = rig("run", "env", f"GI_TYPELIB_PATH={hearth_typelibs()}", hearth_python(),
             os.path.join(ROOT, "scripts", "atspi-inspect.py"), str(pid), (win or {}).get("title") or "",
             timeout=40)
