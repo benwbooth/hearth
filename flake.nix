@@ -221,10 +221,18 @@
           --set-default HEARTH_XKB_RULES ${pkgs.xkeyboard_config}/share/X11/xkb/rules/evdev.lst
         # Spotlight's indexer and the AI hub's llama.cpp server, for the
         # systemd user units in nixosModules.ai.
-        for t in hearth-indexer hearth-llama-server; do
+        for t in hearth-indexer hearth-llama-server hearth-accounts; do
           makeWrapper $out/share/hearth/helpers/$t $out/bin/$t \
             --prefix PATH : ${lib.makeBinPath runtimeDeps}:$out/share/hearth/helpers
         done
+        # Accounts (Settings > Accounts): the service apps ask for passwords
+        # and sign-in tokens, started on demand by the session bus.
+        mkdir -p $out/share/dbus-1/services
+        cat > $out/share/dbus-1/services/io.github.benwbooth.Accounts.service <<EOF
+        [D-BUS Service]
+        Name=io.github.benwbooth.Accounts
+        Exec=$out/bin/hearth-accounts serve
+        EOF
         # From a text console when the lock screen is stuck (README: Lock screen).
         ln -s $out/share/hearth/helpers/hearth-recover-lock $out/bin/hearth-recover-lock
         # GTK_MODULES=appmenu-gtk-module (arbor/config.kdl) finds it through

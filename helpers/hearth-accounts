@@ -1,0 +1,1076 @@
+#!/usr/bin/env python3
+"""hearth-accounts: your online accounts, set up once in Settings > Accounts and
+used by every app (almanac's mail, calendars and contacts, grove's servers and
+Google documents, …).
+
+  hearth-accounts serve                  the D-Bus service (started on demand)
+  hearth-accounts list                   -> {"ok", "accounts": [...], "registrations": {...}}
+  hearth-accounts save JSON              add or change an account -> {"ok", "id"}
+  hearth-accounts remove ID
+  hearth-accounts registration PROVIDER JSON   the app registration (client ID…) for a provider
+  hearth-accounts sign-in PROVIDER [ID]  browser sign-in, waits -> {"ok", "id", "email"} or {"ok": false, "error"}
+  hearth-accounts code CODE              the code Yahoo/AOL show (or the whole address)
+  hearth-accounts cancel                 stop a sign-in that is waiting
+  hearth-accounts token ID PURPOSE       an access token (for testing)
+  hearth-accounts test ID                try the account (mail: log in to IMAP/SMTP; server: reach it)
+  hearth-accounts presets                the mail providers Settings offers, with their servers
+  hearth-accounts discover EMAIL         find a mail address's servers (Thunderbird's database)
+
+Everything but `serve` prints one JSON line.
+
+D-Bus: io.github.benwbooth.Accounts at /io/github/benwbooth/Accounts,
+interface io.github.benwbooth.Accounts1 (JSON strings in and out):
+  List() -> s                    accounts, no secrets
+  Password(s id) -> s
+  AccessToken(s id, s purpose) -> s   {"token", "expires_in", "email"}; purpose is
+                                 mail | calendar | contacts | drive (files the app
+                                 made) | files (read all files)
+      errors io.github.benwbooth.Accounts1.SignedOut (the provider ended the
+      sign-in, e.g. Google's 7 days in Testing: sign in again), .NotAllowed (the
+      account wasn't allowed that: sign in again and tick it), .Failed
+  Save(s json) -> s id           inline "password" and grants[].refresh_token go to
+                                 the keyring; the same account (kind + address, or
+                                 server) is merged rather than added twice
+  Remove(s id)
+  Registrations() -> s, SaveRegistration(s provider, s json)
+  SignIn(s provider, s id) -> s session   then signal SignInDone(s session, s result)
+  SubmitCode(s code), CancelSignIn()
+  OpenSettings(s id) -> b        Settings > Accounts (false without hearth)
+  signal Changed()
+
+Accounts live in ~/.config/hearth/accounts.json (no secrets); passwords and
+refresh tokens in the Secret Service (secret-tool, application=hearth-accounts
+account=<id> key=password|refresh:<grant>).
+
+Tests: HEARTH_ACCOUNTS_BROWSER=CMD opens sign-in pages with CMD instead of
+xdg-open; HEARTH_ACCOUNTS_DIR=DIR keeps accounts.json there, and secrets in
+DIR/secrets.json instead of the keyring; HEARTH_ACCOUNTS_TEST_BASE=URL adds a
+"test" provider whose sign-in pages are at URL/auth and URL/token.
+"""
+import base64
+import hashlib
+import json
+import os
+import secrets as rnd
+import socket
+import subprocess
+import sys
+import threading
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+BUS_NAME = "io.github.benwbooth.Accounts"
+PATH = "/io/github/benwbooth/Accounts"
+IFACE = "io.github.benwbooth.Accounts1"
+
+TEST_DIR = os.environ.get("HEARTH_ACCOUNTS_DIR", "")
+CONF_DIR = TEST_DIR or os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "hearth")
+STORE = os.path.join(CONF_DIR, "accounts.json")
+TEST_BASE = os.environ.get("HEARTH_ACCOUNTS_TEST_BASE", "")
+STORAGE_PORT = 53682
+
+G = "https://www.googleapis.com/auth/"
+MS_MAIL = "offline_access https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send"
+MS_DATA = "offline_access openid email https://graph.microsoft.com/User.Read https://graph.microsoft.com/Calendars.ReadWrite https://graph.microsoft.com/Contacts.ReadWrite"
+MS_FILES = "offline_access https://graph.microsoft.com/Files.ReadWrite"
+
+# Each sign-in provider: its pages, what a sign-in asks for, mail servers,
+# and which granted scopes allow each purpose (any one of them will do).
+PROVIDERS = {
+    "google": {
+        "name": "Google", "what": "Gmail, Google Calendar, Contacts and Drive",
+        "auth": "https://accounts.google.com/o/oauth2/v2/auth",
+        "token": "https://oauth2.googleapis.com/token",
+        "userinfo": "https://openidconnect.googleapis.com/v1/userinfo",
+        "scope": "openid email https://mail.google.com/ " + G + "calendar " + G + "contacts " + G + "drive.file " + G + "drive.readonly",
+        "mail": ["imap.gmail.com", 993, "smtp.gmail.com", 465],
+        "purposes": {"mail": ["https://mail.google.com/"], "calendar": [G + "calendar"], "contacts": [G + "contacts"],
+                     "drive": [G + "drive.file", G + "drive"], "files": [G + "drive.readonly", G + "drive"]},
+        "secret": True,
+    },
+    "microsoft": {
+        "name": "Microsoft", "what": "Outlook, Hotmail, Microsoft 365 mail, calendars, contacts and OneDrive",
+        "auth": "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize",
+        "token": "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",
+        "userinfo": "https://graph.microsoft.com/v1.0/me",
+        "scope": MS_DATA + " https://graph.microsoft.com/Files.ReadWrite https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send",
+        "mail": ["outlook.office365.com", 993, "smtp.office365.com", 587],
+        # Microsoft hands out one service's token at a time: the purpose's
+        # scope goes with every refresh.
+        "refresh_scope": {"mail": MS_MAIL, "calendar": MS_DATA, "contacts": MS_DATA, "drive": MS_FILES, "files": MS_FILES},
+        "secret": False,
+    },
+    "yahoo": {
+        "name": "Yahoo", "what": "Yahoo Mail",
+        "auth": "https://api.login.yahoo.com/oauth2/request_auth",
+        "token": "https://api.login.yahoo.com/oauth2/get_token",
+        "userinfo": "https://api.login.yahoo.com/openid/v1/userinfo",
+        "scope": "openid email mail-w", "paste": True, "basic": True,
+        "mail": ["imap.mail.yahoo.com", 993, "smtp.mail.yahoo.com", 465],
+        "purposes": {"mail": ["mail-w"]}, "secret": True,
+    },
+    "aol": {
+        "name": "AOL", "what": "AOL Mail",
+        "auth": "https://api.login.aol.com/oauth2/request_auth",
+        "token": "https://api.login.aol.com/oauth2/get_token",
+        "userinfo": "https://api.login.aol.com/openid/v1/userinfo",
+        "scope": "openid email mail-w", "paste": True, "basic": True,
+        "mail": ["imap.aol.com", 993, "smtp.aol.com", 465],
+        "purposes": {"mail": ["mail-w"]}, "secret": True,
+    },
+    "dropbox": {
+        "name": "Dropbox", "what": "Dropbox (big attachments sent as links)",
+        "auth": "https://www.dropbox.com/oauth2/authorize",
+        "token": "https://api.dropboxapi.com/oauth2/token",
+        "scope": "files.content.write files.content.read sharing.write sharing.read",
+        "storage": True, "extra": {"token_access_type": "offline"},
+        "purposes": {"drive": ["files.content.write"], "files": ["files.content.read"]}, "secret": True,
+    },
+    "box": {
+        "name": "Box", "what": "Box (big attachments sent as links)",
+        "auth": "https://account.box.com/api/oauth2/authorize",
+        "token": "https://api.box.com/oauth2/token",
+        "scope": "", "storage": True, "secret": True,
+    },
+}
+if TEST_BASE:
+    PROVIDERS["test"] = {"name": "Test", "what": "", "auth": TEST_BASE + "/auth", "token": TEST_BASE + "/token",
+                         "scope": "openid email", "mail": ["127.0.0.1", 993, "127.0.0.1", 465], "secret": False}
+OAUTH_KINDS = [k for k in PROVIDERS]
+
+
+def env_registration(provider):
+    up = provider.upper()
+    cid = os.environ.get("HEARTH_%s_CLIENT_ID" % up, "")
+    return {"client_id": cid, "client_secret": os.environ.get("HEARTH_%s_CLIENT_SECRET" % up, "")} if cid else None
+
+
+# ------------------------------------------------------------------ storage
+
+_lock = threading.RLock()
+
+
+def load():
+    with _lock:
+        try:
+            with open(STORE) as f:
+                d = json.load(f)
+        except (OSError, ValueError):
+            d = {}
+        d.setdefault("version", 1)
+        d.setdefault("registrations", {})
+        d.setdefault("accounts", [])
+        return d
+
+
+def save_store(d):
+    with _lock:
+        os.makedirs(CONF_DIR, exist_ok=True)
+        tmp = STORE + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(d, f, indent=2)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, STORE)
+
+
+def new_id(prefix="a"):
+    return prefix + format(int(time.time() * 1000), "x") + rnd.token_hex(2)
+
+
+# Secrets: the Secret Service through secret-tool (or a file in tests).
+SECRETS_FILE = os.path.join(TEST_DIR, "secrets.json") if TEST_DIR else ""
+
+
+def secret_get(account, key):
+    if SECRETS_FILE:
+        try:
+            with open(SECRETS_FILE) as f:
+                return json.load(f).get(account + "/" + key)
+        except (OSError, ValueError):
+            return None
+    try:
+        r = subprocess.run(["secret-tool", "lookup", "application", "hearth-accounts", "account", account, "key", key],
+                           capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return r.stdout if r.returncode == 0 and r.stdout != "" else None
+
+
+def secret_set(account, key, value, label):
+    if SECRETS_FILE:
+        with _lock:
+            try:
+                with open(SECRETS_FILE) as f:
+                    d = json.load(f)
+            except (OSError, ValueError):
+                d = {}
+            d[account + "/" + key] = value
+            with open(SECRETS_FILE, "w") as f:
+                json.dump(d, f)
+        return True
+    try:
+        r = subprocess.run(["secret-tool", "store", "--label", label, "application", "hearth-accounts", "account", account, "key", key],
+                           input=value, capture_output=True, text=True, timeout=30)
+        return r.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def secret_clear(account, key=None):
+    if SECRETS_FILE:
+        with _lock:
+            try:
+                with open(SECRETS_FILE) as f:
+                    d = json.load(f)
+            except (OSError, ValueError):
+                return
+            d = {k: v for k, v in d.items() if not (k.startswith(account + "/") and (key is None or k == account + "/" + key))}
+            with open(SECRETS_FILE, "w") as f:
+                json.dump(d, f)
+        return
+    args = ["secret-tool", "clear", "application", "hearth-accounts", "account", account]
+    if key:
+        args += ["key", key]
+    try:
+        subprocess.run(args, capture_output=True, timeout=20)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
+# ------------------------------------------------------------------ accounts
+
+def same_account(a, b):
+    """Whether two records are the same account (so a save merges)."""
+    if a.get("kind") != b.get("kind"):
+        return False
+    k = a.get("kind")
+    low = lambda s: (s or "").strip().lower()
+    if k == "server":
+        return all(low(a.get(f)) == low(b.get(f)) for f in ("protocol", "host", "user")) and str(a.get("port") or "") == str(b.get("port") or "") \
+            and (a.get("path") or "") == (b.get("path") or "")
+    if k == "nextcloud":
+        return low(a.get("server")) == low(b.get("server")) and low(a.get("user")) == low(b.get("user"))
+    if k in ("dropbox", "box"):
+        return True
+    if k == "mail":
+        return low(a.get("email")) == low(b.get("email")) and low(a.get("username") or a.get("email")) == low(b.get("username") or b.get("email"))
+    return low(a.get("email")) != "" and low(a.get("email")) == low(b.get("email"))
+
+
+def public(a):
+    """An account as apps see it: no secrets, plus what it can be used for."""
+    a = json.loads(json.dumps(a))
+    p = PROVIDERS.get(a.get("kind"), {})
+    if a.get("kind") in PROVIDERS:
+        uses = set()
+        for g in a.get("grants", []):
+            uses |= grant_purposes(a["kind"], g)
+        a["uses"] = sorted(uses)
+        a["provider_name"] = p.get("name", a["kind"])
+    elif a.get("kind") == "mail":
+        a["uses"] = ["mail"] + (["calendar"] if a.get("caldav_url") else []) + (["contacts"] if a.get("carddav_url") else [])
+    elif a.get("kind") == "nextcloud":
+        a["uses"] = ["drive", "files"]
+    elif a.get("kind") == "server":
+        a["uses"] = ["files"]
+    for g in a.get("grants", []):
+        g.pop("refresh_token", None)
+    a.pop("password", None)
+    return a
+
+
+def grant_purposes(kind, g):
+    p = PROVIDERS.get(kind, {})
+    if "purposes" in p:
+        have = set((g.get("scope") or "").split())
+        return {purpose for purpose, need in p["purposes"].items() if have & set(need)}
+    if "refresh_scope" in p:          # Microsoft: everything it signed in for
+        return set(p["refresh_scope"])
+    if kind == "box":
+        return {"drive", "files"}
+    return {"mail"}
+
+
+def label_for(a):
+    return "%s account: %s" % (PROVIDERS.get(a.get("kind"), {}).get("name") or a.get("kind", "").capitalize(),
+                               a.get("email") or a.get("name") or a.get("host") or a.get("server") or a.get("id"))
+
+
+def do_save(rec):
+    """Adds or updates an account; returns its id."""
+    rec = dict(rec)
+    password = rec.pop("password", None)
+    grants = rec.pop("grants", None)
+    with _lock:
+        d = load()
+        cur = None
+        if rec.get("id"):
+            cur = next((a for a in d["accounts"] if a["id"] == rec["id"]), None)
+        if cur is None:
+            cur = next((a for a in d["accounts"] if same_account(a, rec)), None)
+        if cur is None:
+            cur = {"id": rec.get("id") or new_id(), "created": int(time.time())}
+            d["accounts"].append(cur)
+        app_ids = dict(cur.get("app_ids") or {})
+        app_ids.update(rec.pop("app_ids", None) or {})
+        rec.pop("id", None)
+        for k, v in rec.items():
+            if k in ("mail",) and isinstance(v, dict):
+                cur.setdefault(k, {}).update(v)
+            else:
+                cur[k] = v
+        if app_ids:
+            cur["app_ids"] = app_ids
+        if cur.get("kind") in PROVIDERS and "mail" not in cur and PROVIDERS[cur["kind"]].get("mail"):
+            m = PROVIDERS[cur["kind"]]["mail"]
+            cur["mail"] = {"imap_host": m[0], "imap_port": m[1], "smtp_host": m[2], "smtp_port": m[3]}
+        if not cur.get("name"):
+            cur["name"] = cur.get("email") or cur.get("host") or cur.get("server") or PROVIDERS.get(cur.get("kind"), {}).get("name", "Account")
+        if password is not None:
+            if password == "":
+                secret_clear(cur["id"], "password")
+            else:
+                secret_set(cur["id"], "password", password, label_for(cur))
+        if grants:
+            have = cur.setdefault("grants", [])
+            for g in grants:
+                g = dict(g)
+                tok = g.pop("refresh_token", None)
+                same = next((x for x in have if x.get("client_id") == g.get("client_id") and x.get("id") == g.get("id")), None) if g.get("id") else None
+                if same is None:
+                    same = next((x for x in have if x.get("client_id") == g.get("client_id")), None)
+                if same is None:
+                    same = {"id": g.get("id") or new_id("g")}
+                    have.insert(0, same)
+                g.pop("id", None)
+                same.update(g)
+                if tok:
+                    secret_set(cur["id"], "refresh:" + same["id"], tok, label_for(cur) + " (sign-in)")
+            cur["signed_out"] = False
+            cur["error"] = ""
+        save_store(d)
+        TOKENS.pop_account(cur["id"])
+        return cur["id"]
+
+
+def do_remove(aid):
+    with _lock:
+        d = load()
+        d["accounts"] = [a for a in d["accounts"] if a["id"] != aid]
+        save_store(d)
+    secret_clear(aid)
+    TOKENS.pop_account(aid)
+
+
+def get_account(aid):
+    d = load()
+    a = next((a for a in d["accounts"] if a["id"] == aid), None)
+    if a is None:
+        # An app's own id works too.
+        a = next((a for a in d["accounts"] if aid in (a.get("app_ids") or {}).values()), None)
+    return a
+
+
+def registration(provider, d=None):
+    d = d or load()
+    r = d["registrations"].get(provider)
+    if r and r.get("client_id"):
+        return r
+    return env_registration(provider)
+
+
+# ------------------------------------------------------------------ OAuth
+
+class AccountError(Exception):
+    def __init__(self, kind, msg):
+        super().__init__(msg)
+        self.kind = kind
+
+
+def http(url, data=None, headers=None, timeout=60):
+    req = urllib.request.Request(url, data=data, headers=headers or {})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status, r.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8", "replace")
+    except (urllib.error.URLError, OSError) as e:
+        raise AccountError("Failed", "Couldn't reach the sign-in service: %s" % getattr(e, "reason", e))
+
+
+def post_form(url, body, basic=None):
+    headers = {"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"}
+    if basic:
+        headers["Authorization"] = "Basic " + base64.b64encode(("%s:%s" % basic).encode()).decode()
+    status, text = http(url, urllib.parse.urlencode(body).encode(), headers)
+    try:
+        v = json.loads(text)
+    except ValueError:
+        raise AccountError("Failed", "The sign-in service answered %d: %s" % (status, text[:200]))
+    if "error" in v:
+        code = v["error"] if isinstance(v["error"], str) else "error"
+        desc = v.get("error_description") or ""
+        if code == "invalid_grant":
+            raise AccountError("SignedOut", "Signed out: %s Sign in again (Settings > Accounts)." % desc)
+        hint = {"invalid_client": " (check the app's client ID and secret in Settings > Accounts)",
+                "unauthorized_client": " (check the app's client ID and secret in Settings > Accounts)"}.get(code, "")
+        raise AccountError("Failed", ("Sign-in failed: %s %s%s" % (code, desc, hint)).strip())
+    return v
+
+
+def provider_url(p, key, tenant):
+    return p[key].replace("{tenant}", tenant or "common")
+
+
+class TokenCache:
+    def __init__(self):
+        self.m = {}
+        self.lock = threading.Lock()
+
+    def get(self, key):
+        with self.lock:
+            v = self.m.get(key)
+            return v if v and v[1] > time.time() else None
+
+    def put(self, key, tok, secs):
+        with self.lock:
+            self.m[key] = (tok, time.time() + max(60, secs - 120))
+
+    def pop_account(self, aid):
+        with self.lock:
+            for k in [k for k in self.m if k.startswith(aid + ":")]:
+                del self.m[k]
+
+
+TOKENS = TokenCache()
+# One refresh at a time per account (Microsoft hands out a new refresh token
+# with each one: two at once would each spend the same old one).
+_refresh_locks = {}
+
+
+def access_token(aid, purpose):
+    a = get_account(aid)
+    if a is None:
+        raise AccountError("Failed", "No such account.")
+    aid = a["id"]
+    kind = a.get("kind")
+    p = PROVIDERS.get(kind)
+    if p is None:
+        raise AccountError("Failed", "This account signs in with a password, not a token.")
+    key = "%s:%s" % (aid, purpose)
+    hit = TOKENS.get(key)
+    if hit:
+        return {"token": hit[0], "expires_in": int(hit[1] - time.time()), "email": a.get("email", "")}
+    grants = [g for g in a.get("grants", []) if purpose in grant_purposes(kind, g)]
+    if not grants:
+        raise AccountError("NotAllowed", "%s isn't allowed to be used for %s: sign in again (Settings > Accounts) and allow it on %s's page."
+                           % (a.get("email") or p["name"], purpose, p["name"]))
+    lock = _refresh_locks.setdefault(aid, threading.Lock())
+    with lock:
+        hit = TOKENS.get(key)
+        if hit:
+            return {"token": hit[0], "expires_in": int(hit[1] - time.time()), "email": a.get("email", "")}
+        last = None
+        for g in grants:
+            refresh = secret_get(aid, "refresh:" + g["id"])
+            if not refresh:
+                last = AccountError("SignedOut", "Signed out: the sign-in isn't in the keyring. Sign in again (Settings > Accounts).")
+                continue
+            body = {"client_id": g.get("client_id", ""), "grant_type": "refresh_token", "refresh_token": refresh}
+            rs = (p.get("refresh_scope") or {}).get(purpose)
+            if rs:
+                body["scope"] = rs
+            secret = g.get("client_secret", "")
+            basic = None
+            if p.get("basic") and secret:
+                basic = (g.get("client_id", ""), secret)
+            elif secret:
+                body["client_secret"] = secret
+            try:
+                v = post_form(provider_url(p, "token", g.get("tenant")), body, basic)
+            except AccountError as e:
+                last = e
+                continue
+            tok = v.get("access_token")
+            if not tok:
+                last = AccountError("Failed", "The sign-in service gave no access token.")
+                continue
+            secs = int(v.get("expires_in") or 3000)
+            nr = v.get("refresh_token")
+            if nr and nr != refresh:
+                secret_set(aid, "refresh:" + g["id"], nr, label_for(a) + " (sign-in)")
+            TOKENS.put(key, tok, secs)
+            if a.get("signed_out") or a.get("error"):
+                mark(aid, signed_out=False, error="")
+            return {"token": tok, "expires_in": secs, "email": a.get("email", "")}
+        if last and last.kind == "SignedOut":
+            mark(aid, signed_out=True, error=str(last))
+        raise last or AccountError("Failed", "Couldn't get a token.")
+
+
+def mark(aid, **kw):
+    with _lock:
+        d = load()
+        for a in d["accounts"]:
+            if a["id"] == aid:
+                a.update(kw)
+        save_store(d)
+    if SERVICE:
+        SERVICE.changed_soon()
+
+
+def b64url(b):
+    return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+
+
+def who_am_i(p, access, id_token):
+    if id_token:
+        try:
+            payload = id_token.split(".")[1]
+            v = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+            for k in ("email", "preferred_username", "upn"):
+                if "@" in (v.get(k) or ""):
+                    return v[k]
+        except (IndexError, ValueError):
+            pass
+    if not p.get("userinfo") or not access:
+        return ""
+    try:
+        _, text = http(p["userinfo"], headers={"Authorization": "Bearer " + access})
+        v = json.loads(text)
+    except (AccountError, ValueError):
+        return ""
+    for k in ("email", "mail", "userPrincipalName"):
+        if v.get(k):
+            return v[k]
+    return ""
+
+
+class SignInRound:
+    """The sign-in that is waiting (only one at a time)."""
+    lock = threading.Lock()
+    round = 0
+    pasted = None
+
+
+def cancel_sign_in():
+    with SignInRound.lock:
+        SignInRound.round += 1
+
+
+def submit_code(code):
+    c = (code or "").strip()
+    if "code=" in c:
+        c = c.split("code=", 1)[1].split("&", 1)[0]
+    SignInRound.pasted = urllib.parse.unquote(c)
+
+
+PAGE = ("<html><body style='font-family:sans-serif;padding:40px'><h2>%s</h2>%s</body></html>")
+
+
+def sign_in(provider, open_url, account_id=""):
+    """Runs a browser sign-in; returns the account id and address."""
+    if provider == "nextcloud":
+        raise AccountError("Failed", "Nextcloud signs in with its server address: use nextcloud_sign_in.")
+    p = PROVIDERS.get(provider)
+    if p is None:
+        raise AccountError("Failed", "Unknown provider %s." % provider)
+    reg = registration(provider)
+    if not reg:
+        raise AccountError("Failed", "Set up %s sign-in first (Settings > Accounts > %s)." % (p["name"], p["name"]))
+    cid, secret, tenant = reg["client_id"], reg.get("client_secret", ""), reg.get("tenant", "")
+    storage = p.get("storage")
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        srv.bind(("127.0.0.1", STORAGE_PORT if storage else 0))
+    except OSError as e:
+        raise AccountError("Failed", "Port %d is busy (%s): close what's using it and try again." % (STORAGE_PORT, e))
+    srv.listen(4)
+    srv.settimeout(0.2)
+    port = srv.getsockname()[1]
+    manual = p.get("paste")
+    if manual:
+        redirect = "oob"
+    elif provider == "microsoft":
+        redirect = "http://localhost:%d" % port
+    else:
+        redirect = "http://127.0.0.1:%d" % port
+    SignInRound.pasted = None
+    with SignInRound.lock:
+        SignInRound.round += 1
+        my_round = SignInRound.round
+    verifier = b64url(rnd.token_bytes(36))
+    state = b64url(rnd.token_bytes(12))
+    params = {"client_id": cid, "response_type": "code", "redirect_uri": redirect, "state": state,
+              "code_challenge": b64url(hashlib.sha256(verifier.encode()).digest()), "code_challenge_method": "S256"}
+    if p.get("scope"):
+        params["scope"] = p["scope"]
+    if provider == "google":
+        # Always the account chooser, so the account picked is the one listed
+        # under Test users rather than whichever is signed in already.
+        params.update(access_type="offline", prompt="select_account consent", include_granted_scopes="true")
+    elif provider == "microsoft":
+        params["prompt"] = "select_account"
+    params.update(p.get("extra") or {})
+    open_url(provider_url(p, "auth", tenant) + "?" + urllib.parse.urlencode(params))
+
+    deadline = time.time() + 300
+    code = None
+    try:
+        while code is None:
+            if time.time() > deadline:
+                raise AccountError("Failed", "Sign-in timed out.")
+            if SignInRound.round != my_round:
+                raise AccountError("Cancelled", "Sign-in stopped.")
+            if SignInRound.pasted:
+                code = SignInRound.pasted
+                break
+            try:
+                conn, _ = srv.accept()
+            except socket.timeout:
+                continue
+            with conn:
+                conn.settimeout(5)
+                try:
+                    line = conn.recv(8192).decode("utf-8", "replace").split("\r\n", 1)[0]
+                except OSError:
+                    continue
+                path = line.split(" ")[1] if line.count(" ") >= 2 else ""
+                q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(path).query))
+                ok = "code" in q and q.get("state") == state
+                page = PAGE % (("Signed in", "You can close this page.") if ok else
+                               ("Sign-in did not finish", "Go back to Settings and try again."))
+                body = page.encode()
+                try:
+                    conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: %d\r\nConnection: close\r\n\r\n" % len(body) + body)
+                except OSError:
+                    pass
+                if q.get("error"):
+                    hint = ""
+                    if provider == "google" and q["error"] == "access_denied":
+                        hint = " If Google said “Access blocked”, add your address under Test users (setup step 7), then sign in again."
+                    raise AccountError("Failed", "Sign-in was not allowed: %s %s%s" % (q["error"], q.get("error_description", ""), hint))
+                if ok:
+                    code = q["code"]
+    finally:
+        srv.close()
+
+    body = {"client_id": cid, "grant_type": "authorization_code", "code": code, "redirect_uri": redirect, "code_verifier": verifier}
+    basic = None
+    if p.get("basic") and secret:
+        basic = (cid, secret)
+    elif secret:
+        body["client_secret"] = secret
+    if provider == "microsoft":
+        body["scope"] = MS_DATA
+    v = post_form(provider_url(p, "token", tenant), body, basic)
+    refresh = v.get("refresh_token")
+    if not refresh:
+        raise AccountError("Failed", "%s gave no lasting sign-in (refresh token)." % p["name"])
+    email = "" if storage else who_am_i(p, v.get("access_token", ""), v.get("id_token", ""))
+    scope = v.get("scope") or p.get("scope", "")
+    if provider == "microsoft":
+        scope = p["scope"]
+    grant = {"client_id": cid, "client_secret": secret, "tenant": tenant, "scope": scope, "refresh_token": refresh,
+             "signed_in": int(time.time())}
+    rec = {"kind": provider, "grants": [grant]}
+    if email:
+        rec["email"] = email
+    target = get_account(account_id) if account_id else None
+    if target and (not email or (target.get("email") or "").lower() == email.lower()):
+        # Signing in again: the new sign-in replaces the old ones.
+        for g in target.get("grants", []):
+            secret_clear(target["id"], "refresh:" + g["id"])
+        with _lock:
+            d = load()
+            for a in d["accounts"]:
+                if a["id"] == target["id"]:
+                    a["grants"] = []
+            save_store(d)
+        rec["id"] = target["id"]
+    aid = do_save(rec)
+    return {"id": aid, "email": email, "scope": scope}
+
+
+def nextcloud_sign_in(server, open_url):
+    """Nextcloud's login flow v2: its page hands over an app password."""
+    server = server.strip().rstrip("/")
+    if not server.startswith("http"):
+        server = "https://" + server
+    status, text = http(server + "/index.php/login/v2", data=b"", headers={"User-Agent": "hearth"})
+    try:
+        v = json.loads(text)
+    except ValueError:
+        raise AccountError("Failed", "That doesn't look like a Nextcloud server (it answered %d)." % status)
+    open_url(v["login"])
+    with SignInRound.lock:
+        SignInRound.round += 1
+        my_round = SignInRound.round
+    deadline = time.time() + 600
+    while time.time() < deadline:
+        if SignInRound.round != my_round:
+            raise AccountError("Cancelled", "Sign-in stopped.")
+        time.sleep(2)
+        st, t = http(v["poll"]["endpoint"], data=urllib.parse.urlencode({"token": v["poll"]["token"]}).encode())
+        if st == 200:
+            r = json.loads(t)
+            aid = do_save({"kind": "nextcloud", "server": r["server"], "user": r["loginName"], "name": "Nextcloud (%s)" % r["loginName"],
+                           "password": r["appPassword"]})
+            return {"id": aid, "email": r["loginName"]}
+    raise AccountError("Failed", "Sign-in timed out.")
+
+
+# ------------------------------------------------------------------ mail helpers
+
+# Mail services Settings offers: how they sign in and their servers.
+PRESETS = [
+    {"id": "google", "name": "Google", "how": "oauth", "detail": "Gmail, Google Calendar and Contacts"},
+    {"id": "microsoft", "name": "Microsoft", "how": "oauth", "detail": "Outlook.com, Hotmail, Live, Microsoft 365"},
+    {"id": "yahoo", "name": "Yahoo", "how": "oauth", "detail": "Yahoo Mail"},
+    {"id": "aol", "name": "AOL", "how": "oauth", "detail": "AOL Mail"},
+    {"id": "icloud", "name": "iCloud", "how": "password", "detail": "Mail, calendars and contacts; needs an app-specific password from account.apple.com",
+     "imap": ["imap.mail.me.com", 993], "smtp": ["smtp.mail.me.com", 587], "caldav": "https://caldav.icloud.com", "carddav": "https://contacts.icloud.com",
+     "help": "https://account.apple.com/account/manage", "username": "email"},
+    {"id": "exchange", "name": "Microsoft Exchange", "how": "password", "detail": "Your organization's Exchange server (EWS)", "incoming": "ews"},
+    {"id": "proton", "name": "Proton Mail", "how": "password", "detail": "Through Proton Mail Bridge running on this computer",
+     "imap": ["127.0.0.1", 1143], "smtp": ["127.0.0.1", 1025], "help": "https://proton.me/mail/bridge"},
+    {"id": "fastmail", "name": "Fastmail", "how": "password", "detail": "Needs an app password (Settings > Privacy & Security)",
+     "imap": ["imap.fastmail.com", 993], "smtp": ["smtp.fastmail.com", 465], "caldav": "https://caldav.fastmail.com", "carddav": "https://carddav.fastmail.com",
+     "help": "https://app.fastmail.com/settings/security/apppasswords"},
+    {"id": "zoho", "name": "Zoho Mail", "how": "password", "detail": "Needs an app password if two-factor sign-in is on",
+     "imap": ["imap.zoho.com", 993], "smtp": ["smtp.zoho.com", 465], "caldav": "https://calendar.zoho.com", "carddav": "https://contacts.zoho.com"},
+    {"id": "gmx", "name": "GMX", "how": "password", "detail": "Turn on IMAP in GMX's settings first",
+     "imap": ["imap.gmx.com", 993], "smtp": ["mail.gmx.com", 587]},
+    {"id": "mailcom", "name": "mail.com", "how": "password", "detail": "Turn on IMAP in mail.com's settings first",
+     "imap": ["imap.mail.com", 993], "smtp": ["smtp.mail.com", 587]},
+    {"id": "yandex", "name": "Yandex Mail", "how": "password", "detail": "Needs an app password",
+     "imap": ["imap.yandex.com", 993], "smtp": ["smtp.yandex.com", 465], "caldav": "https://caldav.yandex.ru", "carddav": "https://carddav.yandex.ru"},
+    {"id": "mailboxorg", "name": "mailbox.org", "how": "password", "detail": "",
+     "imap": ["imap.mailbox.org", 993], "smtp": ["smtp.mailbox.org", 465], "caldav": "https://dav.mailbox.org", "carddav": "https://dav.mailbox.org"},
+    {"id": "posteo", "name": "Posteo", "how": "password", "detail": "",
+     "imap": ["posteo.de", 993], "smtp": ["posteo.de", 465], "caldav": "https://posteo.de:8443", "carddav": "https://posteo.de:8843"},
+    {"id": "other", "name": "Other mail account", "how": "password", "detail": "Any IMAP or POP mail service, CalDAV calendars and CardDAV contacts"},
+]
+
+
+def discover(email):
+    """Servers for an address: Thunderbird's ISPDB, then the domain's own autoconfig."""
+    domain = email.split("@")[-1].strip().lower()
+    if not domain:
+        return {"ok": False, "error": "Type the whole address first."}
+    import xml.etree.ElementTree as ET
+    for url in ("https://autoconfig.thunderbird.net/v1.1/" + domain,
+                "https://autoconfig.%s/mail/config-v1.1.xml?emailaddress=%s" % (domain, urllib.parse.quote(email))):
+        try:
+            st, text = http(url, timeout=10)
+        except AccountError:
+            continue
+        if st != 200:
+            continue
+        try:
+            root = ET.fromstring(text)
+        except ET.ParseError:
+            continue
+        out = {}
+        for s in root.iter("incomingServer"):
+            if s.get("type") in ("imap", "pop3") and "imap" not in out:
+                out["incoming"] = "" if s.get("type") == "imap" else "pop"
+                out["imap"] = [s.findtext("hostname"), int(s.findtext("port") or 993)]
+                out["username"] = "email" if "%EMAILADDRESS%" in (s.findtext("username") or "") else "local"
+        for s in root.iter("outgoingServer"):
+            if "smtp" not in out:
+                out["smtp"] = [s.findtext("hostname"), int(s.findtext("port") or 465)]
+        if "imap" in out:
+            out["ok"] = True
+            return out
+    return {"ok": False, "error": "Couldn't find %s's servers: type them in." % domain}
+
+
+def test_account(aid):
+    import imaplib
+    import smtplib
+    import ssl
+    a = get_account(aid)
+    if a is None:
+        return {"ok": False, "error": "No such account."}
+    if a.get("kind") == "server":
+        try:
+            port = int(a.get("port") or {"sftp": 22, "smb": 445, "webdav": 443}.get(a.get("protocol"), 0))
+            socket.create_connection((a["host"], port), timeout=8).close()
+            return {"ok": True, "detail": "%s answers on port %d." % (a["host"], port)}
+        except OSError as e:
+            return {"ok": False, "error": "Couldn't reach %s: %s" % (a.get("host"), e)}
+    m = a.get("mail") or {}
+    if not m.get("imap_host") or m.get("incoming") == "ews":
+        return {"ok": True, "detail": "Nothing to try here."}
+    user = a.get("username") or a.get("email")
+    try:
+        ctx = ssl.create_default_context()
+        port = int(m.get("imap_port") or 993)
+        c = imaplib.IMAP4_SSL(m["imap_host"], port, ssl_context=ctx, timeout=15) if port == 993 else imaplib.IMAP4(m["imap_host"], port, timeout=15)
+        if a.get("kind") in PROVIDERS:
+            tok = access_token(a["id"], "mail")["token"]
+            c.authenticate("XOAUTH2", lambda _: ("user=%s\x01auth=Bearer %s\x01\x01" % (a.get("email"), tok)).encode())
+        else:
+            c.login(user, secret_get(a["id"], "password") or "")
+        c.logout()
+    except AccountError as e:
+        return {"ok": False, "error": str(e)}
+    except (OSError, imaplib.IMAP4.error, ssl.SSLError) as e:
+        return {"ok": False, "error": "Mail sign-in failed: %s" % e}
+    return {"ok": True, "detail": "Signed in to %s." % m["imap_host"]}
+
+
+# ------------------------------------------------------------------ D-Bus service
+
+SERVICE = None
+
+
+def serve():
+    global SERVICE
+    import dbus
+    import dbus.service
+    from dbus.mainloop.glib import DBusGMainLoop
+    from gi.repository import GLib
+
+    DBusGMainLoop(set_as_default=True)
+    bus = dbus.SessionBus()
+
+    def dbus_error(e):
+        name = IFACE + "." + (e.kind if isinstance(e, AccountError) and e.kind in ("SignedOut", "NotAllowed", "Cancelled") else "Failed")
+        return dbus.DBusException(str(e), name=name)
+
+    def in_thread(fn, ok, err):
+        def run():
+            try:
+                r = fn()
+                GLib.idle_add(lambda: (ok(r), False)[1])
+            except Exception as e:  # noqa: BLE001 (every failure goes back to the caller)
+                GLib.idle_add(lambda e=e: (err(dbus_error(e)), False)[1])
+        threading.Thread(target=run, daemon=True).start()
+
+    class Service(dbus.service.Object):
+        def __init__(self):
+            super().__init__(dbus.service.BusName(BUS_NAME, bus), PATH)
+            self._pending = False
+
+        def changed_soon(self):
+            if not self._pending:
+                self._pending = True
+                GLib.idle_add(self._emit)
+
+        def _emit(self):
+            self._pending = False
+            self.Changed()
+            return False
+
+        @dbus.service.signal(IFACE, signature="")
+        def Changed(self):
+            pass
+
+        @dbus.service.signal(IFACE, signature="ss")
+        def SignInDone(self, session, result):
+            pass
+
+        @dbus.service.method(IFACE, in_signature="", out_signature="s")
+        def List(self):
+            d = load()
+            return json.dumps([public(a) for a in d["accounts"]])
+
+        @dbus.service.method(IFACE, in_signature="s", out_signature="s", async_callbacks=("ok", "err"))
+        def Password(self, aid, ok, err):
+            def get():
+                a = get_account(aid)
+                if a is None:
+                    raise AccountError("Failed", "No such account.")
+                pw = secret_get(a["id"], "password")
+                if pw is None:
+                    raise AccountError("Failed", "%s: the password isn't in the keyring. Type it again in Settings > Accounts." % a.get("name"))
+                return pw
+            in_thread(get, ok, err)
+
+        @dbus.service.method(IFACE, in_signature="ss", out_signature="s", async_callbacks=("ok", "err"))
+        def AccessToken(self, aid, purpose, ok, err):
+            in_thread(lambda: json.dumps(access_token(aid, purpose)), ok, err)
+
+        @dbus.service.method(IFACE, in_signature="s", out_signature="s", async_callbacks=("ok", "err"))
+        def Save(self, rec, ok, err):
+            def run():
+                aid = do_save(json.loads(rec))
+                self.changed_soon()
+                return aid
+            in_thread(run, ok, err)
+
+        @dbus.service.method(IFACE, in_signature="s", out_signature="", async_callbacks=("ok", "err"))
+        def Remove(self, aid, ok, err):
+            def run():
+                do_remove(aid)
+                self.changed_soon()
+            in_thread(run, ok, err)
+
+        @dbus.service.method(IFACE, in_signature="", out_signature="s")
+        def Registrations(self):
+            d = load()
+            out = {}
+            for k in PROVIDERS:
+                r = registration(k, d)
+                out[k] = {"ready": bool(r), "client_id": (r or {}).get("client_id", ""), "has_secret": bool((r or {}).get("client_secret")),
+                          "source": "saved" if d["registrations"].get(k, {}).get("client_id") else ("built in" if r else ""),
+                          "project": d["registrations"].get(k, {}).get("project", ""), "needs_secret": PROVIDERS[k].get("secret", True),
+                          "name": PROVIDERS[k]["name"], "what": PROVIDERS[k]["what"], "paste": bool(PROVIDERS[k].get("paste"))}
+            return json.dumps(out)
+
+        @dbus.service.method(IFACE, in_signature="ss", out_signature="")
+        def SaveRegistration(self, provider, rec):
+            r = json.loads(rec) if rec else {}
+            with _lock:
+                d = load()
+                if not r.get("client_id"):
+                    d["registrations"].pop(provider, None)
+                else:
+                    old = d["registrations"].get(provider, {})
+                    if not r.get("client_secret") and old.get("client_secret") and old.get("client_id") == r.get("client_id"):
+                        r["client_secret"] = old["client_secret"]
+                    d["registrations"][provider] = {**old, **r}
+                save_store(d)
+            self.changed_soon()
+
+        @dbus.service.method(IFACE, in_signature="ss", out_signature="s")
+        def SignIn(self, provider, aid):
+            session = new_id("s")
+
+            def opener(url):
+                try:
+                    subprocess.Popen([os.environ.get("HEARTH_ACCOUNTS_BROWSER", "xdg-open"), url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+                except OSError:
+                    pass
+                GLib.idle_add(lambda: (self.SignInOpened(session, url), False)[1])
+
+            def run():
+                try:
+                    if provider == "nextcloud":
+                        r = nextcloud_sign_in(aid, opener)
+                    else:
+                        r = sign_in(provider, opener, aid)
+                    r["ok"] = True
+                except AccountError as e:
+                    r = {"ok": False, "error": str(e), "cancelled": e.kind == "Cancelled"}
+                except Exception as e:  # noqa: BLE001
+                    r = {"ok": False, "error": "Sign-in failed: %s" % e}
+                GLib.idle_add(lambda: (self.SignInDone(session, json.dumps(r)), self.changed_soon(), False)[2])
+            threading.Thread(target=run, daemon=True).start()
+            return session
+
+        @dbus.service.signal(IFACE, signature="ss")
+        def SignInOpened(self, session, url):
+            pass
+
+        @dbus.service.method(IFACE, in_signature="s", out_signature="")
+        def SubmitCode(self, code):
+            submit_code(code)
+
+        @dbus.service.method(IFACE, in_signature="", out_signature="")
+        def CancelSignIn(self):
+            cancel_sign_in()
+
+        @dbus.service.method(IFACE, in_signature="s", out_signature="b")
+        def OpenSettings(self, aid):
+            try:
+                r = subprocess.run(["hearth-ipc", "call", "settings", "openPane", "accounts" + ((":" + aid) if aid else "")],
+                                   capture_output=True, timeout=10)
+                return r.returncode == 0
+            except (OSError, subprocess.TimeoutExpired):
+                return False
+
+    SERVICE = Service()
+    GLib.MainLoop().run()
+
+
+# ------------------------------------------------------------------ CLI
+
+def out(**kw):
+    print(json.dumps(kw), flush=True)
+
+
+def proxy():
+    import dbus
+    bus = dbus.SessionBus()
+    return dbus.Interface(bus.get_object(BUS_NAME, PATH), IFACE)
+
+
+def call(name, *args, timeout=120):
+    import dbus
+    try:
+        return getattr(proxy(), name)(*args, timeout=timeout)
+    except dbus.DBusException as e:
+        out(ok=False, error=e.get_dbus_message(), kind=e.get_dbus_name().rsplit(".", 1)[-1])
+        sys.exit(1)
+
+
+def main():
+    args = sys.argv[1:]
+    cmd = args[0] if args else ""
+    if cmd == "serve":
+        serve()
+    elif cmd == "list":
+        out(ok=True, accounts=json.loads(call("List")), registrations=json.loads(call("Registrations")))
+    elif cmd == "save":
+        out(ok=True, id=str(call("Save", args[1])))
+    elif cmd == "remove":
+        call("Remove", args[1])
+        out(ok=True)
+    elif cmd == "registration":
+        call("SaveRegistration", args[1], args[2] if len(args) > 2 else "")
+        out(ok=True)
+    elif cmd == "sign-in":
+        import dbus
+        from dbus.mainloop.glib import DBusGMainLoop
+        from gi.repository import GLib
+        DBusGMainLoop(set_as_default=True)
+        bus = dbus.SessionBus()
+        loop = GLib.MainLoop()
+        want = {}
+
+        def opened(session, url):
+            if session == want.get("s"):
+                out(ok=True, opened=str(url))
+
+        def done(session, result):
+            if session == want.get("s"):
+                r = json.loads(str(result))
+                print(json.dumps(r), flush=True)
+                want["rc"] = 0 if r.get("ok") else 1
+                loop.quit()
+        bus.add_signal_receiver(done, "SignInDone", IFACE, BUS_NAME, PATH)
+        bus.add_signal_receiver(opened, "SignInOpened", IFACE, BUS_NAME, PATH)
+        want["s"] = str(dbus.Interface(bus.get_object(BUS_NAME, PATH), IFACE).SignIn(args[1], args[2] if len(args) > 2 else ""))
+        loop.run()
+        sys.exit(want.get("rc", 1))
+    elif cmd == "code":
+        call("SubmitCode", args[1])
+        out(ok=True)
+    elif cmd == "cancel":
+        call("CancelSignIn")
+        out(ok=True)
+    elif cmd == "token":
+        out(ok=True, **json.loads(call("AccessToken", args[1], args[2])))
+    elif cmd == "password-set":
+        # (Settings types a password: it never goes on a command line.)
+        pw = sys.stdin.read()
+        out(ok=True, id=str(call("Save", json.dumps({"id": args[1], "password": pw}))))
+    elif cmd == "test":
+        out(**test_account(args[1]))
+    elif cmd == "presets":
+        out(ok=True, presets=PRESETS)
+    elif cmd == "discover":
+        out(**discover(args[1]))
+    else:
+        print(__doc__)
+        sys.exit(2)
+
+
+if __name__ == "__main__":
+    main()
