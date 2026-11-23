@@ -42,6 +42,58 @@ COLS = ["rank", "attr", "source", "toolkit", "pop", "measured", "route", "soluti
 AUTO = {"", "todo", "retest", "partial"}  # statuses the measurements may overwrite
 
 
+def load_probes():
+    """Latest session row per app from data/probe*.jsonl (with inspect)."""
+    import glob, json
+    rows = {}
+    for fn in sorted(glob.glob(os.path.join(ROOT, "data", "probe*.jsonl"))):
+        for l in open(fn):
+            try:
+                j = json.loads(l)
+            except ValueError:
+                continue
+            if j.get("variant") == "session":
+                rows[j["attr"]] = j
+    return rows
+
+
+def gap_of(measured, toolkit, p):
+    """Name the general mechanism missing for an app that isn't done.
+    Shared names group every app a single fix would cover."""
+    if measured == "full":
+        return ""
+    if measured in ("no-window", "untested"):
+        return "harness-no-window" if measured == "no-window" else ""
+    p = p or {}
+    if measured == "burger":
+        return "burger-only"
+    w = p.get("window") or {}
+    if w.get("app_menu"):
+        return "dbusmenu-empty"
+    if (w.get("gtk_menu") or {}).get("menubar_path"):
+        return "gtkmenu-empty"
+    ins = p.get("inspect") or {}
+    a = ins.get("atspi") or {}
+    if ins.get("mpris"):
+        return "mpris-not-shown"
+    if not a.get("found"):
+        tk = toolkit or "unknown"
+        if tk in ("electron", "chromium", "cef"):
+            return "electron-no-a11y"
+        if ins.get("flatpak"):
+            return "flatpak-no-a11y"
+        return f"no-a11y:{tk}"
+    if a.get("menubars"):
+        return "atspi-menubar-not-read"
+    if a.get("menu_buttons"):
+        return "menu-button-not-read"
+    if a.get("menus") or a.get("menu_items"):
+        return "atspi-menus-not-read"
+    if toolkit in ("qt6-mixed", "qt6-quick", "qt5-quick"):
+        return "kirigami-no-menu"
+    return "no-menus-visible"  # likely none-needed: check a screenshot
+
+
 def machine_row(r):
     today = r["today"] or "untested"
     if today == "no-window":
@@ -64,6 +116,10 @@ def rebuild():
     db = sqlite3.connect(os.path.join(ROOT, "data", "survey.sqlite"))
     db.row_factory = sqlite3.Row
     rows = [machine_row(r) for r in db.execute("select * from results order by rank")]
+    probes = load_probes()
+    for r in rows:
+        if r["status"] != "done":
+            r["gap"] = gap_of(r["measured"], r["toolkit"], probes.get(r["attr"]))
     old = {}
     if os.path.exists(TSV):
         with open(TSV) as f:
@@ -107,6 +163,14 @@ def summary():
     for r in rows:
         k = r["solution"].split(":")[0] + (":" + r["solution"].split(":")[1] if r["solution"].startswith("general:") else "")
         sol[k] = sol.get(k, 0) + 1
+    gaps = {}
+    for r in rows:
+        if r.get("gap"):
+            n, w = gaps.get(r["gap"], (0, 0.0))
+            gaps[r["gap"]] = (n + 1, w + float(r["pop"]))
+    print("  gaps (apps, share of installs):")
+    for g, (n, w) in sorted(gaps.items(), key=lambda x: -x[1][1])[:25]:
+        print(f"    {g:28} {n:5}  {100 * w / tot:5.1f}%")
     print("  solutions:", ", ".join(f"{k} {v}" for k, v in sorted(sol.items(), key=lambda x: -x[1])))
 
 
