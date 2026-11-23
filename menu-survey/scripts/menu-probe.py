@@ -40,6 +40,71 @@ RIG = os.path.expanduser("~/.config/Claude/side-session-notes/local_3249e068-f6b
 WORKER = os.environ.get("MENU_PROBE_WORKER", "")
 RIGDIR = os.path.join(os.environ["XDG_RUNTIME_DIR"], "menu-rig-survey" + WORKER)
 ENV = dict(os.environ, MENU_RIG_DIR=RIGDIR)
+# MENU_PROBE_DEVLOOP=1: the rig runs devloop's latest arbor and hearth (the
+# engine as it is now) instead of the installed ones.
+HEARTH_PKG = ""
+if os.environ.get("MENU_PROBE_DEVLOOP") == "1":
+    _dl = os.path.expanduser("~/.local/state/devloop")
+    HEARTH_PKG = os.path.dirname(os.path.dirname(os.path.realpath(f"{_dl}/hearth/bin/hearth")))
+    ENV["HEARTH_PKG"] = HEARTH_PKG
+    ENV["PATH"] = f"{_dl}/arbor/bin:" + ENV.get("PATH", "")
+
+
+def hearth_python():
+    """The Python hearth's helpers run with (dbus, gi, Atspi): from the
+    hearth-shell wrapper's PATH."""
+    pkg = HEARTH_PKG or os.path.dirname(os.path.dirname(os.path.realpath(
+        subprocess.run(["sh", "-c", "command -v hearth-ipc"], capture_output=True, text=True).stdout.strip())))
+    try:
+        text = open(os.path.join(pkg, "libexec", "hearth-shell")).read()
+        m = re.search(r"(/nix/store/[a-z0-9]{32}-python3-[^/:]*-env)/bin", text)
+        if m:
+            return m.group(1) + "/bin/python3"
+    except OSError:
+        pass
+    return "python3"
+
+
+def hearth_typelibs():
+    """The Atspi typelib path hearth-atspi-menu uses (HEARTH_ATSPI_TYPELIB in
+    the hearth-shell wrapper)."""
+    pkg = HEARTH_PKG or os.path.dirname(os.path.dirname(os.path.realpath(
+        subprocess.run(["sh", "-c", "command -v hearth-ipc"], capture_output=True, text=True).stdout.strip())))
+    try:
+        m = re.search(r"HEARTH_ATSPI_TYPELIB-'([^']+)'", open(os.path.join(pkg, "libexec", "hearth-shell")).read())
+        return m.group(1) if m else ""
+    except OSError:
+        return ""
+
+
+def inspect(win):
+    """What the app exposes (atspi-inspect.py), shortcuts window, MPRIS."""
+    pid = (win or {}).get("pid") or 0
+    if not pid:
+        return {}
+    r = rig("run", "env", f"GI_TYPELIB_PATH={hearth_typelibs()}", hearth_python(),
+            os.path.join(ROOT, "scripts", "atspi-inspect.py"), str(pid), (win or {}).get("title") or "",
+            timeout=40)
+    try:
+        info = json.loads(r.stdout.strip().splitlines()[-1])
+    except Exception:
+        info = {"error": (r.stderr or r.stdout)[-200:]}
+    try:
+        exe = os.path.realpath(f"/proc/{pid}/exe")
+        files = subprocess.run(["gresource", "list", exe], capture_output=True, text=True, timeout=10).stdout
+        info["shortcuts_window"] = bool(re.search(r"(shortcuts-dialog|help-overlay|shortcuts(-window)?)\.ui", files))
+        info["exe"] = exe
+    except Exception:
+        pass
+    b = rig("busctl", "--json=short", "list")
+    try:
+        names = json.loads(b.stdout)
+        tree = tree_pids(pid)
+        info["mpris"] = [n["name"] for n in names if n.get("name", "").startswith("org.mpris.MediaPlayer2.")
+                         and str(n.get("pid")) in tree]
+    except Exception:
+        pass
+    return info
 OUT = os.path.join(ROOT, "data", f"probe{WORKER}.jsonl")
 SHOTS = os.path.join(ROOT, "data", "shots")
 SESSION_ENV = {
@@ -259,7 +324,9 @@ def desktop_exec(out):
 
 def app_menus(dump):
     """Top-level menus with at least one item, from hearth's dump."""
-    m = (dump or {}).get("menu") or {}
+    # The merged tree (the window's menus plus MPRIS / harvested shortcuts)
+    # where hearth reports it.
+    m = (dump or {}).get("tree") or (dump or {}).get("menu") or {}
     res = []
     for c in m.get("children") or []:
         if c.get("type") == "separator" or not c.get("visible", True):
@@ -365,10 +432,11 @@ def attempt_windows(attr, before, win, wait_menu, escaped=False):
         route = req.get("kind") or ("none" if not menus else "?")
         if route == "x11" and menus:
             route = infer_x11_route(w)
-        cur = dict(window=dict(title=w.get("title"), app_id=w.get("app_id"), app_menu=w.get("app_menu"),
+        cur = dict(window=dict(title=w.get("title"), app_id=w.get("app_id"), pid=w.get("pid"),
+                               app_menu=w.get("app_menu"),
                                gtk_menu=w.get("gtk_menu")),
                    route=route, request=req,
-                   menus=[f"{l}:{n}" for l, n in menus], n_items=count_items(dump.get("menu") or {}),
+                   menus=[f"{l}:{n}" for l, n in menus], n_items=count_items(dump.get("tree") or dump.get("menu") or {}),
                    result="menus" if any(n for _, n in menus) else "fallback", n_windows=len(cands))
         if best is None or cur["n_items"] > best["n_items"]:
             best = cur
@@ -500,6 +568,9 @@ def probe_flatpak(attr):
     argv = ["env", f"FLATPAK_USER_DIR={FLATPAK_DIR}", "flatpak", "run", fid]
     rows = []
     r0 = attempt(attr, argv, "session", {}, [])
+    r0["hearth"] = HEARTH_PKG or "installed"
+    if r0.get("result") != "no-window" and len([m for m in r0.get("menus", []) if not m.endswith(":0")]) < 2:
+        r0["inspect"] = inspect(r0.get("window"))
     r0.update(toolkit=toolkit_of(attr), flatpak_talk=talk, flatpak=True)
     rows.append(r0)
     if r0["result"] != "menus":
@@ -560,6 +631,9 @@ def probe_store(attr, outs, err):
     tk = toolkit_of(attr)
     rows = []
     r = attempt(attr, argv, "session", {}, [])
+    r["hearth"] = HEARTH_PKG or "installed"
+    if r.get("result") != "no-window" and len([m for m in r.get("menus", []) if not m.endswith(":0")]) < 2:
+        r["inspect"] = inspect(r.get("window"))
     r.update(store=out, desktop=did, toolkit=tk)
     rows.append(r)
     if r["result"] != "menus":
