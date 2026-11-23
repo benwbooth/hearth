@@ -21,12 +21,18 @@ ColumnLayout {
     spacing: 14
     // Where to start (Settings opened as "accounts:<arg>"): "add",
     // "setup:<provider>[:<step>]", "mail:<preset>", "server", "nextcloud",
+    // "clouddrives[:add[:<kind>]|:edit:<drive>]",
     // "signin:<provider>", or an account's id (shown first).
     property string arg: ""
     onArgChanged: Qt.callLater(applyArg)
     function applyArg() {
         const a = arg.split(":");
-        if (a[0] === "add") page = "add";
+        if (a[0] === "clouddrives") {
+            // "clouddrives:add:s3:Cloudflare", "clouddrives:edit:<drive>": that section's own places.
+            page = "list";
+            if (cloudDrives.item) cloudDrives.item.open(a.slice(1).join(":"));
+        }
+        else if (a[0] === "add") page = "add";
         else if (a[0] === "setup") { provider = a[1]; againId = ""; step = parseInt(a[2]) || 0; page = "setup"; showStep(); }
         else if (a[0] === "mail") newMail(presets.find(p => p.id === a[1]) || { id: "other", name: "Other mail account", detail: "" });
         else if (a[0] === "server") edit({ kind: "server", protocol: "sftp" });
@@ -257,8 +263,10 @@ ColumnLayout {
     Loader {
         Layout.fillWidth: true
         Layout.topMargin: 10
+        id: cloudDrives
         visible: pane.page === "list" && status === Loader.Ready
         source: "CloudDrivesPane.qml"
+        onLoaded: if (pane.arg.indexOf("clouddrives") === 0) pane.applyArg()
     }
 
     // ---------------------------------------------------------------- add
