@@ -34,7 +34,15 @@ def outcome(r):
     if r.get("result") != "menus":
         return "none" if r.get("result") == "fallback" else r.get("result") or "none"
     tops = [m for m in r.get("menus", []) if not m.endswith(":0")]
-    return "full" if len(tops) >= 2 else "burger"
+    # One menu that opened with its items (a ☰ read in the menu bar: the
+    # app's whole menu) is full too; "burger" is a ☰ still unread (its one
+    # placeholder item).
+    if len(tops) == 1:
+        try:
+            return "full" if int(tops[0].rsplit(":", 1)[1]) >= 2 else "burger"
+        except ValueError:
+            return "burger"
+    return "full" if tops else "burger"
 
 
 def main():

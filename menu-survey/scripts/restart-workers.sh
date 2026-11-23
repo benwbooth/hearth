@@ -10,7 +10,9 @@ import glob, json
 n = 0
 for fn in glob.glob("data/probe*.jsonl"):
     rows = [json.loads(l) for l in open(fn) if l.strip()]
-    full = lambda r: r.get("result") == "menus" and len([m for m in r.get("menus", []) if not m.endswith(":0")]) >= 2
+    def full(r):  # build_db's outcome(): 2+ menus, or one opened ☰ with its items
+        tops = [m for m in r.get("menus", []) if not m.endswith(":0")]
+        return r.get("result") == "menus" and (len(tops) >= 2 or (len(tops) == 1 and int(tops[0].rsplit(":", 1)[1] or 0) >= 2))
     good = {r["attr"] for r in rows if r.get("variant") == "session" and full(r)}
     skip = {r["attr"] for r in rows if r.get("variant") == "build"}
     keep = [r for r in rows if r["attr"] in good or r["attr"] in skip]
