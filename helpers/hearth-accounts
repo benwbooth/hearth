@@ -1010,7 +1010,11 @@ def call(name, *args, timeout=120):
     try:
         return getattr(proxy(), name)(*args, timeout=timeout)
     except dbus.DBusException as e:
-        out(ok=False, error=e.get_dbus_message(), kind=e.get_dbus_name().rsplit(".", 1)[-1])
+        if e.get_dbus_name() in ("org.freedesktop.DBus.Error.ServiceUnknown", "org.freedesktop.DBus.Error.NameHasNoOwner"):
+            out(ok=False, kind="NotInstalled",
+                error="The accounts service isn't installed yet: it comes with the next system update (rebuild NixOS), then accounts can be added here.")
+        else:
+            out(ok=False, error=e.get_dbus_message(), kind=e.get_dbus_name().rsplit(".", 1)[-1])
         sys.exit(1)
 
 
