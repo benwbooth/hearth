@@ -5,7 +5,7 @@ set -u
 cd "$(dirname "$0")/.."
 systemctl --user stop hearth-menu-probe-w0 hearth-menu-probe-w1 hearth-menu-probe-w2 hearth-menu-probe-w3 2>/dev/null
 sleep 4
-python3 -I - <<'PY'
+[ "${NOREQUEUE:-}" ] || python3 -I - <<'PY'
 import glob, json
 n = 0
 for fn in glob.glob("data/probe*.jsonl"):

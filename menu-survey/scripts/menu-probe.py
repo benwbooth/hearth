@@ -271,10 +271,89 @@ SCOPE = {"n": 0, "unit": ""}
 APPDIRS = []
 
 
+def app_procs(match):
+    """Our uid's processes whose cwd or HOME/TMPDIR/XDG_RUNTIME_DIR satisfy
+    match(path): the tested apps, wherever they ended up. `flatpak run` moves
+    the app into its own app-flatpak-<id>-N.scope, out of our scope, so
+    killing our scope alone leaks it."""
+    found = []
+    me = os.getuid()
+    for p in os.listdir("/proc"):
+        if not p.isdigit() or int(p) == os.getpid():
+            continue
+        try:
+            if os.stat(f"/proc/{p}").st_uid != me:
+                continue
+            paths = []
+            try:
+                paths.append(os.readlink(f"/proc/{p}/cwd"))
+            except OSError:
+                pass
+            try:
+                for kv in open(f"/proc/{p}/environ", "rb").read().split(b"\0"):
+                    k, _, v = kv.partition(b"=")
+                    if k in (b"HOME", b"TMPDIR", b"XDG_RUNTIME_DIR"):
+                        paths.append(v.decode(errors="replace"))
+            except OSError:
+                pass
+            if any(match(x) for x in paths):
+                found.append(int(p))
+        except OSError:
+            continue
+    return found
+
+
+def kill_procs(pids):
+    """Stop each process's whole app scope when it is a Flatpak one (its
+    bwrap/dbus-proxy helpers included), else SIGKILL the process."""
+    scopes = set()
+    for p in pids:
+        try:
+            cg = open(f"/proc/{p}/cgroup").read().strip().rsplit("/", 1)[-1]
+        except OSError:
+            continue
+        if cg.startswith("app-flatpak-") and cg.endswith(".scope"):
+            scopes.add(cg)
+        else:
+            try:
+                os.kill(p, signal.SIGKILL)
+            except OSError:
+                pass
+    for u in scopes:
+        sh(["systemctl", "--user", "kill", "-s", "KILL", u], timeout=20)
+        sh(["systemctl", "--user", "stop", u], timeout=20)
+    return scopes
+
+
+def own_app_procs():
+    mine = os.path.join(RIGDIR, "apps") + "/"
+    return app_procs(lambda x: x.startswith(mine))
+
+
+def orphan_sweep():
+    """Leftovers of any worker: processes still living in a deleted
+    menu-rig-*/apps/N folder (a crashed or killed worker's apps)."""
+    pat = re.compile(r"/menu-rig-[^/]*/apps/\d+")
+
+    def dead(x):
+        m = pat.search(x)
+        return bool(m) and (x.endswith(" (deleted)") or not os.path.isdir(x[:m.end()]))
+    pids = app_procs(dead)
+    if pids:
+        scopes = kill_procs(pids)
+        print(f"swept {len(pids)} leftover app processes ({len(scopes)} flatpak scopes)", file=sys.stderr, flush=True)
+
+
 def cleanup():
     if SCOPE["unit"]:
         sh(["systemctl", "--user", "kill", "-s", "KILL", SCOPE["unit"]], timeout=20)
         SCOPE["unit"] = ""
+    for _ in range(3):
+        left = own_app_procs()
+        if not left:
+            break
+        kill_procs(left)
+        time.sleep(0.5)
     try:
         core = set(open(os.path.join(RIGDIR, "core.pids")).read().split())
     except OSError:
@@ -654,6 +733,27 @@ def flatpak(*args, timeout=1800):
         return subprocess.CompletedProcess(args, 124, "", "timeout")
 
 
+def flatpak_terminal_only(fid):
+    """Every launcher of the app is Terminal=true (cmus...): no window and no
+    menus, and run without a tty it spins at 100% CPU."""
+    files = glob.glob(os.path.join(FLATPAK_DIR, "app", fid, "current", "active", "export", "share",
+                                   "applications", "*.desktop"))
+    seen = False
+    for fn in files:
+        cp = configparser.RawConfigParser(strict=False, interpolation=None)
+        try:
+            cp.read(fn, encoding="utf-8")
+            e = cp["Desktop Entry"]
+        except Exception:
+            continue
+        if e.get("Type", "Application") != "Application" or e.get("NoDisplay", "").lower() == "true":
+            continue
+        seen = True
+        if e.get("Terminal", "").lower() != "true":
+            return False
+    return seen
+
+
 def probe_flatpak(attr):
     fid = attr.split(":", 1)[1]
     os.makedirs(FLATPAK_DIR, exist_ok=True)
@@ -661,6 +761,9 @@ def probe_flatpak(attr):
     r = flatpak("install", "-y", "--noninteractive", "flathub", fid)
     if r.returncode and "already installed" not in (r.stderr + r.stdout):
         return [dict(attr=attr, variant="build", result="install-failed", error=(r.stderr or r.stdout)[-300:])]
+    if flatpak_terminal_only(fid):
+        flatpak("uninstall", "-y", "--noninteractive", fid)
+        return [dict(attr=attr, variant="exec", result="terminal-only", flatpak=True)]
     meta = flatpak("info", "--show-metadata", fid).stdout
     talk = sorted(set(re.findall(r"(com\.canonical\.AppMenu\.Registrar|org\.kde\.StatusNotifierWatcher|org\.a11y\.Bus)", meta)))
     argv = ["env", f"FLATPAK_USER_DIR={FLATPAK_DIR}", "flatpak", "run", fid]
@@ -803,6 +906,7 @@ def main():
                 r = dict(zip(hdr, line.rstrip("\n").split("\t")))
                 APPS[r["attr"]] = r
     print(f"{len(todo)} apps to probe", file=sys.stderr, flush=True)
+    orphan_sweep()  # a previous run's apps (stopped or crashed worker)
     with open(OUT, "a") as f:
         for attr in todo:
             t = time.time()
@@ -813,6 +917,14 @@ def main():
                 rows = probe(attr)
             except Exception as e:
                 rows = [dict(attr=attr, variant="error", result="error", error=repr(e))]
+            finally:
+                # Even after a timeout or error: nothing of this app may
+                # outlive its folder (cleanup kills before it deletes).
+                try:
+                    cleanup()
+                    orphan_sweep()
+                except Exception as e:
+                    print(f"cleanup failed: {e!r}", file=sys.stderr, flush=True)
             for r in rows:
                 f.write(json.dumps(r) + "\n")
             f.flush()
