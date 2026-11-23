@@ -167,7 +167,10 @@ class Prompt:
     def answer(self, accept, password, choice):
         props = {}
         if self.choice:
-            props["choice-chosen"] = dbus.Boolean(bool(choice), variant_level=1)
+            # A variant in the a{sv}'s variant, as GCR's own prompter sends
+            # it: GCR (gcr-ssh-agent's "unlock automatically") unwraps twice
+            # and drops a singly-wrapped value.
+            props["choice-chosen"] = dbus.Boolean(bool(choice), variant_level=2)
         if not accept:
             self.ready("no", props, self.our_exchange())
         elif self.type == "password":
@@ -198,7 +201,10 @@ class Prompter(dbus.service.Object):
         by_id[p.id] = p
         watch(p.sender)
         # The prompter is ready: hand over our half of the key exchange.
-        p.ready("", {}, p.our_exchange())
+        # After this call's reply, not during it: GCR's clients
+        # (gcr-ssh-agent) only accept PromptReady once BeginPrompting has
+        # returned, and drop an earlier one without answering it.
+        GLib.idle_add(lambda: (p.ready("", {}, p.our_exchange()), False)[1])
 
     @dbus.service.method(PROMPTER_IFACE, in_signature="osa{sv}s", out_signature="", sender_keyword="sender")
     def PerformPrompt(self, callback, type_, properties, exchange, sender=None):
