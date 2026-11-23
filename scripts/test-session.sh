@@ -102,7 +102,9 @@ EOF
   echo "session $name: HYPRLAND_INSTANCE_SIGNATURE=$sig WAYLAND_DISPLAY=$way"
   ;;
 run)
-  [[ -f $dir/qs.pid ]] && kill "$(cat "$dir/qs.pid")" 2>/dev/null || true
+  # The whole group (daemon starts it with setsid): the shell's long-lived
+  # helpers (udisksctl/nmcli monitor, ...) outlive a shell killed on its own.
+  [[ -f $dir/qs.pid ]] && kill -- -"$(cat "$dir/qs.pid")" 2>/dev/null || true
   sleep 0.3
   HYPRLAND_INSTANCE_SIGNATURE=$(hypr_sig) WAYLAND_DISPLAY=$(hypr_wayland) QT_QPA_PLATFORM=wayland \
     HEARTH_FONT_DIR="${HEARTH_FONT_DIR:-$(tool inter)/share/fonts/truetype}" \
