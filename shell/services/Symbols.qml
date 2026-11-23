@@ -48,16 +48,18 @@ Singleton {
     }
 
     // A zones layout: the screen's outline with its zones filled.
-    // zones: [{ x, y, width, height }] in 0..1.
-    function zones(list) {
+    // zones: [{ x, y, width, height }] in 0..1. fg: the colour ("#rrggbb";
+    // black, for the menu bar's tinting, when not given).
+    function zones(list, fg) {
         const X = 3, Y = 6, W = 16, H = 10;
-        let b = `<rect x="${X - 0.75}" y="${Y - 0.75}" width="${W + 1.5}" height="${H + 1.5}" rx="2" fill="none" stroke="#000" stroke-width="1.5" opacity="0.55"/>`;
+        const c = fg || "#000";
+        let b = `<rect x="${X - 0.75}" y="${Y - 0.75}" width="${W + 1.5}" height="${H + 1.5}" rx="2" fill="none" stroke="${c}" stroke-width="1.5" opacity="0.55"/>`;
         for (const z of list || []) {
             const x0 = Math.round(X + 1 + z.x * (W - 2)), x1 = Math.round(X + 1 + (z.x + z.width) * (W - 2));
             const y0 = Math.round(Y + 1 + z.y * (H - 2)), y1 = Math.round(Y + 1 + (z.y + z.height) * (H - 2));
             // One pixel between neighbouring zones.
             const w = Math.max(1, x1 - x0 - (x1 < X + W - 1 ? 1 : 0)), h = Math.max(1, y1 - y0 - (y1 < Y + H - 1 ? 1 : 0));
-            b += `<rect x="${x0}" y="${y0}" width="${w}" height="${h}" rx="0.75"/>`;
+            b += `<rect x="${x0}" y="${y0}" width="${w}" height="${h}" rx="0.75" fill="${c}"/>`;
         }
         return svg(b);
     }

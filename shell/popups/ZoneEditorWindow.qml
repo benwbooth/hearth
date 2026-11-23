@@ -28,8 +28,9 @@ Scope {
             title: "Zone Layout Editor — " + (nameBox.text || "Untitled")
             visible: true
             color: Theme.bg
-            implicitWidth: 1100
-            implicitHeight: 760
+            // Smaller on a small screen (it opened past the bottom of a 600 pt one).
+            implicitWidth: screenObj ? Math.max(820, Math.min(1100, Math.round(screenObj.width * 0.9))) : 1100
+            implicitHeight: screenObj ? Math.max(560, Math.min(760, Math.round(screenObj.height * 0.85))) : 760
             minimumSize: Qt.size(820, 560)
             onVisibleChanged: if (!visible) ZoneEditor.close()
 
@@ -341,10 +342,37 @@ Scope {
                     spacing: 8
                     Label { text: "Start from a grid:"; color: Theme.fgDim }
                     Label { text: "columns" }
-                    TextBox { id: colsBox; Layout.preferredWidth: 110; placeholder: "e.g. 1 2 1"; text: "1 2 1"; onAccepted: win.applyGrid(colsBox.text, rowsBox.text) }
+                    TextBox { id: colsBox; Layout.preferredWidth: 80; placeholder: "e.g. 1 2 1"; text: "1 2 1"; onAccepted: win.applyGrid(colsBox.text, rowsBox.text) }
                     Label { text: "rows" }
-                    TextBox { id: rowsBox; Layout.preferredWidth: 110; placeholder: "e.g. 1 1"; text: "1"; onAccepted: win.applyGrid(colsBox.text, rowsBox.text) }
+                    TextBox { id: rowsBox; Layout.preferredWidth: 80; placeholder: "e.g. 1 1"; text: "1"; onAccepted: win.applyGrid(colsBox.text, rowsBox.text) }
                     PushButton { text: "Apply"; tooltip: "Replace the zones with this grid. Numbers are relative sizes: \"1 2 1\" makes a wide middle column."; onClicked: win.applyGrid(colsBox.text, rowsBox.text) }
+                    Label { text: "or a layout:"; color: Theme.fgDim; Layout.leftMargin: 8 }
+                    Dropdown {
+                        id: startFrom
+                        // Shrinks (down to 140) before the row would overflow a narrow window.
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 140
+                        Layout.maximumWidth: 240
+                        Layout.preferredWidth: 240
+                        placeholder: "Choose a layout…"
+                        listWidth: 300
+                        searchable: true
+                        // Every layout (the built-in ones and yours), each
+                        // with its picture.
+                        options: (ArborZones.layouts.length ? ArborZones.layouts : ArborZones.builtinLayouts())
+                            .map(l => ({ value: l.id, label: l.name, note: l.zones.length + (l.zones.length === 1 ? " zone" : " zones"),
+                                         icon: Symbols.zones(l.zones, Theme.fg.toString()) }))
+                        Tooltip { anchorItem: startFrom; hovered: startFrom.containsMouse; text: "Replace the zones with a copy of another layout's (Undo brings yours back)" }
+                        onPicked: v => {
+                            const all = ArborZones.layouts.length ? ArborZones.layouts : ArborZones.builtinLayouts();
+                            const l = all.find(x => x.id === v);
+                            if (!l) return;
+                            win.zones = win.copyZones(l.zones.map(z => ({ x: +z.x, y: +z.y, width: +z.width, height: +z.height })));
+                            win.sel = -1;
+                            win.remember();
+                            startFrom.value = undefined;
+                        }
+                    }
                     Item { Layout.fillWidth: true }
                 }
 

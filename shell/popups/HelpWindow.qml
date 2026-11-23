@@ -324,6 +324,13 @@ Scope {
             }
             Para {
                 Layout.topMargin: 26
+                visible: Compositor.isArbor
+                text: "Zones: pick a layout from the zones icon in the menu bar (scroll on the icon, or Super+Ctrl+Page Down / Page Up, to go through them). Then hold Shift while dragging a window and drop it into a zone, or press Super+Ctrl+1…9 to send the window you're in to that zone (zones count down each column, then left to right). "
+                    + "Ready-made layouts: columns (two, three, four, 25/50/25 for ultrawide screens), uneven splits (60/40, 40/60, 70/30, two thirds + one third), a big window with two stacked beside it (Priority, One Left + Two Right, Two Left + One Right, and the Priority Grid's wide centre with stacked sides), rows (Two Rows, One Top + Two Bottom), grids (2x2, 3x2, 3x3) and Centered Focus, one window in the middle with room around it. "
+                    + "To make your own, hover a layout and click its pencil to customize a copy, or choose New custom layout and start from a grid or any of these."
+            }
+            Para {
+                Layout.topMargin: Compositor.isArbor ? 10 : 26
                 text: "Minimize: the down-arrow button at the right of the title bar or Super+Page Down; the window pours into the Dock (the Genie effect; Settings > Dock can make it shrink instead, or not animate) and waits there (click it to bring it back). Full screen: Super+F. See every window at once: Super+W or swipe up with three fingers."
             }
             Item { Layout.fillHeight: true }

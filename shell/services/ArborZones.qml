@@ -127,14 +127,63 @@ Singleton {
     // --- zones.json ---
     function save() { file.setText(JSON.stringify(cfg, null, 2) + "\n"); }
 
-    // A fresh config (no zones.json yet): the same built-in layouts as the
-    // Lua module.
-    function defaultConfig() {
+    // The built-in layouts, in the order the picker and Super+Ctrl+PgUp/PgDn
+    // go through them. Ids never change (zones.json and display choices name
+    // them); zones are numbered column by column, top to bottom, for the
+    // Super+Ctrl+1…9 binds. New ones reach an existing zones.json through
+    // mergeBuiltins() below.
+    function builtinLayouts() {
         const z = (name, x, y, w, h) => ({ name: name, x: x, y: y, width: w, height: h });
         const t = 1 / 3;
-        const grid = [];
-        for (let r = 0; r < 3; r++)
-            for (let c = 0; c < 3; c++) grid.push(z("Zone " + (r * 3 + c + 1), c * t, r * t, t, t));
+        const cols = (ws, names) => { let x = 0; return ws.map((w, i) => { const r = z(names[i], x, 0, w, 1); x += w; return r; }); };
+        const grid = (nc, nr) => {
+            const out = [];
+            for (let r = 0; r < nr; r++)
+                for (let c = 0; c < nc; c++) out.push(z("Zone " + (r * nc + c + 1), c / nc, r / nr, 1 / nc, 1 / nr));
+            return out;
+        };
+        const L = (id, name, zones) => ({ id: "builtin." + id, name: name, is_built_in: true, zones: zones });
+        return [
+            // Columns.
+            L("two-panes", "Two Panes", cols([0.5, 0.5], ["Left", "Right"])),
+            L("split-60-40", "60 / 40", cols([0.6, 0.4], ["Main", "Side"])),
+            L("split-40-60", "40 / 60", cols([0.4, 0.6], ["Side", "Main"])),
+            L("two-panes-wide", "Two Panes (Wide + Side)", cols([0.7, 0.3], ["Main", "Side"])),
+            L("two-thirds-left", "Two Thirds + One Third", cols([2 * t, t], ["Main", "Side"])),
+            L("two-thirds-right", "One Third + Two Thirds", cols([t, 2 * t], ["Side", "Main"])),
+            L("three-panes", "Three Panes", cols([t, t, t], ["Left", "Center", "Right"])),
+            L("three-panes-ultrawide", "Three Panes (Ultrawide)", cols([0.25, 0.5, 0.25], ["Left", "Center", "Right"])),
+            L("four-columns", "Four Columns", cols([0.25, 0.25, 0.25, 0.25], ["Column 1", "Column 2", "Column 3", "Column 4"])),
+            // A big zone with stacked neighbours.
+            L("priority-grid", "Priority Grid", [z("Left Top", 0, 0, 0.25, 0.5), z("Left Bottom", 0, 0.5, 0.25, 0.5),
+                                                 z("Center", 0.25, 0, 0.5, 1),
+                                                 z("Right Top", 0.75, 0, 0.25, 0.5), z("Right Bottom", 0.75, 0.5, 0.25, 0.5)]),
+            L("priority-left", "Priority (Left Focus)", [z("Focus", 0, 0, 0.6, 1), z("Top-Right", 0.6, 0, 0.4, 0.5), z("Bottom-Right", 0.6, 0.5, 0.4, 0.5)]),
+            L("priority-right", "Priority (Right Focus)", [z("Top-Left", 0, 0, 0.4, 0.5), z("Bottom-Left", 0, 0.5, 0.4, 0.5), z("Focus", 0.4, 0, 0.6, 1)]),
+            L("left-and-right-stack", "One Left + Two Right", [z("Left", 0, 0, 0.5, 1), z("Top-Right", 0.5, 0, 0.5, 0.5), z("Bottom-Right", 0.5, 0.5, 0.5, 0.5)]),
+            L("left-stack-and-right", "Two Left + One Right", [z("Top-Left", 0, 0, 0.5, 0.5), z("Bottom-Left", 0, 0.5, 0.5, 0.5), z("Right", 0.5, 0, 0.5, 1)]),
+            // Rows.
+            L("two-rows", "Two Rows", [z("Top", 0, 0, 1, 0.5), z("Bottom", 0, 0.5, 1, 0.5)]),
+            L("top-and-two-bottom", "One Top + Two Bottom", [z("Top", 0, 0, 1, 0.5), z("Bottom-Left", 0, 0.5, 0.5, 0.5), z("Bottom-Right", 0.5, 0.5, 0.5, 0.5)]),
+            // Grids.
+            L("quarters", "Quarters", grid(2, 2).map((q, i) => Object.assign(q, { name: ["Top-Left", "Top-Right", "Bottom-Left", "Bottom-Right"][i] }))),
+            L("grid-3x2", "Grid 3x2", grid(3, 2)),
+            L("grid-3x3", "Grid 3x3", grid(3, 3)),
+            // One window in the middle, room around it.
+            L("centered-focus", "Centered Focus", [z("Focus", 0.2, 0.05, 0.6, 0.9)])
+        ];
+    }
+    function isBuiltin(l) { return !!l && (l.is_built_in || String(l.id).startsWith("builtin.")); }
+    // zones.json's built-ins brought up to date (new ones added, in their
+    // place in the list), custom layouts kept after them. null: nothing to do.
+    function mergeBuiltins(c) {
+        const want = builtinLayouts().concat((c.layouts || []).filter(l => !isBuiltin(l)));
+        if (JSON.stringify(want) === JSON.stringify(c.layouts || [])) return null;
+        return Object.assign({}, c, { layouts: want });
+    }
+
+    // A fresh config (no zones.json yet).
+    function defaultConfig() {
         return {
             version: 1,
             snap_mode: "modifier",
@@ -149,15 +198,7 @@ Singleton {
             highlight_color: { red: 0.18, green: 0.48, blue: 0.96 },
             overlay_opacity: 0.35,
             keyboard_shortcuts_enabled: true,
-            layouts: [
-                { id: "builtin.two-panes", name: "Two Panes", is_built_in: true, zones: [z("Left", 0, 0, 0.5, 1), z("Right", 0.5, 0, 0.5, 1)] },
-                { id: "builtin.two-panes-wide", name: "Two Panes (Wide + Side)", is_built_in: true, zones: [z("Main", 0, 0, 0.7, 1), z("Side", 0.7, 0, 0.3, 1)] },
-                { id: "builtin.three-panes", name: "Three Panes", is_built_in: true, zones: [z("Left", 0, 0, t, 1), z("Center", t, 0, t, 1), z("Right", 2 * t, 0, t, 1)] },
-                { id: "builtin.three-panes-ultrawide", name: "Three Panes (Ultrawide)", is_built_in: true, zones: [z("Left", 0, 0, 0.25, 1), z("Center", 0.25, 0, 0.5, 1), z("Right", 0.75, 0, 0.25, 1)] },
-                { id: "builtin.quarters", name: "Quarters", is_built_in: true, zones: [z("Top-Left", 0, 0, 0.5, 0.5), z("Top-Right", 0.5, 0, 0.5, 0.5), z("Bottom-Left", 0, 0.5, 0.5, 0.5), z("Bottom-Right", 0.5, 0.5, 0.5, 0.5)] },
-                { id: "builtin.priority-left", name: "Priority (Left Focus)", is_built_in: true, zones: [z("Focus", 0, 0, 0.6, 1), z("Top-Right", 0.6, 0, 0.4, 0.5), z("Bottom-Right", 0.6, 0.5, 0.4, 0.5)] },
-                { id: "builtin.grid-3x3", name: "Grid 3x3", is_built_in: true, zones: grid }
-            ]
+            layouts: builtinLayouts()
         };
     }
 
@@ -169,7 +210,12 @@ Singleton {
         atomicWrites: true
         onFileChanged: reload()
         onLoaded: {
-            try { root.cfg = JSON.parse(text()); } catch (e) { console.warn("zones.json:", e); return; }
+            let c;
+            try { c = JSON.parse(text()); } catch (e) { console.warn("zones.json:", e); return; }
+            // Layouts added to hearth since the file was written.
+            const merged = root.mergeBuiltins(c);
+            root.cfg = merged || c;
+            if (merged) root.save();
             root.push();
         }
         onLoadFailed: err => {

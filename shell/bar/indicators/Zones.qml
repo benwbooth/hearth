@@ -31,6 +31,11 @@ Indicator {
     readonly property color accent: cfg && cfg.highlight_color
         ? Qt.rgba(cfg.highlight_color.red, cfg.highlight_color.green, cfg.highlight_color.blue, 1)
         : Theme.accent
+    // Tallest the layout cards get before they scroll.
+    readonly property real maxCardsHeight: {
+        const s = root.QsWindow.window ? root.QsWindow.window.screen : null;
+        return Math.max(300, (s ? s.height : 1080) * 0.55);
+    }
     readonly property real screenAspect: {
         const s = root.QsWindow.window ? root.QsWindow.window.screen : null;
         return s && s.height > 0 ? s.width / s.height : 16 / 9;
@@ -253,7 +258,7 @@ Indicator {
     popupContent: ColumnLayout {
         id: menu
         spacing: 4
-        implicitWidth: 480
+        implicitWidth: 600
 
         // Opens the layout editor window (popups/ZoneEditorWindow.qml); a
         // built-in layout is edited as a copy.
@@ -297,103 +302,114 @@ Indicator {
             color: Theme.fgDim
             font.pointSize: Theme.smallFontSize
         }
-        GridLayout {
-            id: cards
+        // Scrolls once the cards are taller than about half the screen (there are
+        // 20 built-in layouts plus your own).
+        Flickable {
+            id: cardScroll
             visible: !menu.editing
             Layout.fillWidth: true
-            columns: 3
-            columnSpacing: 8
-            rowSpacing: 8
-            readonly property real cardWidth: (width - columnSpacing * (columns - 1)) / columns
+            Layout.preferredHeight: Math.min(cards.implicitHeight, root.maxCardsHeight)
+            contentWidth: width
+            contentHeight: cards.implicitHeight
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            GridLayout {
+                id: cards
+                width: cardScroll.width
+                columns: 4
+                columnSpacing: 8
+                rowSpacing: 8
+                readonly property real cardWidth: (width - columnSpacing * (columns - 1)) / columns
 
-            Repeater {
-                model: menu.editing ? [] : root.orderedLayouts
-                delegate: MouseArea {
-                    id: card
-                    required property var modelData
-                    readonly property bool active: root.layoutFor(root.display) && root.layoutFor(root.display).id === modelData.id
-                    Layout.preferredWidth: cards.cardWidth
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    implicitHeight: col.implicitHeight + 16
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.useLayout(modelData.id)
+                Repeater {
+                    model: menu.editing ? [] : root.orderedLayouts
+                    delegate: MouseArea {
+                        id: card
+                        required property var modelData
+                        readonly property bool active: root.layoutFor(root.display) && root.layoutFor(root.display).id === modelData.id
+                        Layout.preferredWidth: cards.cardWidth
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        implicitHeight: col.implicitHeight + 16
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.useLayout(modelData.id)
 
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: Theme.radius
-                        color: card.active ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.14)
-                             : card.containsMouse ? Theme.hover : Theme.bgRaised
-                        border.color: card.active ? root.accent : card.containsMouse ? Theme.border : "transparent"
-                        border.width: card.active ? 2 : 1
-                    }
-                    ColumnLayout {
-                        id: col
-                        x: 8
-                        y: 8
-                        width: parent.width - 16
-                        height: parent.height - 16
-                        spacing: 6
-                        Diagram {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: Math.round(Math.max(44, Math.min(80, width / root.screenAspect)))
-                            layout: card.modelData
-                            active: card.active
-                            onZoneClicked: i => root.snapZone(card.modelData, i)
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: Theme.radius
+                            color: card.active ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.14)
+                                 : card.containsMouse ? Theme.hover : Theme.bgRaised
+                            border.color: card.active ? root.accent : card.containsMouse ? Theme.border : "transparent"
+                            border.width: card.active ? 2 : 1
                         }
-                        Label {
-                            Layout.fillWidth: true
-                            text: card.modelData.name
-                            font.bold: card.active
-                            horizontalAlignment: Text.AlignHCenter
-                            wrapMode: Text.WordWrap
-                            maximumLineCount: 2
-                            elide: Text.ElideRight
+                        ColumnLayout {
+                            id: col
+                            x: 8
+                            y: 8
+                            width: parent.width - 16
+                            height: parent.height - 16
+                            spacing: 6
+                            Diagram {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: Math.round(Math.max(44, Math.min(80, width / root.screenAspect)))
+                                layout: card.modelData
+                                active: card.active
+                                onZoneClicked: i => root.snapZone(card.modelData, i)
+                            }
+                            Label {
+                                Layout.fillWidth: true
+                                text: card.modelData.name
+                                font.bold: card.active
+                                horizontalAlignment: Text.AlignHCenter
+                                wrapMode: Text.WordWrap
+                                maximumLineCount: 2
+                                elide: Text.ElideRight
+                            }
+                            Label {
+                                Layout.fillWidth: true
+                                text: card.active ? "Active" : card.modelData.zones.length + (card.modelData.zones.length === 1 ? " zone" : " zones")
+                                color: card.active ? root.accent : Theme.fgDim
+                                font.pointSize: Theme.smallFontSize
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+                            Item { Layout.fillHeight: true }
                         }
-                        Label {
-                            Layout.fillWidth: true
-                            text: card.active ? "Active" : card.modelData.zones.length + " zones"
-                            color: card.active ? root.accent : Theme.fgDim
-                            font.pointSize: Theme.smallFontSize
-                            horizontalAlignment: Text.AlignHCenter
-                        }
-                        Item { Layout.fillHeight: true }
-                    }
-                    // Custom layouts: edit / delete on hover.
-                    Row {
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.margins: 4
-                        spacing: 2
-                        visible: card.containsMouse
-                        Repeater {
-                            model: card.modelData.is_built_in
-                                ? [{ i: "document-edit", t: "Customize a copy of", f: () => menu.startEdit(card.modelData) }]
-                                : [{ i: "document-edit", t: "Edit", f: () => menu.startEdit(card.modelData) },
-                                   { i: "edit-delete", t: "Delete", f: () => root.deleteLayout(card.modelData.id) }]
-                            delegate: Rectangle {
-                                required property var modelData
-                                width: 22
-                                height: 22
-                                radius: 11
-                                color: bm.containsMouse ? Theme.hover : Theme.bg
-                                border.color: Theme.border
-                                Icon {
-                                    anchors.centerIn: parent
-                                    implicitSize: 14
-                                    name: parent.modelData.i
-                                }
-                                MouseArea {
-                                    id: bm
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: parent.modelData.f()
-                                    Tooltip {
-                                        anchorItem: bm
-                                        hovered: bm.containsMouse
-                                        text: bm.parent.modelData.t + " this layout"
+                        // Custom layouts: edit / delete on hover.
+                        Row {
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.margins: 4
+                            spacing: 2
+                            visible: card.containsMouse
+                            Repeater {
+                                model: card.modelData.is_built_in
+                                    ? [{ i: "document-edit", t: "Customize a copy of", f: () => menu.startEdit(card.modelData) }]
+                                    : [{ i: "document-edit", t: "Edit", f: () => menu.startEdit(card.modelData) },
+                                       { i: "edit-delete", t: "Delete", f: () => root.deleteLayout(card.modelData.id) }]
+                                delegate: Rectangle {
+                                    required property var modelData
+                                    width: 22
+                                    height: 22
+                                    radius: 11
+                                    color: bm.containsMouse ? Theme.hover : Theme.bg
+                                    border.color: Theme.border
+                                    Icon {
+                                        anchors.centerIn: parent
+                                        implicitSize: 14
+                                        name: parent.modelData.i
+                                    }
+                                    MouseArea {
+                                        id: bm
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: parent.modelData.f()
+                                        Tooltip {
+                                            anchorItem: bm
+                                            hovered: bm.containsMouse
+                                            text: bm.parent.modelData.t + " this layout"
+                                        }
                                     }
                                 }
                             }
