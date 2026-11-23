@@ -59,6 +59,8 @@ ShellRoot {
     VoiceOverlay {}
     AboutWindow {}
     PolkitDialog {}
+    // The keyring's password prompt (services/KeyringPrompter).
+    KeyringDialog {}
     NotificationBanners {}
     NotificationCenter {}
 }

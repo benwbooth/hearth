@@ -299,7 +299,8 @@ Scope {
             Title { text: "Saved passwords" }
             Para { text: "Apps keep the passwords and sign-in keys they remember (your browser's logins and cookies, Slack, VS Code, the accounts in Settings, SSH key passphrases) in your keyring: one locked file in your home folder. You never type a separate keyring password: the login screen unlocks it with the password you log in with." }
             Para { text: "That's why the login screen asks for your password rather than your fingerprint: the keyring needs the password itself. The lock screen can use your fingerprint, because the keyring stays unlocked until you log out." }
-            Para { text: "If you change your login password, also run oo7-cli change-secret in a Terminal and give it the new password, so the next login can unlock the keyring. (The keyring is the oo7 Secret Service; its file is ~/.local/share/keyrings/v1/login.keyring.)" }
+            Para { text: "If the keyring ever stays locked (its password no longer matches your login password, say after you changed one of them), the first app that needs a saved password brings up an \"Unlock Your Saved Passwords\" box. Type the keyring's password there: usually your login password, or your old one if you changed it recently. Cancel leaves it locked, and that app goes without its saved passwords for now." }
+            Para { text: "To stop that box from coming back after a password change, run oo7-cli change-secret in a Terminal and give it your new login password, so the next login unlocks the keyring again. (The keyring is the oo7 Secret Service; its file is ~/.local/share/keyrings/v1/login.keyring.)" }
             Para { text: "To see what's saved from a Terminal: oo7-cli list. To look one up: oo7-cli search --all application=brave." }
             Item { Layout.fillHeight: true }
         }

@@ -39,6 +39,7 @@
 
     python = pkgs.python3.withPackages (p: [
       p.dbus-python p.pygobject3
+      p.cryptography                     # hearth-keyring-prompter: the keyring's secret exchange (AES)
       p.pyyaml                           # hearth-appmenu: menu modules (menus/*.yaml)
       p.websockets                       # hearth-voice: the WhisperLive server
       (p.toPythonModule recoll)          # hearth-search: recoll's Python API

@@ -1,0 +1,305 @@
+#!/usr/bin/env python3
+"""Keyring password prompter for hearth (the keyring has nothing else to ask with).
+
+The keyring (oo7-daemon; gnome-keyring speaks the same protocol) asks for its
+password through GNOME's "system prompter": whoever owns
+org.gnome.keyring.SystemPrompter on the session bus and serves
+org.gnome.keyring.internal.Prompter at /org/gnome/keyring/Prompter. Outside
+GNOME Shell nobody does, so a locked keyring just fails. This helper owns
+that name and relays each prompt to the shell as JSON lines on stdout:
+
+  {"id": 1, "type": "password", "title": "Unlock Keyring",
+   "message": "Authentication required", "description": "...",
+   "warning": "", "passwordNew": false, "choiceLabel": "",
+   "choiceChosen": false, "continueLabel": "Unlock", "cancelLabel": "Cancel"}
+  {"id": 1, "type": "close"}       # the keyring is done with this prompt
+
+The same id comes again (with "warning" set, e.g. "The unlock password was
+incorrect") when the keyring wants another try. "type" is "password" or
+"confirm". Answers come back on stdin, one JSON object per line:
+
+  {"id": 1, "accept": true, "password": "...", "choice": false}
+  {"id": 1, "accept": false}
+
+The password never crosses the bus in the clear: it is AES-encrypted with a
+key from a Diffie-Hellman exchange with the keyring ("sx-aes-1", as GCR's
+GcrSecretExchange does).
+
+Options: --name NAME owns another bus name (tests).
+"""
+import base64
+import hashlib
+import hmac
+import itertools
+import json
+import os
+import secrets
+import sys
+
+import dbus
+import dbus.mainloop.glib
+import dbus.service
+from gi.repository import GLib
+
+try:
+    from cryptography.hazmat.primitives import padding
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+except ImportError:  # still answer "no" to every prompt rather than not run
+    Cipher = None
+
+BUS_NAME = "org.gnome.keyring.SystemPrompter"
+PROMPTER_PATH = "/org/gnome/keyring/Prompter"
+PROMPTER_IFACE = "org.gnome.keyring.internal.Prompter"
+CALLBACK_IFACE = "org.gnome.keyring.internal.Prompter.Callback"
+
+# RFC 2409 / 3526 1536-bit MODP group, generator 2 (what GCR and oo7 use).
+DH_PRIME = int(
+    "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74"
+    "020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F1437"
+    "4FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7ED"
+    "EE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF05"
+    "98DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB"
+    "9ED529077096966D670C354E4ABC9804F1746C08CA237327FFFFFFFFFFFFFFFF", 16)
+DH_BYTES = 192
+PROTOCOL = "[sx-aes-1]\n"
+
+ids = itertools.count(1)
+# (sender, callback path) -> Prompt
+prompts = {}
+by_id = {}
+bus = None
+loop = None
+
+
+def emit(obj):
+    try:
+        print(json.dumps(obj), flush=True)
+    except BrokenPipeError:
+        GLib.idle_add(loop.quit)
+
+
+def log(*args):
+    print("hearth-keyring-prompter:", *args, file=sys.stderr, flush=True)
+
+
+def to_bytes(n):
+    return n.to_bytes(max(1, (n.bit_length() + 7) // 8), "big")
+
+
+def parse_exchange(text):
+    if not text.startswith(PROTOCOL):
+        return {}
+    out = {}
+    for line in text[len(PROTOCOL):].split("\n"):
+        key, sep, value = line.partition("=")
+        if sep and value:
+            try:
+                out[key.strip()] = base64.b64decode(value.strip())
+            except ValueError:
+                pass
+    return out
+
+
+def build_exchange(fields):
+    return PROTOCOL + "\n".join("%s=%s" % (k, base64.b64encode(v).decode()) for k, v in fields.items())
+
+
+def hkdf_sha256(ikm, length):
+    prk = hmac.new(b"\0" * 32, ikm, hashlib.sha256).digest()
+    okm, block = b"", b""
+    for i in itertools.count(1):
+        if len(okm) >= length:
+            return okm[:length]
+        block = hmac.new(prk, block + bytes([i]), hashlib.sha256).digest()
+        okm += block
+
+
+def plain(value):
+    """dbus-python value (maybe a variant in a variant: GCR's old bug) -> Python."""
+    if isinstance(value, dbus.Boolean):
+        return bool(value)
+    if isinstance(value, (dbus.Int32, dbus.UInt32, dbus.Int64, dbus.Byte)):
+        return int(value)
+    if isinstance(value, (dbus.String, dbus.ObjectPath, str)):
+        return str(value)
+    return value
+
+
+class Prompt:
+    def __init__(self, sender, callback):
+        self.id = next(ids)
+        self.sender = sender
+        self.callback = callback
+        self.private = secrets.randbits(1536) % (DH_PRIME - 2) + 1
+        self.public = pow(2, self.private, DH_PRIME)
+        self.aes_key = None
+        self.type = "password"
+        self.choice = False
+
+    def proxy(self):
+        return bus.get_object(self.sender, self.callback, introspect=False)
+
+    def ready(self, reply, properties, exchange):
+        self.proxy().PromptReady(
+            dbus.String(reply), dbus.Dictionary(properties, signature="sv"), dbus.String(exchange),
+            dbus_interface=CALLBACK_IFACE,
+            reply_handler=lambda *a: None,
+            error_handler=lambda e: log("PromptReady failed:", e))
+
+    def our_exchange(self, secret=None):
+        fields = {"public": to_bytes(self.public)}
+        if secret is not None and self.aes_key is not None and Cipher is not None:
+            iv = os.urandom(16)
+            padder = padding.PKCS7(128).padder()
+            data = padder.update(secret) + padder.finalize()
+            enc = Cipher(algorithms.AES(self.aes_key), modes.CBC(iv)).encryptor()
+            fields["secret"] = enc.update(data) + enc.finalize()
+            fields["iv"] = iv
+        return build_exchange(fields)
+
+    def take_exchange(self, text):
+        peer = parse_exchange(text).get("public")
+        if not peer:
+            return
+        shared = pow(int.from_bytes(peer, "big"), self.private, DH_PRIME)
+        self.aes_key = hkdf_sha256(shared.to_bytes(DH_BYTES, "big"), 16)
+
+    def answer(self, accept, password, choice):
+        props = {}
+        if self.choice:
+            props["choice-chosen"] = dbus.Boolean(bool(choice), variant_level=1)
+        if not accept:
+            self.ready("no", props, self.our_exchange())
+        elif self.type == "password":
+            self.ready("yes", props, self.our_exchange((password or "").encode()))
+        else:
+            self.ready("yes", props, self.our_exchange())
+
+    def done(self):
+        prompts.pop((self.sender, self.callback), None)
+        by_id.pop(self.id, None)
+        emit({"id": self.id, "type": "close"})
+        try:
+            self.proxy().PromptDone(dbus_interface=CALLBACK_IFACE,
+                                    reply_handler=lambda *a: None, error_handler=lambda e: None)
+        except dbus.DBusException:
+            pass
+
+
+class Prompter(dbus.service.Object):
+    @dbus.service.method(PROMPTER_IFACE, in_signature="o", out_signature="", sender_keyword="sender")
+    def BeginPrompting(self, callback, sender=None):
+        key = (str(sender), str(callback))
+        old = prompts.get(key)
+        if old:
+            old.done()
+        p = Prompt(*key)
+        prompts[key] = p
+        by_id[p.id] = p
+        watch(p.sender)
+        # The prompter is ready: hand over our half of the key exchange.
+        p.ready("", {}, p.our_exchange())
+
+    @dbus.service.method(PROMPTER_IFACE, in_signature="osa{sv}s", out_signature="", sender_keyword="sender")
+    def PerformPrompt(self, callback, type_, properties, exchange, sender=None):
+        p = prompts.get((str(sender), str(callback)))
+        if p is None:
+            raise dbus.DBusException("No such prompt; call BeginPrompting first",
+                                     name="org.freedesktop.DBus.Error.InvalidArgs")
+        p.type = "confirm" if str(type_) == "confirm" else "password"
+        p.take_exchange(str(exchange))
+        props = {str(k): plain(v) for k, v in properties.items()}
+        p.choice = bool(props.get("choice-label"))
+        if p.type == "password" and (p.aes_key is None or Cipher is None):
+            log("no usable secret exchange%s; refusing" % ("" if Cipher else " (python cryptography missing)"))
+            p.answer(False, None, False)
+            return
+        emit({
+            "id": p.id,
+            "type": p.type,
+            "title": props.get("title", ""),
+            "message": props.get("message", ""),
+            "description": props.get("description", ""),
+            "warning": props.get("warning", ""),
+            "passwordNew": bool(props.get("password-new", False)),
+            "choiceLabel": props.get("choice-label", ""),
+            "choiceChosen": bool(props.get("choice-chosen", False)),
+            "continueLabel": props.get("continue-label", ""),
+            "cancelLabel": props.get("cancel-label", ""),
+        })
+
+    @dbus.service.method(PROMPTER_IFACE, in_signature="o", out_signature="", sender_keyword="sender")
+    def StopPrompting(self, callback, sender=None):
+        p = prompts.get((str(sender), str(callback)))
+        if p:
+            p.done()
+
+
+watched = {}
+
+
+def watch(sender):
+    if sender in watched:
+        return
+
+    def gone(owner):
+        if owner:
+            return
+        for p in [p for p in prompts.values() if p.sender == sender]:
+            prompts.pop((p.sender, p.callback), None)
+            by_id.pop(p.id, None)
+            emit({"id": p.id, "type": "close"})
+        w = watched.pop(sender, None)
+        if w:
+            GLib.idle_add(lambda: (w.cancel(), False)[1])
+
+    watched[sender] = bus.watch_name_owner(sender, gone)
+
+
+def handle_reply(line):
+    try:
+        msg = json.loads(line)
+        rid = int(msg["id"])
+    except (ValueError, KeyError, TypeError):
+        log("bad reply")
+        return
+    p = by_id.get(rid)
+    if p is None:
+        return
+    p.answer(bool(msg.get("accept")), msg.get("password"), msg.get("choice"))
+
+
+def on_stdin(source, condition):
+    line = sys.stdin.readline()
+    if line.strip():
+        handle_reply(line)
+    if not line or condition & (GLib.IO_HUP | GLib.IO_ERR):
+        loop.quit()  # EOF: the shell went away
+        return False
+    return True
+
+
+def main():
+    global bus, loop
+    name = BUS_NAME
+    if "--name" in sys.argv:
+        name = sys.argv[sys.argv.index("--name") + 1]
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    bus = dbus.SessionBus()
+    Prompter(bus, PROMPTER_PATH)
+    # Queue behind GNOME Shell if it's there; let it take over.
+    bus_name = dbus.service.BusName(name, bus, allow_replacement=True, do_not_queue=False)
+    log("serving %s as %s" % (name, bus.get_unique_name()))
+    loop = GLib.MainLoop()
+    GLib.io_add_watch(sys.stdin.fileno(), GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR, on_stdin)
+    try:
+        loop.run()
+    except KeyboardInterrupt:
+        pass
+    for p in list(prompts.values()):
+        p.answer(False, None, False)
+    del bus_name
+
+
+if __name__ == "__main__":
+    main()

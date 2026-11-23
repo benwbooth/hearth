@@ -185,6 +185,7 @@ Singleton {
         { title: "Keyboard shortcuts", keys: "Super+/", guide: "shortcuts" },
         { title: "Trackpad gestures", guide: "gestures" },
         { title: "How windows work", guide: "windows" },
+        { title: "Saved passwords: unlock the keyring, change its password", guide: "passwords" },
         { title: "Getting started", guide: "welcome" }
     ]
 
