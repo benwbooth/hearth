@@ -75,7 +75,15 @@ def gap_of(measured, toolkit, p):
                          ("jack", "blocked:needs-jack"),
                          ("was not provided by any .service files", "blocked:needs-session-service"),
                          ("cannot connect to d-bus service", "blocked:needs-session-service"),
-                         ("already running", "harness-single-instance")):
+                         ("already running", "harness-single-instance"),
+                         ("--help", "harness-needs-arguments"), ("usage:", "harness-needs-arguments"),
+                         ("pa_context_connect", "blocked:needs-sound-server"),
+                         ("pulseaudio", "blocked:needs-sound-server"),
+                         ("namespace xdp not available", "blocked:app-packaging"),
+                         ("flatpak-spawn", "blocked:app-packaging"),
+                         ("no constructor defined", "blocked:app-crash"),
+                         ("panic", "blocked:app-crash"), ("segmentation fault", "blocked:app-crash"),
+                         ("traceback", "blocked:app-crash"), ("bail out", "blocked:app-crash")):
             if pat in log:
                 return gap
         return "harness-no-window"

@@ -142,6 +142,9 @@ SESSION_ENV = {
     # audio device (Quadrapassel's OpenAL) get dummy ones.
     "ALSOFT_DRIVERS": "null",
     "SDL_AUDIODRIVER": "dummy",
+    # Icon themes and other shared data, as in a session (GTK aborts on a
+    # missing icon otherwise). Read-only system paths.
+    "XDG_DATA_DIRS": "/run/current-system/sw/share:/etc/profiles/per-user/" + os.environ.get("USER", "ben") + "/share",
 }
 TOOLS = {}
 
@@ -366,7 +369,7 @@ def count_items(node):
     return sum(1 + count_items(c) for c in node.get("children") or [] if c.get("type") != "separator")
 
 
-def attempt(attr, argv, variant, extra_env, extra_args, wait_win=35, wait_menu=16):
+def attempt(attr, argv, variant, extra_env, extra_args, wait_win=50, wait_menu=16):
     cleanup()
     before = {w["id"] for w in windows()}
     # The arbor session has X11 too (xwayland-satellite): VLC 3 and other
@@ -486,6 +489,10 @@ def attempt_windows(attr, before, win, wait_menu, escaped=False):
             if again and again["n_items"] > best["n_items"]:
                 again["closed_first_run"] = [w.get("title") for w in extra]
                 best = again
+    if not escaped and not full_menus(best):
+        # What the app exposes, while it's surely still up (Escape and the
+        # first-run close below can end it).
+        best["inspect"] = inspect(dict(best.get("window") or {}, pid=(best.get("window") or {}).get("pid")))
     if best["result"] != "menus" and not escaped:
         # A start screen / welcome dialog in front: Escape once, look again.
         wt = tool("wtype")
@@ -652,8 +659,9 @@ def probe_flatpak(attr):
     rows = []
     r0 = attempt(attr, argv, "session", {}, [])
     r0["hearth"] = HEARTH_PKG or "installed"
-    if r0.get("result") != "no-window" and len([m for m in r0.get("menus", []) if not m.endswith(":0")]) < 2:
-        r0["inspect"] = inspect(r0.get("window"))
+    if r0.get("result") != "no-window" and len([m for m in r0.get("menus", []) if not m.endswith(":0")]) < 2 \
+            and not (r0.get("inspect") or {}).get("atspi", {}).get("found"):
+        r0["inspect"] = r0.get("inspect") or inspect(r0.get("window"))
     r0.update(toolkit=toolkit_of(attr), flatpak_talk=talk, flatpak=True)
     rows.append(r0)
     if r0["result"] != "menus":
@@ -716,8 +724,9 @@ def probe_store(attr, outs, err):
     rows = []
     r = attempt(attr, argv, "session", {}, [])
     r["hearth"] = HEARTH_PKG or "installed"
-    if r.get("result") != "no-window" and len([m for m in r.get("menus", []) if not m.endswith(":0")]) < 2:
-        r["inspect"] = inspect(r.get("window"))
+    if r.get("result") != "no-window" and len([m for m in r.get("menus", []) if not m.endswith(":0")]) < 2 \
+            and not (r.get("inspect") or {}).get("atspi", {}).get("found"):
+        r["inspect"] = r.get("inspect") or inspect(r.get("window"))
     r.update(store=out, desktop=did, toolkit=tk)
     rows.append(r)
     if r["result"] != "menus":
