@@ -5,10 +5,14 @@ Google documents, …).
 
   hearth-accounts serve                  the D-Bus service (started on demand)
   hearth-accounts list                   -> {"ok", "accounts": [...], "registrations": {...}}
-  hearth-accounts save JSON              add or change an account -> {"ok", "id"}
+  hearth-accounts save JSON|-           add or change an account -> {"ok", "id"} ("-": the JSON is in
+                                         $HEARTH_ACCOUNTS_INPUT, so a password never shows in a command line)
   hearth-accounts remove ID
   hearth-accounts registration PROVIDER JSON   the app registration (client ID…) for a provider
   hearth-accounts sign-in PROVIDER [ID]  browser sign-in, waits -> {"ok", "id", "email"} or {"ok": false, "error"}
+                                         (nextcloud: ID is the server address)
+  hearth-accounts load-registration PROVIDER FILE   a downloaded client file (Google's client_secret_….json)
+  hearth-accounts watch                  prints {"changed": true} each time the accounts change
   hearth-accounts code CODE              the code Yahoo/AOL show (or the whole address)
   hearth-accounts cancel                 stop a sign-in that is waiting
   hearth-accounts token ID PURPOSE       an access token (for testing)
@@ -1018,7 +1022,31 @@ def main():
     elif cmd == "list":
         out(ok=True, accounts=json.loads(call("List")), registrations=json.loads(call("Registrations")))
     elif cmd == "save":
-        out(ok=True, id=str(call("Save", args[1])))
+        rec = os.environ.get("HEARTH_ACCOUNTS_INPUT", "") if args[1] == "-" else args[1]
+        out(ok=True, id=str(call("Save", rec)))
+    elif cmd == "load-registration":
+        try:
+            with open(args[2]) as f:
+                text = f.read()
+            v = json.loads(text)
+            v = v.get("installed") or v.get("web") or v
+            reg = {"client_id": v["client_id"], "client_secret": v.get("client_secret", "")}
+            if v.get("project_id"):
+                reg["project"] = v["project_id"]
+        except (OSError, ValueError, KeyError, AttributeError):
+            out(ok=False, error="That isn't a client file: download it again with Download JSON.")
+            sys.exit(1)
+        call("SaveRegistration", args[1], json.dumps(reg))
+        out(ok=True, client_id=reg["client_id"])
+    elif cmd == "watch":
+        import dbus
+        from dbus.mainloop.glib import DBusGMainLoop
+        from gi.repository import GLib
+        DBusGMainLoop(set_as_default=True)
+        bus = dbus.SessionBus()
+        bus.add_signal_receiver(lambda: out(changed=True), "Changed", IFACE, BUS_NAME, PATH)
+        out(watching=True)
+        GLib.MainLoop().run()
     elif cmd == "remove":
         call("Remove", args[1])
         out(ok=True)

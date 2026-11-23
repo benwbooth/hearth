@@ -23,12 +23,22 @@ Scope {
         wallpaper: "settings/WallpaperPane.qml", lockscreen: "settings/LockScreenPane.qml",
         users: "settings/UsersPane.qml", spotlight: "settings/SpotlightPane.qml",
         ai: "settings/AiPane.qml", voice: "settings/VoicePane.qml",
-        bluetooth: "settings/BluetoothPane.qml", menubar: "settings/MenuBarPane.qml"
+        bluetooth: "settings/BluetoothPane.qml", menubar: "settings/MenuBarPane.qml",
+        accounts: "settings/AccountsPane.qml"
     })
+    // What follows ":" in an opened pane name ("accounts:<id>").
+    property string paneArg: ""
 
     Connections {
         target: Settings
-        function onOpenRequested(pane) { if (pane) root.pane = pane; root.open = true; }
+        function onOpenRequested(pane) {
+            if (pane) {
+                const i = pane.indexOf(":");
+                root.paneArg = i > 0 ? pane.slice(i + 1) : "";
+                root.pane = i > 0 ? pane.slice(0, i) : pane;
+            }
+            root.open = true;
+        }
     }
 
     LazyLoader {
@@ -72,6 +82,7 @@ Scope {
                         Repeater {
                             model: [
                                 { id: "users", label: "Users & Accounts", icon: "system-users" },
+                                { id: "accounts", label: "Internet Accounts", icon: "applications-internet" },
                                 { id: "appearance", label: "Appearance", icon: "preferences-desktop-theme-global" },
                                 { id: "menubar", label: "Menu Bar", icon: "preferences-desktop" },
                                 { id: "dock", label: "Desktop & Dock", icon: "preferences-system-windows" },
@@ -147,7 +158,7 @@ Scope {
                                      wallpaper: "Wallpaper", mouse: "Mouse & Touchpad", night: "Night Light", notifications: "Notifications",
                                      hotcorners: "Hot Corners", displays: "Displays", keyboard: "Keyboard", shortcuts: "Keyboard Shortcuts",
                                      windowrules: "Window Rules", power: "Sleep & Power", lockscreen: "Lock Screen", clipboard: "Clipboard", screenshots: "Screenshots",
-                                     users: "Users & Accounts", spotlight: "Search", bluetooth: "Bluetooth", ai: "AI", voice: "Voice Assistant" })[root.pane] || ""
+                                     users: "Users & Accounts", accounts: "Internet Accounts", spotlight: "Search", bluetooth: "Bluetooth", ai: "AI", voice: "Voice Assistant" })[root.pane] || ""
                             font.pointSize: Theme.fontSize + 6
                             font.weight: Font.Bold
                         }
@@ -158,6 +169,13 @@ Scope {
                             visible: !!root.paneFiles[root.pane]
                             active: visible
                             source: root.paneFiles[root.pane] || ""
+                            // "accounts:add" and the like: where in the pane to start.
+                            id: paneLoader
+                            onLoaded: if (item && item.hasOwnProperty("arg")) item.arg = root.paneArg
+                        }
+                        Connections {
+                            target: root
+                            function onPaneArgChanged() { if (paneLoader.item && paneLoader.item.hasOwnProperty("arg")) paneLoader.item.arg = root.paneArg }
                         }
                         Loader {
                             Layout.fillWidth: true
