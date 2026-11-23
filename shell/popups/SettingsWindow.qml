@@ -480,7 +480,7 @@ Scope {
                 Divider {}
                 SwitchRow {
                     label: "Minimize windows into application icon"
-                    note: "Off: minimized windows get their own tiles at the end of the Dock."
+                    note: "On: every minimized window goes into its app's icon. Off: windows of apps kept in the Dock still go into their icon; other apps' windows get their own tiles at the right end of the Dock."
                     key: "dock.minimizeIntoApp"
                 }
             }

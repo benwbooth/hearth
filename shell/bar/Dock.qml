@@ -196,10 +196,15 @@ PanelWindow {
         }
         if (!cfg.minimizeIntoApp) {
             // Minimized: arbor reports it per window; elsewhere the
-            // foreign-toplevel state.
-            const mins = Compositor.isArbor
+            // foreign-toplevel state. Windows of apps kept in the Dock go
+            // into the app's icon instead (click it to bring them back);
+            // the others get a tile of their own here.
+            const pinnedTops = new Set();
+            for (const g of pinned) for (const t of g.windows) pinnedTops.add(t);
+            const mins = (Compositor.isArbor
                 ? Compositor.windows.filter(w => w.minimized && w.toplevel).map(w => w.toplevel)
-                : ToplevelManager.toplevels.values.filter(t => t.minimized);
+                : ToplevelManager.toplevels.values.filter(t => t.minimized))
+                .filter(t => !pinnedTops.has(t));
             if (mins.length) {
                 out.push({ key: "sep:min", kind: "sep" });
                 for (const t of mins) out.push({ key: "min:" + (t.appId || "") + ":" + mins.indexOf(t), kind: "min", toplevel: t });
@@ -330,10 +335,11 @@ PanelWindow {
 
     // --- where windows minimize to (arbor's Genie / Scale effect) ---
     // Each window's dock slot, in this dock surface's coordinates at rest
-    // (no magnification, shown): the window's own tile when it is minimized
-    // and minimized windows get tiles, the place the next tile will appear
-    // for the others (the Dock grows by a tile, and by the divider before
-    // the first one, staying centred), else the app's icon. arbor finds the
+    // (no magnification, shown): the app's icon for apps kept in the Dock
+    // (or for every app with "minimize into application icon"); for the
+    // others the window's own tile once minimized, and before that the
+    // place the next tile will appear (the Dock grows by a tile, and by the
+    // divider before the first one, staying centred). arbor finds the
     // surface by its namespace, so side docks below the menu bar line up.
     readonly property var minimizeTargets: {
         if (!Compositor.isArbor) return [];
@@ -365,7 +371,7 @@ PanelWindow {
                 const id = idOf(t);
                 if (id < 0 || done.has(id)) continue;
                 done.add(id);
-                out.push(r(id, isNaN(next) ? iconAt(sl.base) : next));
+                out.push(r(id, isNaN(next) || sl.pinned ? iconAt(sl.base) : next));
             }
         }
         return out;
