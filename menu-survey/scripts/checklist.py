@@ -39,7 +39,7 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 TSV = os.path.join(ROOT, "checklist.tsv")
 COLS = ["rank", "attr", "source", "toolkit", "pop", "measured", "route", "solution", "status",
         "gap", "checked", "notes"]
-AUTO = {"", "todo", "retest", "partial"}  # statuses the measurements may overwrite
+AUTO = {"", "todo", "retest", "partial", "none-needed", "blocked"}  # statuses the measurements may overwrite
 
 
 def load_probes():
@@ -142,6 +142,12 @@ def rebuild():
     for r in rows:
         if r["status"] != "done":
             r["gap"] = gap_of(r["measured"], r["toolkit"], probes.get(r["attr"]))
+            if r["gap"] == "no-menus-visible":
+                # On AT-SPI, but no menu bar, no menu button, no shortcuts
+                # window, no commands exported: nothing a menu could show.
+                r["status"], r["solution"], r["gap"] = "none-needed", "none-needed", ""
+            elif r["gap"].startswith("blocked:"):
+                r["status"] = "blocked"
     old = {}
     if os.path.exists(TSV):
         with open(TSV) as f:
@@ -178,7 +184,7 @@ def summary():
         n, w = by.get(r["status"], (0, 0.0))
         by[r["status"]] = (n + 1, w + float(r["pop"]))
     print(f"{len(rows)} apps")
-    for s in ("done", "partial", "todo", "retest", "blocked"):
+    for s in ("done", "partial", "none-needed", "todo", "retest", "blocked"):
         n, w = by.get(s, (0, 0.0))
         print(f"  {s:8} {n:5}  {100 * w / tot:5.1f}% of installs")
     sol = {}
@@ -204,7 +210,7 @@ def markdown():
     tot = sum(float(r["pop"]) for r in measured) or 1
     print(f"Measured apps: {len(measured)} of {len(rows)}.\n")
     print("| Status | Apps | Share of installs |\n|---|---:|---:|")
-    for st in ("done", "partial", "todo", "retest", "blocked"):
+    for st in ("done", "partial", "none-needed", "todo", "retest", "blocked"):
         xs = [r for r in measured if r["status"] == st]
         if xs:
             print(f"| {st} | {len(xs)} | {100 * sum(float(r['pop']) for r in xs) / tot:.1f}% |")
