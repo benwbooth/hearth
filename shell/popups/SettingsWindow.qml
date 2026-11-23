@@ -352,6 +352,10 @@ Scope {
                 SwitchRow { label: "Show the day of the week"; key: "menubar.showWeekday" }
                 Divider {}
                 SwitchRow { label: "Show seconds"; key: "menubar.showSeconds" }
+                Divider {}
+                SwitchRow { label: "Show your calendar from Almanac"; note: "Click the clock to see today's and tomorrow's events from Almanac, with dots under busy days. Click an event to open it in Almanac."; key: "menubar.showCalendar" }
+                Divider {}
+                SwitchRow { label: "Show the next event"; note: "An hour before your next event, its name and how soon it starts appear next to the clock (\"Standup in 10 min\")."; key: "menubar.showNextEvent" }
             }
             Label { text: "When the menu bar is full"; font.weight: Font.DemiBold }
             Label {

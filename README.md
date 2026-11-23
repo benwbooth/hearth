@@ -192,6 +192,21 @@ Text: every Text uses native rendering (`//@ pragma NativeTextRendering` plus
 `Translate { x: 0.001; y: 0.001 }` so text never lands on an exact half
 device pixel at 130% scale.
 
+## Calendar (Almanac)
+
+Click the menu bar clock for the month, with dots under days that have
+events, and the agenda (today and tomorrow, or the day you click) from
+Almanac, Ben's mail and calendar app (~/src/almanac). Click an event to open
+it in Almanac; New Event… opens Almanac's editor on that day. Settings > Menu
+Bar can turn it off, or show the next event beside the clock ("Standup in
+10 min", off by default). `helpers/hearth-calendar` asks `almanac --events
+FROM TO` (a read of Almanac's data.json; Almanac needn't be running) and asks
+again when Almanac saves; it opens things with `almanac --open-event` /
+`--new-event`, which the running Almanac takes over D-Bus.
+`HEARTH_ALMANAC=<bin>` picks the program, `HEARTH_ALMANAC_SAMPLE=1` shows its
+made-up sample calendar (tests, screenshots). `hearth-ipc call calendar
+newEvent [YYYY-MM-DD] | openNext | refresh`.
+
 ## Global menu
 
 The focused app's menus sit in the menu bar after its name (arbor with the

@@ -1,0 +1,190 @@
+#!/usr/bin/env python3
+"""Relay Ben's calendar from Almanac (~/src/almanac) to the menu bar clock.
+
+Almanac answers `almanac --events FROM TO` with JSON (events with repeats
+expanded, without notes) straight from its data.json, whether or not the app
+is running. This helper asks it for a range of days, prints the answer as one
+JSON line, and asks again whenever data.json is replaced (Almanac saves it in
+one go: write data.json.tmp, rename), so the clock follows edits and syncs
+without polling.
+
+stdout, one line per answer:
+  {"available": true, "from": "YYYY-MM-DD", "to": ..., "calendars": [...],
+   "events": [{id, title, start, end, allDay, location, calendar, color,
+               occurrence, readOnly, ...}]}
+  {"available": false, "reason": "..."}     (no Almanac found / unreadable)
+
+stdin, one command per line:
+  range FROM TO      days to answer for (the clock's shown month + agenda)
+  refresh            ask again now (e.g. after midnight)
+  open ID START      show that event in Almanac
+  new YYYY-MM-DD     Almanac's new-event editor on that day
+
+HEARTH_ALMANAC=<path> picks the almanac binary; HEARTH_ALMANAC_SAMPLE=1 shows
+Almanac's made-up sample calendar (tests and screenshots).
+"""
+import datetime as dt
+import json
+import os
+import shutil
+import subprocess
+import sys
+
+from gi.repository import Gio, GLib
+
+SAMPLE = os.environ.get("HEARTH_ALMANAC_SAMPLE") == "1"
+
+
+def is_devloop_wrapper(path):
+    """Ben's PATH `almanac` is a devloop launcher script: running it with
+    --events would start or raise the app, so queries skip it."""
+    try:
+        with open(path, "rb") as f:
+            head = f.read(4096)
+        return head.startswith(b"#!") and b"devloop" in head
+    except OSError:
+        return False
+
+
+def query_binary():
+    """The almanac program to ask for events (never one that opens a window)."""
+    env = os.environ.get("HEARTH_ALMANAC")
+    if env:
+        return env if os.access(env, os.X_OK) else None
+    dev = os.path.expanduser("~/.local/state/devloop/almanac/bin/almanac")
+    if os.access(dev, os.X_OK):
+        return dev
+    found = shutil.which("almanac")
+    if found and not is_devloop_wrapper(found):
+        return found
+    return None
+
+
+def launch_binary():
+    """The almanac to open things with: the desktop's launcher (devloop's
+    passes arguments on to the running copy, or starts it under devloop)."""
+    return os.environ.get("HEARTH_ALMANAC") or shutil.which("almanac") or query_binary()
+
+
+def default_range():
+    today = dt.date.today()
+    first = today.replace(day=1)
+    start = first - dt.timedelta(days=7)
+    end = (first + dt.timedelta(days=70)).replace(day=1) + dt.timedelta(days=7)
+    return start.isoformat(), end.isoformat()
+
+
+class Relay:
+    def __init__(self):
+        self.range = default_range()
+        self.monitor = None
+        self.watched = None
+        self.pending = 0
+        self.last = None
+
+    def emit(self, obj):
+        line = json.dumps(obj, separators=(",", ":"))
+        if line != self.last:
+            self.last = line
+            print(line, flush=True)
+
+    def refresh(self):
+        self.pending = 0
+        binary = query_binary()
+        if not binary:
+            self.emit({"available": False, "reason": "Almanac isn't installed"})
+            return False
+        cmd = [binary, "--events", self.range[0], self.range[1]]
+        if SAMPLE:
+            cmd.append("--sample")
+        try:
+            out = subprocess.run(cmd, capture_output=True, timeout=20,
+                                 stdin=subprocess.DEVNULL).stdout
+            data = json.loads(out.decode() or "{}")
+        except (OSError, subprocess.TimeoutExpired, ValueError) as e:
+            self.emit({"available": False, "reason": f"Almanac didn't answer ({type(e).__name__})"})
+            return False
+        if "error" in data or "events" not in data:
+            self.emit({"available": False, "reason": data.get("error", "Almanac didn't answer")})
+            return False
+        data["available"] = True
+        self.watch(data.get("dataFile") or "")
+        self.emit(data)
+        return False
+
+    def soon(self, ms=400):
+        """Ask again a moment after a change (a save is a write + rename)."""
+        if self.pending:
+            GLib.source_remove(self.pending)
+        self.pending = GLib.timeout_add(ms, self.refresh)
+
+    def watch(self, path):
+        if SAMPLE or not path or path == self.watched:
+            return
+        self.watched = path
+        if self.monitor:
+            self.monitor.cancel()
+        # The folder, not the file: data.json is replaced by a rename (and
+        # may not exist yet before Almanac is first set up).
+        folder = os.path.dirname(path)
+        os.makedirs(folder, exist_ok=True)
+        name = os.path.basename(path)
+        self.monitor = Gio.File.new_for_path(folder).monitor_directory(Gio.FileMonitorFlags.WATCH_MOVES, None)
+
+        def changed(_m, f, other, _ev):
+            names = {f.get_basename() if f else None, other.get_basename() if other else None}
+            if name in names:
+                self.soon()
+
+        self.monitor.connect("changed", changed)
+
+    def command(self, line):
+        parts = line.split()
+        if not parts:
+            return
+        if parts[0] == "range" and len(parts) == 3:
+            if tuple(parts[1:]) != self.range:
+                self.range = (parts[1], parts[2])
+                self.refresh()
+        elif parts[0] == "refresh":
+            self.refresh()
+        elif parts[0] == "open" and len(parts) == 3:
+            self.launch(["--open-event", parts[1], parts[2]])
+        elif parts[0] == "new" and len(parts) == 2:
+            self.launch(["--new-event", parts[1]])
+
+    def launch(self, args):
+        binary = launch_binary()
+        if not binary:
+            return
+        # Detached: it may be the app itself starting up.
+        subprocess.Popen([binary, *args], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+
+
+def main():
+    relay = Relay()
+    loop = GLib.MainLoop()
+    stdin = GLib.IOChannel.unix_new(sys.stdin.fileno())
+
+    def on_stdin(ch, cond):
+        if cond & (GLib.IO_HUP | GLib.IO_ERR):
+            loop.quit()
+            return False
+        line = ch.readline()
+        if not line:
+            loop.quit()
+            return False
+        relay.command(line.strip())
+        return True
+
+    GLib.io_add_watch(stdin, GLib.PRIORITY_DEFAULT, GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR, on_stdin)
+    relay.refresh()
+    try:
+        loop.run()
+    except KeyboardInterrupt:
+        pass
+
+
+if __name__ == "__main__":
+    main()

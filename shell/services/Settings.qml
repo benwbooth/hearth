@@ -40,6 +40,8 @@ Singleton {
             showDate: true,
             showWeekday: true,
             showSeconds: false,
+            showCalendar: true,         // the clock's popup lists Almanac's events (helpers/hearth-calendar)
+            showNextEvent: false,       // "Standup in 10 min" before the clock, from an hour ahead
             hiddenIndicators: [],       // ipcNames from bar/Tray.qml
             // Short of room (laptop): which items may move into the chevron
             // dropdown (true) or always stay (false); unset: bar/MenuBar.qml's
