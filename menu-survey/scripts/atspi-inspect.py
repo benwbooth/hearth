@@ -110,6 +110,16 @@ def main():
             continue
         if role in interesting:
             a["roles"][role] = a["roles"].get(role, 0) + 1
+        if role in ("label", "static", "text", "paragraph", "alert", "dialog", "heading") and len(a.setdefault("texts", [])) < 12:
+            try:
+                txt = (o.get_name() or "").strip()
+                if not txt and role in ("text", "paragraph", "static", "label"):
+                    ti = o.get_text_iface()
+                    txt = (ti.get_text(0, min(ti.get_character_count(), 300)) if ti else "").strip()
+                if txt:
+                    a["texts"].append(txt[:200])
+            except Exception:
+                pass
         if role == "menu bar":
             a["menubars"] += 1
         elif role == "menu":

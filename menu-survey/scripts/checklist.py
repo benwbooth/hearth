@@ -84,6 +84,10 @@ def gap_of(measured, toolkit, p):
     w = p.get("window") or {}
     ins = p.get("inspect") or {}
     a = ins.get("atspi") or {}
+    # A startup error dialog in front (Evolution without its data server).
+    shown = " ".join(a.get("texts") or []).lower()
+    if "cannot connect to d-bus service" in shown or "was not provided by any .service files" in shown:
+        return "blocked:needs-session-service"
     # An exported menu bar that came empty only counts when the app shows
     # menus on AT-SPI (appmenu-gtk-module exports an empty one for every GTK
     # 3 window, dialogs and splash screens included).
