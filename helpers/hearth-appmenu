@@ -1036,8 +1036,14 @@ class Mpris:
             return
         obj = bus.get_object(self.name, self.PATH, introspect=False)
         if action[0] == "set":
-            dbus.Interface(obj, "org.freedesktop.DBus.Properties").Set(
-                self.PLAYER, action[1], action[2], reply_handler=lambda *a: None, error_handler=err)
+            value = action[2]
+            value = dbus.Boolean(value, variant_level=1) if isinstance(value, bool) \
+                else dbus.String(value, variant_level=1)
+            # Explicit signature: without introspection dbus-python would send
+            # "sss" and GDBus answers that as an unknown method.
+            obj.Set(self.PLAYER, action[1], value, signature="ssv",
+                    dbus_interface="org.freedesktop.DBus.Properties",
+                    reply_handler=lambda *a: None, error_handler=err)
         else:
             iface = self.ROOT if action[0] == "Raise" else self.PLAYER
             getattr(dbus.Interface(obj, iface), action[0])(reply_handler=lambda *a: None, error_handler=err)

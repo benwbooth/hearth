@@ -1,6 +1,6 @@
 rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 1	firefox	nixpkgs	firefox-xul	69.780	full	atspi	general:atspi	done		2026-11-22	
-2	mpv	nixpkgs	custom-drawn	67.370	none	x11	todo	todo		2026-11-22	
+2	mpv	nixpkgs	custom-drawn	67.370	none	x11	module:mpv.yaml	done		2026-11-22	module verified nested: menus shown, Video/Fullscreen sends f via arbor send-keys
 3	kdePackages.discover	nixpkgs	qt6-mixed	53.046	none	x11	todo	todo		2026-11-22	
 4	vlc	nixpkgs	qt5-widgets	52.960	none	x11	todo	todo		2026-11-22	
 5	pavucontrol	nixpkgs	gtk4	52.910	none	x11	todo	todo		2026-11-22	
@@ -549,7 +549,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 548	caja	nixpkgs	gtk3	3.596	full	gtk	general:gtk	done		2026-11-22	
 549	sweethome3d.application	nixpkgs	java-swing	3.590	none	x11	todo	todo		2026-11-22	
 550	flathub:com.valvesoftware.SteamLink	flathub	flathub-pending	3.582	none	x11	todo	todo		2026-11-22	
-551	celluloid	nixpkgs	gtk4-adwaita	3.580	burger	atspi	general:atspi-burger	partial		2026-11-22	
+551	celluloid	nixpkgs	gtk4-adwaita	3.580	burger	atspi	general:atspi-burger+mpris	done		2026-11-22	☰ over AT-SPI + MPRIS Playback menu (Repeat verified live)
 552	planify	nixpkgs	gtk4-adwaita	3.578	burger	atspi	general:atspi-burger	partial		2026-11-22	
 553	flycast	nixpkgs	sdl-glfw	3.568	none	x11	todo	todo		2026-11-22	
 554	upscayl	nixpkgs	gtk4-adwaita	3.561	untested		todo	retest			
@@ -707,7 +707,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 706	stellarium	nixpkgs	qt6-mixed	2.953	none	x11	todo	todo		2026-11-22	
 707	flathub:io.github.chidiwilliams.Buzz	flathub	flathub-pending	2.952	no-window		todo	retest			
 708	flathub:org.turbowarp.TurboWarp	flathub	flathub-pending	2.951	none	x11	todo	todo		2026-11-22	
-709	cosmic-files	nixpkgs	custom-drawn	2.950	none	x11	todo	todo		2026-11-22	
+709	cosmic-files	nixpkgs	custom-drawn	2.950	none	x11	module:com.system76.CosmicFiles.yaml	partial	cosmic-no-a11y	2026-11-22	module mirrors its menu bar (keyed items only; New File/Open With/Sort need AT-SPI, which libcosmic doesn't expose here); File/New Window verified
 710	flathub:net.codelogistics.clicker	flathub	flathub-pending	2.947	none	x11	todo	todo		2026-11-22	
 711	gpu-viewer	nixpkgs	gtk4-adwaita	2.944	none	x11	todo	todo		2026-11-22	
 712	flathub:top.akizip.akizip	flathub	flathub-pending	2.942	burger	atspi	general:atspi-burger	partial		2026-11-22	
