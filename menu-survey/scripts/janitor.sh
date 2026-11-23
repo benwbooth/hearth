@@ -5,22 +5,48 @@
 #    (nothing references them: not the system, not a running app, not the
 #    tools' roots). `nix store delete` of a chosen set needs a newer daemon,
 #    and `nix-store --delete` aborts on the first live path, so: dead list
-#    ∩ our closures, deleted in batches (a batch that turned live is
-#    skipped until next time).
+#    ∩ our closures, deleted in one call; a path that came alive meanwhile
+#    is dropped with its closure and the call repeated.
 #  - Flatpak: the throwaway installation's apps not running in a sandbox
 #    right now, then unused runtimes.
 set -u
 cd "$(dirname "$0")/.."
 log() { echo "$(date +%T) $*"; }
-stores=$(cat data/probe*.jsonl 2>/dev/null | jq -r 'select(.store != null) | .store' | sort -u | while read -r p; do [ -e "$p" ] && echo "$p"; done)
-if [ -n "$stores" ]; then
-  closure=$(echo "$stores" | xargs -r nix-store -qR 2>/dev/null | sort -u)
-  dead=$(nix-store --gc --print-dead 2>/dev/null | sort -u)
-  del=$(comm -12 <(echo "$closure") <(echo "$dead"))
-  n=$(echo "$del" | grep -c . || true)
-  log "nix: $n dead paths from tested apps"
-  [ "$n" -gt 0 ] && echo "$del" | xargs -r -n 200 nix-store --delete 2>&1 | grep -E "store paths deleted" | awk '{d+=$1} END {print "  deleted", d+0}'
-fi
+python3 -I - <<'PY'
+import json, glob, os, re, subprocess, time
+def run(args):
+    return subprocess.run(args, capture_output=True, text=True)
+stores = set()
+for fn in glob.glob("data/probe*.jsonl"):
+    for l in open(fn):
+        try:
+            s = json.loads(l).get("store")
+        except ValueError:
+            continue
+        if s and os.path.exists(s):
+            stores.add(s)
+if stores:
+    ours = set(run(["nix-store", "-qR", *sorted(stores)]).stdout.split())
+    dead = set(run(["nix-store", "--gc", "--print-dead"]).stdout.split())
+    todo = ours & dead
+    print(time.strftime("%T"), f"nix: {len(todo)} dead paths from tested apps", flush=True)
+    freed, rounds = 0.0, 0
+    # One call for the whole set. A path that came alive meanwhile (a
+    # worker's new app shares a library) makes nix refuse all of it: drop
+    # that path with its closure and try again.
+    while todo and rounds < 60:
+        rounds += 1
+        r = run(["nix-store", "--delete", *sorted(todo)])
+        m = re.search(r"Cannot delete path '([^']+)'", r.stderr)
+        d = re.search(r"(\d+) store paths deleted, ([\d.]+) (\w+) freed", r.stdout + r.stderr)
+        if d:
+            freed += float(d.group(2)) * {"KiB": 1 / 1024 ** 2, "MiB": 1 / 1024, "GiB": 1}.get(d.group(3), 0)
+        if not m:
+            break
+        alive = set(run(["nix-store", "-qR", m.group(1)]).stdout.split()) | {m.group(1)}
+        todo -= alive
+    print(time.strftime("%T"), f"nix: freed {freed:.1f} GiB in {rounds} rounds", flush=True)
+PY
 export FLATPAK_USER_DIR=$HOME/.cache/hearth-menu-survey/flatpak
 if [ -d "$FLATPAK_USER_DIR" ]; then
   running=$(grep -h '^name=' /proc/[0-9]*/root/.flatpak-info 2>/dev/null | cut -d= -f2 | sort -u)
