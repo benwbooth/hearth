@@ -466,19 +466,25 @@ def app_path(pid):
     if len([a for a in args if a]) == 1 and " " in args[0]:
         # Chromium rewrites its process title: one string, spaces between.
         args = args[0].split(" ")
+    # A Flatpak's paths are inside its sandbox: reach them through the
+    # process's root.
+    root = f"/proc/{pid}/root" if os.path.exists(f"/proc/{pid}/root/.flatpak-info") else ""
     for a in args[1:]:
-        if a.endswith(".asar") and os.path.isfile(a):
-            return a
-        if a.startswith("/") and os.path.isdir(a) and os.path.exists(os.path.join(a, "package.json")):
-            return a
+        if not a.startswith("/"):
+            continue
+        p = root + a
+        if a.endswith(".asar") and os.path.isfile(p):
+            return p
+        if os.path.isdir(p) and os.path.exists(os.path.join(p, "package.json")):
+            return p
     try:
-        exe = os.path.realpath(f"/proc/{pid}/exe")
+        exe = os.readlink(f"/proc/{pid}/exe")
     except OSError:
         return ""
     for cand in (os.path.join(os.path.dirname(exe), "resources", "app.asar"),
                  os.path.join(os.path.dirname(exe), "resources", "app")):
-        if os.path.exists(cand):
-            return cand
+        if os.path.exists(root + cand):
+            return root + cand
     return ""
 
 

@@ -1083,8 +1083,14 @@ class Shortcuts:
             self.exe = os.path.realpath(f"/proc/{pid}/exe")
         except OSError:
             self.exe = ""
-        if not self.exe.startswith("/nix/store/") and not self.exe.startswith("/usr/"):
-            self.exe = ""  # not a binary we may read (and never a Flatpak's inner one)
+        if self.exe.startswith("/app/") or os.path.exists(f"/proc/{pid}/root/.flatpak-info"):
+            # A Flatpak's binary: its path is inside the sandbox; the host
+            # reads it through the process (cached by its sandbox path).
+            self.read_path = f"/proc/{pid}/exe"
+        elif self.exe.startswith(("/nix/store/", "/usr/", "/opt/")):
+            self.read_path = self.exe
+        else:
+            self.exe = self.read_path = ""
         if self.exe in self.CACHE:
             GLib.idle_add(self.emit)
         elif self.exe:
@@ -1094,13 +1100,13 @@ class Shortcuts:
     def harvest(self):
         sections = []
         try:
-            files = subprocess.run(["gresource", "list", self.exe], capture_output=True, text=True,
+            files = subprocess.run(["gresource", "list", self.read_path], capture_output=True, text=True,
                                    timeout=5).stdout.split()
             ui = [f for f in files if f.endswith(("shortcuts-dialog.ui", "help-overlay.ui", "shortcuts.ui",
                                                   "shortcuts-window.ui"))]
             for f in ui[:1]:
-                xml = subprocess.run(["gresource", "extract", self.exe, f], capture_output=True, text=True,
-                                     timeout=5).stdout
+                xml = subprocess.run(["gresource", "extract", self.read_path, f], capture_output=True,
+                                     text=True, timeout=5).stdout
                 sections = self.parse(xml)
         except Exception as e:
             GLib.idle_add(lambda: err(f"shortcuts of {self.exe}: {e}") and False)
