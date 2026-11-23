@@ -18,7 +18,10 @@ Row {
     readonly property real monW: screen ? screen.width : 1920
     readonly property real monH: screen ? screen.height : 1080
     readonly property real itemH: menuBarItem ? Theme.menuBarHeight : Theme.barHeight
-    readonly property real boxH: menuBarItem ? Theme.menuBarHeight - Math.round(6 * Theme.pt) : Theme.barHeight - 12
+    // Settings > Menu Bar > Workspace map > Size: 1 = the bar's height,
+    // smaller boxes for a quieter bar.
+    property real boxScale: 1
+    readonly property real boxH: Math.round((menuBarItem ? Theme.menuBarHeight - Math.round(6 * Theme.pt) : Theme.barHeight - 12) * boxScale)
     // The bar's text colour; the overflow dropdown passes its own.
     property color fg: Theme.barFg
     function tint(a) { return Qt.rgba(fg.r, fg.g, fg.b, a); }

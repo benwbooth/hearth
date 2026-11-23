@@ -65,6 +65,7 @@ PanelWindow {
             color: Theme.border
         }
         Tray {}
+        PanelIndicators {}
         Clock {}
         ShowDesktop {}
     }

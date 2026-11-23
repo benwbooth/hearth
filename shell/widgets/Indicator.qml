@@ -19,9 +19,10 @@ BarButton {
     signal middleClicked()
     signal scrolled(int delta)
 
-    // Menu bar settings can hide an indicator by its ipcName; on a narrow
-    // screen it can move into the overflow dropdown (BarButton.overflowed).
-    readonly property bool present: shown && (ipcName === "" || (Settings.menubar.hiddenIndicators || []).indexOf(ipcName) < 0)
+    // Settings > Menu Bar can hide an indicator by its ipcName (the menu
+    // bar item id, services/BarItems.qml); "only in the ⌃ menu" or a full
+    // bar moves it into the overflow dropdown (BarButton.overflowed).
+    readonly property bool present: shown && (ipcName === "" || BarItems.show(ipcName) !== "hidden")
     overflowKey: ipcName
     visible: present && !overflowed
     // Chosen from the overflow dropdown: the popup, under the chevron.

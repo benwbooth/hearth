@@ -3,63 +3,43 @@ import Quickshell
 import Quickshell.Services.SystemTray
 import "../widgets"
 import "../services"
-import "indicators"
 import ".."
 
-// System tray: app icons (StatusNotifierItem) followed by hearth's own
-// indicators. Passive app icons go in the dropdown behind the chevron, and
-// so does whatever doesn't fit the menu bar on a narrow screen (MenuBar.qml
-// decides: `overflowKeys`, `sniOverflow`, `outsideItems`).
+// App tray icons (StatusNotifierItem) and the ⌃ chevron with its dropdown:
+// passive app icons, and in the menu bar whatever doesn't fit or was put
+// there (Settings > Menu Bar: "Only in the ⌃ menu"). hearth's own
+// indicators are separate items (bar/MenuBar.qml, bar/PanelIndicators.qml).
+// The menu bar takes the chevron out (`chevron`) and puts it where the item
+// list says; MenuBar.qml decides `sniOverflow` and `menuRows`.
 Row {
     id: root
     spacing: 0
 
-    // Set by the menu bar. Indicators listed here (by ipcName) leave the
-    // bar for the dropdown (BarButton.overflowed reads these two).
+    // Set by the menu bar: overflowed items' keys (BarButton.overflowed
+    // reads these two).
     property var overflowKeys: []
     readonly property Item overflowAnchor: more
+    readonly property Item chevron: more
     // How many app icons, from the left, are in the dropdown.
     property int sniOverflow: 0
-    // The menu bar's own items now in the dropdown: [{ key, item }].
-    property var outsideItems: []
+    // Rows below the app icons in the dropdown, in bar order: [{ key, item }].
+    property var menuRows: []
+    // Settings > Menu Bar > App icons: "bar" | "overflow" | "hidden".
+    readonly property string iconsShow: BarItems.show("trayicons")
 
     readonly property var items: SystemTray.items.values
-    readonly property var shownItems: items.filter(i => i.status !== Status.Passive)
-    readonly property var hiddenItems: items.filter(i => i.status === Status.Passive)
-    readonly property var barItems: shownItems.slice(Math.min(sniOverflow, shownItems.length))
-    readonly property var menuItems: shownItems.slice(0, Math.min(sniOverflow, shownItems.length)).concat(hiddenItems)
-
-    // hearth's indicators in bar order, plus the bell, for the menu bar's
-    // fit: { key, w, on }.
-    readonly property var indicators: [recording, media, clipboard, zones, network, rdp, camera, printers, drives, weather, keyboard, battery, bluetooth, brightness, volume]
-    readonly property var entries: indicators.map(i => ({ key: i.overflowKey, w: i.implicitWidth, on: i.present }))
-        .concat([{ key: "notifications", w: bell.implicitWidth, on: true }])
+    readonly property var shownItems: iconsShow === "hidden" ? [] : items.filter(i => i.status !== Status.Passive)
+    readonly property var hiddenItems: iconsShow === "hidden" ? [] : items.filter(i => i.status === Status.Passive)
+    readonly property int sniInMenu: iconsShow === "overflow" ? shownItems.length : Math.min(sniOverflow, shownItems.length)
+    readonly property var barItems: shownItems.slice(sniInMenu)
+    readonly property var menuItems: shownItems.slice(0, sniInMenu).concat(hiddenItems)
+    // Width of the icons left in the bar and of the chevron, for the fit.
     readonly property real chevronWidth: more.implicitWidth
-    // Rows in the dropdown below the app icons, in bar order.
-    readonly property var menuRows: outsideItems.concat(
-        indicators.filter(i => i.present && i.overflowed).map(i => ({ key: i.overflowKey, item: i })))
 
     Repeater {
         model: root.barItems
         delegate: TrayItem {}
     }
-
-    Recording { id: recording; ipcName: "recording" }
-    Media { id: media; ipcName: "media" }
-    Clipboard { id: clipboard; ipcName: "clipboard" }
-    Zones { id: zones; ipcName: "zones" }
-    Network { id: network; ipcName: "network" }
-    Rdp { id: rdp; ipcName: "rdp" }
-    Camera { id: camera; ipcName: "camera" }
-    Printers { id: printers; ipcName: "printers" }
-    Drives { id: drives; ipcName: "drives" }
-    Weather { id: weather; ipcName: "weather" }
-    Keyboard { id: keyboard; ipcName: "keyboard" }
-    Battery { id: battery; ipcName: "battery" }
-    Bluetooth { id: bluetooth; ipcName: "bluetooth" }
-    Brightness { id: brightness; ipcName: "brightness" }
-    Volume { id: volume; ipcName: "volume" }
-    NotificationBell { id: bell }
 
     Indicator {
         id: more
@@ -106,7 +86,7 @@ Row {
         readonly property var target: modelData.item
         readonly property string key: modelData.key
         readonly property bool isMap: key === "workspaces"
-        readonly property bool isMonitor: key === "sysmonitor"
+        readonly property bool isMonitor: key.startsWith("treetop.")
         implicitHeight: isMap ? mapRow.implicitHeight + 8 : 32
         hoverEnabled: true
         acceptedButtons: isMap ? Qt.NoButton : Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
@@ -115,8 +95,11 @@ Row {
             if (mouse.button === Qt.LeftButton) {
                 more.popup.close();
                 const t = target;
-                if (t.overflowActivate) Qt.callLater(() => t.overflowActivate());
+                if (key === "notifications") Notifications.toggleCenter();
+                else if (key === "spotlight") Spotlight.toggle();
+                else if (t.overflowActivate) Qt.callLater(() => t.overflowActivate());
             } else if (mouse.button === Qt.RightButton && target.rightClicked) target.rightClicked();
+            else if (mouse.button === Qt.MiddleButton && key === "notifications") Notifications.toggleDnd();
             else if (mouse.button === Qt.MiddleButton && target.middleClicked) target.middleClicked();
         }
         onWheel: w => { if (target.scrolled) target.scrolled(w.angleDelta.y !== 0 ? w.angleDelta.y : w.angleDelta.x); }
@@ -152,7 +135,7 @@ Row {
             }
             Label {
                 anchors.verticalCenter: parent.verticalCenter
-                text: row.isMonitor ? "System monitor" : String(row.target.tooltip || row.key)
+                text: row.isMonitor ? BarItems.label(row.key) : String(row.target.tooltip || BarItems.label(row.key))
                 elide: Text.ElideRight
                 width: Math.max(40, Math.min(implicitWidth, row.width - 8 - 28 - value.implicitWidth - 24))
             }
