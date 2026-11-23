@@ -31,7 +31,9 @@ PanelWindow {
     exclusionMode: ExclusionMode.Normal
     exclusiveZone: 0
     margins.top: barGap
-    WlrLayershell.layer: WlrLayer.Overlay
+    // Top, not Overlay: a fullscreen window (a video, a game) is drawn above the
+    // top layer, so banners never cover it; they wait in Notification Center.
+    WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "hearth-notifications"
     WlrLayershell.keyboardFocus: Notifications.replying > 0 ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     color: "transparent"
