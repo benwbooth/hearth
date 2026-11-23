@@ -154,20 +154,34 @@
         # devloop KILLs this wrapper after 5 s, which would orphan a
         # lingering shell; one still holding the session lock then refused
         # the next hearth's lock (2026-11-21).
+        # Each shell runs in its own process group (setsid), and when it ends
+        # however it ends, so does the group: its long-lived helpers
+        # (udisksctl/nmcli monitor, hearth-badges, hearth-accounts, ...) never
+        # notice a dead parent and piled up by the hundred (2026-11-23). Apps
+        # aren't in the group: the dock starts them with systemd-run and
+        # execDetached gives each its own session.
+        reap() {
+          [ -n "\$child" ] || return 0
+          kill -TERM -- "-\$child" 2>/dev/null || return 0
+          for _ in \$(seq 20); do kill -0 -- "-\$child" 2>/dev/null || return 0; sleep 0.1; done
+          kill -KILL -- "-\$child" 2>/dev/null
+        }
         stop() {
           if [ -n "\$child" ]; then
-            kill -TERM "\$child" 2>/dev/null
-            for _ in \$(seq 40); do kill -0 "\$child" 2>/dev/null || break; sleep 0.1; done
-            kill -KILL "\$child" 2>/dev/null
+            # The whole group at once: devloop KILLs this wrapper after 5 s.
+            kill -TERM -- "-\$child" 2>/dev/null
+            for _ in \$(seq 40); do kill -0 -- "-\$child" 2>/dev/null || break; sleep 0.1; done
+            kill -KILL -- "-\$child" 2>/dev/null
             wait "\$child"
           fi
           exit 143
         }
         trap stop TERM INT HUP
         while :; do
-          $out/libexec/hearth-shell "\$@" &
+          ${pkgs.util-linux}/bin/setsid $out/libexec/hearth-shell "\$@" &
           child=\$!
           wait "\$child"; rc=\$?
+          reap
           case \$rc in 75|255) ;; *) exit "\$rc" ;; esac
           now=\$(date +%s); keep=()
           for t in "\''${recent[@]}"; do (( now - t < 60 )) && keep+=("\$t"); done
