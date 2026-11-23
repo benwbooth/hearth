@@ -474,6 +474,16 @@ def attempt(attr, argv, variant, extra_env, extra_args, wait_win=50, wait_menu=1
     for k, d in dirs.items():
         os.makedirs(os.path.join(base, d), mode=0o700, exist_ok=True)
         env[k] = os.path.join(base, d)
+    # A lived-in home: the XDG user folders (gdm-settings and Varia crash on
+    # a None Downloads folder) and a login shell (scrcpy runs $SHELL).
+    home = env["HOME"]
+    udirs = {"DESKTOP": "Desktop", "DOWNLOAD": "Downloads", "TEMPLATES": "Templates", "PUBLICSHARE": "Public",
+             "DOCUMENTS": "Documents", "MUSIC": "Music", "PICTURES": "Pictures", "VIDEOS": "Videos"}
+    for d in udirs.values():
+        os.makedirs(os.path.join(home, d), exist_ok=True)
+    with open(os.path.join(home, ".config", "user-dirs.dirs"), "w") as f:
+        f.writelines(f'XDG_{k}_DIR="$HOME/{d}"\n' for k, d in udirs.items())
+    env.setdefault("SHELL", "/run/current-system/sw/bin/bash")
     APPDIRS.append(base)
     env.update(extra_env)
     envargs = [f"{k}={v}" for k, v in env.items()]
@@ -548,6 +558,9 @@ def attempt_windows(attr, before, win, wait_menu, escaped=False):
             menus = app_menus(dump)
             if any(n for _, n in menus) and time.time() - t1 > 2.5:
                 break
+        opened = open_placeholders(menus, dump, cw["id"])
+        if opened:
+            dump, menus = opened
         w = next((x for x in windows() if x["id"] == cw["id"]), cw)
         req = dump.get("request") or {}
         route = req.get("kind") or ("none" if not menus else "?")
@@ -600,6 +613,36 @@ def attempt_windows(attr, before, win, wait_menu, escaped=False):
 
 def full_menus(r):
     return r.get("result") == "menus" and len([m for m in r.get("menus", []) if not m.endswith(":0")]) >= 2
+
+
+def open_placeholders(menus, dump, win_id=None):
+    """Menus hearth reads only when they open (the AT-SPI ☰, a Kirigami
+    drawer) show one placeholder item until then. Open each in the menu bar,
+    as the user would (hearth reads it unseen, arbor ProbeWindow), and
+    measure what it then holds."""
+    if (dump.get("request") or {}).get("kind") not in ("atspi", "x11") or not menus:
+        return None
+    thin = [l for l, n in menus if n <= 1 and l][:3]
+    if not thin:
+        return None
+    for label in thin:
+        rig("ipc", "call", "appmenu", "openMenu", label, timeout=20)
+        t0 = time.time()
+        while time.time() - t0 < 8:
+            time.sleep(1.0)
+            try:
+                d = json.loads(rig("ipc", "call", "appmenu", "summary", timeout=20).stdout)
+            except Exception:
+                continue
+            m = app_menus(d)
+            if dict(m).get(label, 0) > 1 or len(m) > len(menus):
+                dump, menus = d, m
+                break
+        if win_id:  # the bar's menu closes when the app takes focus back
+            rig("run", "arbor", "msg", "action", "focus-window", "--id", str(win_id))
+            time.sleep(0.5)
+    dump["opened"] = thin
+    return dump, menus
 
 
 def late_check(rows):
