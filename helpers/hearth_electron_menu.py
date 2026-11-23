@@ -269,9 +269,13 @@ def _label(v, tr):
     m = re.search(r"[\w$.]+\(\s*([\"'`])([^\"'`]+)\1", v)
     if m:
         key = m.group(2)
-        txt = tr.get(key) or tr.get(key.split(":")[-1]) or tr.get(key.split(".")[-1])
-        if txt:
-            return txt
+        for k in (key, key.replace("|", "."), key.split(":")[-1], key.split(".")[-1], key.split("|")[-1]):
+            if tr.get(k):
+                return tr[k]
+    # `__DARWIN__ ? "Preferences…" : "Options…"`: on Linux the else branch.
+    m = re.fullmatch(r".+\?\s*(.+?)\s*:\s*([\"'`][^\"'`]*[\"'`])\s*", v, re.S)
+    if m:
+        return _literal(m.group(2))
     return None
 
 
@@ -291,7 +295,9 @@ def _keys(accel):
                       "command": "Ctrl", "cmd": "Ctrl", "shift": "Shift", "alt": "Alt", "option": "Alt",
                       "super": "Meta", "meta": "Meta", "plus": "+", "space": "Space", "return": "Return",
                       "enter": "Return", "escape": "Esc", "esc": "Esc", "delete": "Del",
-                      "backspace": "Backspace"}.get(low, p.upper() if len(p) == 1 else p))
+                      "backspace": "Backspace", "num0": "KP_0", "numadd": "KP_Add", "numsub": "KP_Subtract",
+                      "nummult": "KP_Multiply", "numdiv": "KP_Divide", "numdec": "KP_Decimal"}.get(
+                          low, p.upper() if len(p) == 1 else p))
     return "+".join(parts)
 
 
@@ -326,8 +332,17 @@ def _item(obj, tr, depth):
 
 
 def _tidy(items):
-    out = []
+    out, seen = [], {}
     for it in items:
+        if isinstance(it, dict) and "keys" in it:
+            # The same command twice (a numpad binding next to the main
+            # one): keep one, the main keyboard's.
+            prev = seen.get(it["label"])
+            if prev is not None:
+                if "KP_" in prev["keys"] and "KP_" not in it["keys"]:
+                    prev["keys"] = it["keys"]
+                continue
+            seen[it["label"]] = it
         if it == "separator" and (not out or out[-1] == "separator"):
             continue
         out.append(it)
