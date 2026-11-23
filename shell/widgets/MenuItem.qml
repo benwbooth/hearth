@@ -34,6 +34,9 @@ MouseArea {
     signal openSubmenu()
     signal closeSubmenu()
     signal triggered()
+    // Rows move as their menu lays out: keep the icon on the pixel grid.
+    onXChanged: Qt.callLater(rowIcon.snap)
+    onYChanged: Qt.callLater(rowIcon.snap)
 
     // The popup that hosts this row (selection, keyboard) and the menu
     // level (container) the row belongs to.
@@ -143,9 +146,10 @@ MouseArea {
             font.weight: Font.DemiBold
         }
         Icon {
+            id: rowIcon
             anchors.centerIn: parent
             anchors.horizontalCenterOffset: -2
-            implicitSize: 16
+            crispSize: 16
             name: root.icon
             visible: root.icon !== ""
             opacity: root.enabled ? 1 : 0.35

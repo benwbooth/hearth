@@ -454,7 +454,7 @@ Row {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: t.icon !== ""
                 name: t.icon
-                implicitSize: 16
+                crispSize: 16
                 opacity: t.enabled ? 1 : 0.45
             }
             Label {
