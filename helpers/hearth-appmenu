@@ -39,6 +39,8 @@ stdout:
       Labels have their mnemonic underscores removed. A GTK app menu (GNOME 3
       style) comes as a root child with id -2 and an empty label.
   {"type": "none", "key": K}   the window has no exported menu (x11)
+  {"type": "extramenus", "key": K, "menus": [ITEM]}  top-level menus added to
+      the window's own (MPRIS: Playback), clicks through the x11 watch
   {"type": "appactions", "key": K, "menu": ITEM|null}  a GTK window's app
       actions without menus (Settings…, Keyboard Shortcuts, Help), as an
       app menu (id -2); clicks go through the x11 watch
@@ -917,6 +919,136 @@ class ModuleMenu:
             g.stop()
 
 
+class Mpris:
+    """A Playback menu for any media player: the window's process (or a
+    parent/child, or its Flatpak sandbox's D-Bus proxy) owns an
+    org.mpris.MediaPlayer2.* name. Built from the player's own properties
+    (Can*, PlaybackStatus, Shuffle, LoopStatus), kept live through
+    PropertiesChanged, and found again when a player appears or leaves
+    (a browser starts playing). Sent as an extra top-level menu
+    ("extramenus"), next to whatever else the window has."""
+
+    ROOT = "org.mpris.MediaPlayer2"
+    PLAYER = "org.mpris.MediaPlayer2.Player"
+    PATH = "/org/mpris/MediaPlayer2"
+    FIRST_ID = -6000
+
+    def __init__(self, key, pid):
+        self.key, self.pid, self.alive = key, pid, True
+        self.name, self.props, self.matches, self.ids, self.sent = None, {}, [], {}, None
+        self.owner_match = bus.add_signal_receiver(
+            self.owner_changed, signal_name="NameOwnerChanged", dbus_interface="org.freedesktop.DBus")
+        GLib.idle_add(self.find)
+
+    def owner_changed(self, name, old, new):
+        if str(name).startswith(self.ROOT + ".") and self.alive:
+            GLib.timeout_add(200, self.find)
+
+    def find(self):
+        if not self.alive or not self.pid:
+            return False
+        mine = set(ancestors(self.pid)) | flatpak_proxies(self.pid)
+        found = None
+        try:
+            names = bus.get_object("org.freedesktop.DBus", "/org/freedesktop/DBus").ListNames(
+                dbus_interface="org.freedesktop.DBus", timeout=2)
+        except dbus.DBusException:
+            names = []
+        for n in sorted(str(x) for x in names):
+            if not n.startswith(self.ROOT + "."):
+                continue
+            p = pid_of(n)
+            if p and (p in mine or self.pid in ancestors(p)):
+                found = n
+                break
+        if found != self.name:
+            for m in self.matches:
+                m.remove()
+            self.matches, self.name, self.props = [], found, {}
+            if found:
+                self.matches.append(bus.add_signal_receiver(
+                    self.changed, signal_name="PropertiesChanged",
+                    dbus_interface="org.freedesktop.DBus.Properties", bus_name=found, path=self.PATH))
+                self.read()
+            else:
+                self.emit()
+        return False
+
+    def read(self):
+        obj = bus.get_object(self.name, self.PATH, introspect=False)
+        props = dbus.Interface(obj, "org.freedesktop.DBus.Properties")
+
+        def got(iface):
+            def ok(d):
+                self.props.update({str(k): plain(v) for k, v in d.items()})
+                self.emit()
+            return ok
+        for iface in (self.ROOT, self.PLAYER):
+            props.GetAll(iface, reply_handler=got(iface), error_handler=lambda e: None)
+
+    def changed(self, iface, changed, invalidated):
+        self.props.update({str(k): plain(v) for k, v in changed.items()})
+        if invalidated:
+            self.read()
+        else:
+            self.emit()
+
+    def emit(self):
+        if not self.alive:
+            return
+        menus = []
+        if self.name:
+            pr, ids, items = self.props, {}, []
+
+            def add(label, action, enabled=True, **kw):
+                nid = self.FIRST_ID - len(ids)
+                ids[nid] = action
+                items.append(item(nid, label, enabled=bool(enabled), **kw))
+            playing = pr.get("PlaybackStatus") == "Playing"
+            add("Pause" if playing else "Play", ("Pause" if playing else "Play",),
+                pr.get("CanPause", True) if playing else pr.get("CanPlay", True))
+            add("Stop", ("Stop",), pr.get("CanControl", True) and pr.get("PlaybackStatus") != "Stopped")
+            items.append(item(self.FIRST_ID - 100, type="separator"))
+            add("Next", ("Next",), pr.get("CanGoNext", False))
+            add("Previous", ("Previous",), pr.get("CanGoPrevious", False))
+            if "Shuffle" in pr or "LoopStatus" in pr:
+                items.append(item(self.FIRST_ID - 101, type="separator"))
+            if "Shuffle" in pr:
+                add("Shuffle", ("set", "Shuffle", not pr["Shuffle"]), True,
+                    toggleType="checkmark", toggleState=1 if pr["Shuffle"] else 0)
+            if "LoopStatus" in pr:
+                for status, label in (("None", "Repeat Off"), ("Track", "Repeat One"), ("Playlist", "Repeat All")):
+                    add(label, ("set", "LoopStatus", status), True, toggleType="radio",
+                        toggleState=1 if pr["LoopStatus"] == status else 0)
+            if pr.get("CanRaise") or pr.get("CanQuit"):
+                items.append(item(self.FIRST_ID - 102, type="separator"))
+            if pr.get("CanRaise"):
+                add("Show Player", ("Raise",))
+            self.ids = ids
+            menus = [item(self.FIRST_ID - 200, "Playback", submenu=True, children=items)]
+        if menus != self.sent:
+            self.sent = menus
+            out({"type": "extramenus", "key": self.key, "menus": menus})
+
+    def click(self, nid):
+        action = self.ids.get(nid)
+        if not action or not self.name:
+            return
+        obj = bus.get_object(self.name, self.PATH, introspect=False)
+        if action[0] == "set":
+            dbus.Interface(obj, "org.freedesktop.DBus.Properties").Set(
+                self.PLAYER, action[1], action[2], reply_handler=lambda *a: None, error_handler=err)
+        else:
+            iface = self.ROOT if action[0] == "Raise" else self.PLAYER
+            getattr(dbus.Interface(obj, iface), action[0])(reply_handler=lambda *a: None, error_handler=err)
+
+    def stop(self):
+        self.alive = False
+        self.owner_match.remove()
+        for m in self.matches:
+            m.remove()
+
+
 class X11Window:
     """The focused X11 window (xwayland-satellite): resolve, then delegate."""
 
@@ -927,6 +1059,8 @@ class X11Window:
         # a menu bar): its app actions, besides whatever is found below.
         gbus, gapp, gwin = gtk or ("", "", "")
         self.actions = AppActions(key, gbus, gapp, gwin) if gbus and (gapp or gwin) else None
+        # A media player: its Playback menu, whatever else is found.
+        self.mpris = Mpris(key, pid) if pid else None
         # A menu module for this app (no native menus to read): its menus.
         found = module_for(appid)
         self.module = None
@@ -1045,6 +1179,8 @@ class X11Window:
             self.inner.stop()
         if self.actions:
             self.actions.stop()
+        if self.mpris:
+            self.mpris.stop()
 
     def open(self, nid):
         if self.inner:
@@ -1055,7 +1191,9 @@ class X11Window:
             self.inner.close(nid)
 
     def click(self, nid):
-        if self.actions and nid in self.actions.ids:
+        if self.mpris and nid in self.mpris.ids:
+            self.mpris.click(nid)
+        elif self.actions and nid in self.actions.ids:
             self.actions.click(nid)
         elif self.inner:
             self.inner.click(nid)

@@ -104,8 +104,17 @@ Singleton {
     Timer { id: resolveTimer; interval: 500; onTriggered: root.settledKey = root.wanted }
     // While the app's menu isn't here: the last one it had (a dialog of
     // the app keeps it too, as on macOS).
-    readonly property var tree: current ? menu
+    readonly property var ownTree: current ? menu
         : (win ? (treeByApp[win.appId] || null) : null)
+    // Menus the helper adds to the window's own (MPRIS: a media player's
+    // Playback), appended after them.
+    property var extraMenus: null
+    readonly property var tree: {
+        const extra = extraMenus && extraMenus.key === wanted ? (extraMenus.menus || []) : [];
+        if (!extra.length) return ownTree;
+        const base = ownTree || { id: 0, label: "", children: [] };
+        return Object.assign({}, base, { children: (base.children || []).concat(extra) });
+    }
     readonly property var topLevel: tree
         ? tree.children.filter(i => i.visible && i.type !== "separator" && i.label !== "") : []
     // A GTK app's GNOME 3 style app menu (helper: root child id -2); the
@@ -218,6 +227,8 @@ Singleton {
                     if (m.key === root.wanted) { root.menuKey = ""; root.menu = null; root.noneKey = m.key; }
                 } else if (m.type === "appactions") {
                     root.appActions = m;
+                } else if (m.type === "extramenus") {
+                    root.extraMenus = m;
                 } else if (m.type === "resolved") {
                     const r = Object.assign({}, root.resolved);
                     r[m.key] = m.request;
