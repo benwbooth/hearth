@@ -6,9 +6,9 @@
 #   services.hearth-greeter.enable = true;
 #
 # Switching back to SDDM is removing that line (or setting it false).
-# The PAM service `greetd` unlocks KWallet with the login password (as
-# SDDM's did) and never asks for a fingerprint: pam_kwallet needs the
-# typed password, like macOS's first login after a restart.
+# The PAM service `greetd` unlocks the keyring (oo7, the Secret Service)
+# with the login password and never asks for a fingerprint: pam_oo7 needs
+# the typed password, like macOS's first login after a restart.
 self:
 { config, lib, pkgs, ... }:
 let
@@ -148,13 +148,22 @@ in
       description = "Cursor theme on the login screen.";
     };
 
-    kwallet = lib.mkOption {
-      type = lib.types.bool;
-      default = true;
-      description = ''
-        Unlock KWallet with the login password (pam_kwallet in the `greetd`
-        PAM service), as SDDM does under Plasma.
-      '';
+    keyring = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = ''
+          Unlock the user's login keyring (oo7-daemon, the Secret Service)
+          with the password typed on the login screen: pam_oo7 in the
+          `greetd` PAM service.
+        '';
+      };
+      pamPackage = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.oo7-pam;
+        defaultText = lib.literalExpression "pkgs.oo7-pam";
+        description = "Package with lib/security/pam_oo7.so (nixpkgs-unstable has it).";
+      };
     };
 
     environment = lib.mkOption {
@@ -177,15 +186,26 @@ in
 
     security.pam.services.greetd = {
       # Password only: pam_fprintd would block the stack waiting for a
-      # finger, and KWallet needs the password itself.
+      # finger, and the keyring needs the password itself.
       fprintAuth = lib.mkDefault false;
-      kwallet = lib.mkIf cfg.kwallet {
-        enable = true;
-        package = pkgs.kdePackages.kwallet-pam;
-        # pam_kwallet only starts for sessions it recognises as graphical;
-        # greetd sets XDG_SESSION_TYPE from the greeter, but don't depend on it.
-        forceRun = true;
-      };
+      rules = lib.mkIf cfg.keyring.enable (let
+        r = config.security.pam.services.greetd.rules;
+        oo7 = "${cfg.keyring.pamPackage}/lib/security/pam_oo7.so";
+      in {
+        # pam_unix asks for the password once (optional, so it can't fail
+        # the login) and keeps it for pam_oo7, which hands it to the user's
+        # oo7-daemon when the session opens; the `sufficient` pam_unix
+        # after them reuses it (try_first_pass). This is NixOS's own
+        # unix-early, which it only adds for pam_kwallet/pam_gnome_keyring.
+        auth.oo7-unix-early = {
+          order = r.auth.unix.order - 1150;
+          control = "optional";
+          modulePath = "${config.security.pam.package}/lib/security/pam_unix.so";
+          settings = { nullok = true; likeauth = true; };
+        };
+        auth.oo7 = { order = r.auth.unix.order - 750; control = "optional"; modulePath = oo7; };
+        session.oo7 = { order = r.session.systemd.order + 50; control = "optional"; modulePath = oo7; };
+      });
     };
 
     # Real names and pictures (the greeter can't read the users' homes).

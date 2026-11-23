@@ -71,7 +71,8 @@ Scope {
                                 { id: "welcome", label: "Getting Started", icon: "help-about" },
                                 { id: "shortcuts", label: "Keyboard Shortcuts", icon: "preferences-desktop-keyboard-shortcut" },
                                 { id: "gestures", label: "Trackpad Gestures", icon: "input-touchpad" },
-                                { id: "windows", label: "How windows work", icon: "preferences-system-windows" }
+                                { id: "windows", label: "How windows work", icon: "preferences-system-windows" },
+                                { id: "passwords", label: "Saved passwords", icon: "dialog-password" }
                             ]
                             MouseArea {
                                 id: nav
@@ -107,7 +108,7 @@ Scope {
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
                     anchors.margins: 24
-                    sourceComponent: ({ shortcuts: shortcutsPage, gestures: gesturesPage, windows: windowsPage, welcome: welcomePage })[root.page]
+                    sourceComponent: ({ shortcuts: shortcutsPage, gestures: gesturesPage, windows: windowsPage, passwords: passwordsPage, welcome: welcomePage })[root.page]
                 }
             }
         }
@@ -289,6 +290,19 @@ Scope {
         color: Theme.accentDim
         border.color: Theme.accent
         Rectangle { width: parent.width; height: 6; radius: 4; color: Theme.accent }
+    }
+
+    Component {
+        id: passwordsPage
+        ColumnLayout {
+            spacing: 14
+            Title { text: "Saved passwords" }
+            Para { text: "Apps keep the passwords and sign-in keys they remember (your browser's logins and cookies, Slack, VS Code, the accounts in Settings, SSH key passphrases) in your keyring: one locked file in your home folder. You never type a separate keyring password: the login screen unlocks it with the password you log in with." }
+            Para { text: "That's why the login screen asks for your password rather than your fingerprint: the keyring needs the password itself. The lock screen can use your fingerprint, because the keyring stays unlocked until you log out." }
+            Para { text: "If you change your login password, also run oo7-cli change-secret in a Terminal and give it the new password, so the next login can unlock the keyring. (The keyring is the oo7 Secret Service; its file is ~/.local/share/keyrings/v1/login.keyring.)" }
+            Para { text: "To see what's saved from a Terminal: oo7-cli list. To look one up: oo7-cli search --all application=brave." }
+            Item { Layout.fillHeight: true }
+        }
     }
 
     Component {

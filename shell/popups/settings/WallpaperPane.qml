@@ -378,7 +378,7 @@ ColumnLayout {
             visible: !!(pane.srcInfo && (pane.srcInfo.key || pane.spec.source === "wallhaven"))
             label: Wallpaper.keys[pane.spec.source] ? "API key (saved)" : "API key"
             note: pane.spec.source === "wallhaven" ? "Optional: from wallhaven.cc/settings/account. Kept in your keyring."
-                : "Kept in your keyring (KWallet), or a private file if there's none. Press Return to save; empty removes it."
+                : "Kept in your keyring, or a private file if there's none. Press Return to save; empty removes it."
             TextBox {
                 id: keyBox
                 implicitWidth: 240

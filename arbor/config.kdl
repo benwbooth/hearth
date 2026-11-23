@@ -156,8 +156,8 @@ portal {
 spawn-sh-at-startup "printf 'Xft.dpi: 128\\nXcursor.size: 32\\n' | xrdb -merge"
 // Screen off, lock and sleep when idle are run by hearth (swayidle with
 // the times from Settings > Sleep & Power).
-// KWallet gets SDDM's password (as Plasma's startup does).
-spawn-at-startup "/run/current-system/sw/libexec/pam_kwallet_init"
+// The keyring (oo7-daemon) is a systemd user service, unlocked by the
+// login screen's PAM (nix/greeter.nix): nothing to start here.
 
 binds {
     Mod+Shift+Slash { show-hotkey-overlay; }

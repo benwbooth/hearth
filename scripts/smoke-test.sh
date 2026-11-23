@@ -87,7 +87,7 @@ export QT_WAYLAND_RECONNECT=1 HEARTH_POLKIT=0 HEARTH_APPMENU_REGISTRAR=0 HEARTH_
 mkdir -p "$XDG_CONFIG_HOME/arbor" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$work/kwin"
 
 # A private bus with nothing to activate: the real session's services
-# (portals, KWallet...) must not start in here.
+# (portals, the keyring...) must not start in here.
 printf '%s\n' '<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN"' \
   ' "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">' \
   '<busconfig><type>session</type>' "<listen>unix:dir=$run</listen>" '<auth>EXTERNAL</auth>' \

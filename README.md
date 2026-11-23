@@ -63,7 +63,7 @@ indicators for everything the Plasma tray did, Settings and Help windows.
       rules.auth.fprintd.args = [ "max-tries=10" ];
     };
     ```
-    No pam_kwallet is needed: KWallet stays open while the screen is locked.
+    No keyring PAM module is needed: the keyring (oo7) stays open while the screen is locked.
     The password is kept only until it is handed to PAM and never logged.
   - Safety: only a PAM success (or the grace period) unlocks; nothing
     else in the shell can. If hearth dies while locked, arbor keeps the
@@ -144,7 +144,7 @@ indicators for everything the Plasma tray did, Settings and Help windows.
   Spotlight, Google Earth View, Simon Stålenhag, David Revoy, Wallhaven
   (SFW unless you add a key), Reddit (often refused without sign-in),
   Unsplash/Pexels/Flickr with your own free key (kept by `secret-tool` in
-  KWallet, else `~/.config/hearth/wallpaper-keys.json`, 0600), each with a
+  the keyring, else `~/.config/hearth/wallpaper-keys.json`, 0600), each with a
   refresh interval and a history (Previous/Next). Also a picture, folder
   slideshows (interval, shuffle, subfolders), dynamic sets (GNOME timed
   XML and light/dark pairs, macOS `.heic` dynamic desktops via libheif:
@@ -675,13 +675,14 @@ services.hearth-greeter.enable = true;   # turns SDDM off (mkForce)
 ```
 
 The module enables greetd (VT 1, `default_session` = the greeter arbor as
-`greeter`), the `greetd` PAM service with pam_kwallet (KWallet unlocks
-with the login password, as with SDDM) and without fingerprint (the
-password is needed for KWallet, like macOS's first login after a restart),
+`greeter`), the `greetd` PAM service with pam_oo7 (the oo7 keyring, the
+Secret Service, unlocks with the login password) and without fingerprint
+(the keyring needs the password, like macOS's first login after a restart),
 AccountsService, and `/var/lib/hearth/{wallpaper,greeter}` (2775 root:users)
 and `/var/cache/hearth-greeter` (greeter's). Options: `defaultSession`
 (else `services.displayManager.defaultSession`, else arbor), `wallpaper`,
-`extraArborConfig`, `cursorTheme`, `kwallet`, `environment`, `package`,
+`extraArborConfig`, `cursorTheme`, `keyring.enable` and
+`keyring.pamPackage` (pam_oo7; `oo7-pam` is in nixpkgs-unstable), `environment`, `package`,
 `arborPackage` (default `programs.arbor.package`).
 
 Back to SDDM: remove `services.hearth-greeter.enable = true;` and rebuild.
