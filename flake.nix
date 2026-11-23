@@ -2,8 +2,8 @@
   description = "hearth: a Quickshell desktop shell for Hyprland";
 
   # /etc/nixos sets `inputs.nixpkgs.follows`, so Quickshell links the same Qt
-  # as Plasma's platform theme and the KDE apps; a second Qt would fail to load
-  # the `kde` platform theme plugin.
+  # as the system's Qt plugins (the xdgdesktopportal platform theme, image
+  # formats); a second Qt would fail to load them.
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
   inputs.quickshell-src = {
     url = "https://git.outfoxxed.me/quickshell/quickshell/archive/refs/tags/v0.3.2.tar.gz";
@@ -80,13 +80,9 @@
       rclone
     ];
 
-    # The `kde` platform theme picks the org.kde.desktop Controls style, which
-    # imports Kirigami. Plasma's session provides it; outside Plasma
-    # (Hyprland) nothing does, so controls fail to load without this.
-    qmlPath = lib.makeSearchPath "lib/qt-6/qml" (with pkgs.kdePackages; [
-      kirigami.unwrapped qqc2-desktop-style sonnet kitemmodels
-      qtmultimedia
-    ]);
+    # QtMultimedia for video wallpapers. (Kirigami and the org.kde.desktop
+    # Controls style left with Plasma's `kde` platform theme, 2026-11-23.)
+    qmlPath = lib.makeSearchPath "lib/qt-6/qml" [ pkgs.kdePackages.qtmultimedia ];
     # QtMultimedia's FFmpeg backend (video wallpapers, VA-API decoding).
     pluginPath = "${pkgs.kdePackages.qtmultimedia}/lib/qt-6/plugins";
     # GNOME's light/dark wallpaper pairs, listed under Dynamic.

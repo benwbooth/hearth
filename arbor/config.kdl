@@ -46,7 +46,10 @@ output "DP-1" {
 }
 
 environment {
-    QT_QPA_PLATFORMTHEME "kde"
+    // Qt's own portal theme (no KDE libraries): light/dark from the
+    // settings portal, open/save dialogs through the FileChooser portal,
+    // Fusion style. Replaced Plasma's "kde" theme (2026-11-23).
+    QT_QPA_PLATFORMTHEME "xdgdesktopportal"
     QT_QPA_PLATFORM "wayland;xcb"
     XDG_MENU_PREFIX "plasma-"
     ELECTRON_OZONE_PLATFORM_HINT "auto"

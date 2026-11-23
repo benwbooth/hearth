@@ -59,7 +59,7 @@ hl.env("XCURSOR_THEME", cursor_theme)
 hl.env("XCURSOR_SIZE", tostring(cursor_size))
 hl.env("HYPRCURSOR_SIZE", tostring(cursor_size))
 -- Keep Qt apps on Breeze + KDE dialogs (plasma-integration works outside Plasma).
-hl.env("QT_QPA_PLATFORMTHEME", "kde")
+hl.env("QT_QPA_PLATFORMTHEME", "xdgdesktopportal")
 hl.env("QT_QPA_PLATFORM", "wayland;xcb")
 -- KDE apps (Dolphin's Open With, file associations) read the app menu from
 -- ${XDG_MENU_PREFIX}applications.menu; only plasma-applications.menu exists.
