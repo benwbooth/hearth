@@ -119,8 +119,12 @@ Singleton {
         const add = extra.filter(m => !have.includes(String(m.label || "").toLowerCase()));
         return Object.assign({}, base, { children: (base.children || []).concat(add) });
     }
+    // One menu per title: LibreOffice's GMenuModel menu bar has its menus
+    // twice, in two sections.
     readonly property var topLevel: tree
-        ? tree.children.filter(i => i.visible && i.type !== "separator" && i.label !== "") : []
+        ? tree.children.filter((i, n, all) => i.visible && i.type !== "separator" && i.label !== ""
+                               && all.findIndex(j => j.visible && j.type !== "separator" && j.label === i.label) === n)
+        : []
     // A GTK app's GNOME 3 style app menu (helper: root child id -2); the
     // menu bar shows it at the top of the bold app-name menu.
     // Or, for a GTK window without menus, its app actions (Settings…,
@@ -266,7 +270,11 @@ Singleton {
         onTriggered: {
             if (root.menu && root.menuKey === root.wanted && !root.forced
                     && root.ownRequest && root.menuKey === root.ownRequest.key
-                    && !root.menu.children.length) {
+                    && !root.menu.children.length
+                    // Only appmenu-gtk-module's exports (empty for XUL apps and
+                    // dialogs). An app's own menu bar can still be filling
+                    // (LibreOffice's): it isn't written off.
+                    && (!root.menuKey.startsWith("g\n") || root.menuKey.includes("/org/appmenu/gtk/"))) {
                 const k = root.menuKey;
                 if (k.startsWith("x\n")) {
                     root.noneKey = k;
