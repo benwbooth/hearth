@@ -177,7 +177,11 @@ Singleton {
             root.openRequested(label);
             return "ok";
         }
-        function dump(): string { return JSON.stringify({ key: root.key, request: root.request, own: root.ownRequest, forced: root.forced, registrar: root.registrarOwned, menu: root.menu, appMenu: root.gtkAppMenu, tree: root.tree }); }
+        function dump(): string { return JSON.stringify({ key: root.key, request: root.request, own: root.ownRequest, forced: root.forced, registrar: root.registrarOwned, appMenu: root.gtkAppMenu,
+            // The window's menus once, merged with the extra ones (MPRIS,
+            // harvested shortcuts). Sending `menu` and the merged tree both
+            // doubled big menus (KSystemLog) past what an IPC reply carries.
+            menu: root.tree }); }
         // `hearth-ipc call appmenu click "File/New Tab"`: activate an item of
         // the focused window's menus (or of its app menu: "app/Settings…") by
         // its labels, as choosing it in the menu bar would (tests, modules).
