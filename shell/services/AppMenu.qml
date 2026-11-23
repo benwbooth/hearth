@@ -169,6 +169,23 @@ Singleton {
             return "ok";
         }
         function dump(): string { return JSON.stringify({ key: root.key, request: root.request, own: root.ownRequest, forced: root.forced, registrar: root.registrarOwned, menu: root.menu, appMenu: root.gtkAppMenu }); }
+        // `hearth-ipc call appmenu click "File/New Tab"`: activate an item of
+        // the focused window's menus (or of its app menu: "app/Settings…") by
+        // its labels, as choosing it in the menu bar would (tests, modules).
+        function click(path: string): string {
+            const parts = path.split("/");
+            let node = parts[0] === "app" ? root.gtkAppMenu : root.tree;
+            if (parts[0] === "app") parts.shift();
+            for (const label of parts) {
+                const kids = node ? (node.children || []) : [];
+                node = kids.find(i => i.label === label && i.visible !== false) || null;
+                if (!node) return "no item " + label;
+            }
+            if (node.submenu || (node.children && node.children.length)) return "is a menu: " + path;
+            if (node.enabled === false) return "disabled: " + path;
+            root.click(node.id);
+            return "ok";
+        }
     }
 
     Process {
