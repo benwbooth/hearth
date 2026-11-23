@@ -83,7 +83,9 @@ Scope {
                 y += rows * cellH + (g.title ? Math.round(10 * pt) : 0);
                 row += rows;
             }
-            return { items: items, heads: heads, height: y };
+            const spots = {};
+            for (let i = 0; i < items.length; i++) spots[items[i].key] = { x: items[i].x, y: items[i].y, index: i };
+            return { items: items, heads: heads, height: y, spots: spots };
         }
 
         // Loading the icons out of view waits until the visible ones are in.
@@ -92,10 +94,10 @@ Scope {
 
         // --- selection (keyboard) ---
         property int sel: 0
-        readonly property var current: layout.items.length ? layout.items[Math.min(sel, layout.items.length - 1)] : null
+        readonly property var selected: layout.items.length ? layout.items[Math.min(sel, layout.items.length - 1)] : null
         onLayoutChanged: if (sel >= layout.items.length) sel = Math.max(0, layout.items.length - 1)
         function moveRow(dir) {
-            const cur = current;
+            const cur = selected;
             if (!cur) return;
             const want = cur.row + dir;
             let best = -1, bestD = 1e9;
@@ -109,7 +111,7 @@ Scope {
         }
         onSelChanged: ensureVisible()
         function ensureVisible() {
-            const it = current;
+            const it = selected;
             if (!it) return;
             if (it.y < flick.contentY) scrollTo(Math.max(0, it.y - headH));
             else if (it.y + cellH > flick.contentY + flick.height) scrollTo(it.y + cellH - flick.height);
@@ -318,7 +320,7 @@ Scope {
                             case Qt.Key_Home: if (!field.text) { win.sel = 0; break; } return;
                             case Qt.Key_End: if (!field.text) { win.sel = n - 1; break; } return;
                             case Qt.Key_Return:
-                            case Qt.Key_Enter: if (win.current) Launchpad.launch(win.current.a); break;
+                            case Qt.Key_Enter: if (win.selected) Launchpad.launch(win.selected.a); break;
                             case Qt.Key_Escape:
                                 if (field.text) { field.text = ""; Launchpad.query = ""; } else Launchpad.hide();
                                 break;
@@ -401,9 +403,9 @@ Scope {
 
                     // The keyboard selection.
                     Rectangle {
-                        visible: !!win.current && Launchpad.open
-                        x: win.current ? win.current.x + Math.round(6 * win.pt) : 0
-                        y: win.current ? win.current.y + Math.round(2 * win.pt) : 0
+                        visible: !!win.selected && Launchpad.open
+                        x: win.selected ? win.selected.x + Math.round(6 * win.pt) : 0
+                        y: win.selected ? win.selected.y + Math.round(2 * win.pt) : 0
                         width: win.cellW - Math.round(12 * win.pt)
                         height: win.cellH - Math.round(4 * win.pt)
                         radius: Math.round(14 * win.pt)
@@ -412,13 +414,19 @@ Scope {
                     }
 
                     Repeater {
-                        model: ScriptModel { values: win.layout.items; objectProp: "key" }
+                        // One cell per installed app for as long as the shell
+                        // runs: a search or a folded section only hides or
+                        // moves them, so their icons never load twice.
+                        model: ScriptModel { values: Launchpad.apps; objectProp: "key" }
                         MouseArea {
                             id: cell
                             required property var modelData
                             required property int index
-                            x: modelData.x
-                            y: modelData.y
+                            readonly property var spot: win.layout.spots[modelData.key] || null
+                            visible: !!spot
+                            enabled: !!spot
+                            x: spot ? spot.x : 0
+                            y: spot ? spot.y : 0
                             width: win.cellW
                             height: win.cellH
                             hoverEnabled: true
@@ -430,7 +438,7 @@ Scope {
                                 if (!pressed || !(pressedButtons & Qt.LeftButton)) return;
                                 if (!dragging && Math.hypot(mouse.x - pressPos.x, mouse.y - pressPos.y) < 10) return;
                                 dragging = true;
-                                win.dragMove(modelData.a, cell.mapToItem(null, mouse.x, mouse.y));
+                                win.dragMove(modelData, cell.mapToItem(null, mouse.x, mouse.y));
                             }
                             onReleased: mouse => {
                                 if (!dragging) return;
@@ -441,15 +449,15 @@ Scope {
                             onClicked: mouse => {
                                 if (dragging) return;
                                 if (mouse.button === Qt.RightButton) {
-                                    win.sel = index;
-                                    menu.openFor(modelData.a, cell.mapToItem(stage, mouse.x, mouse.y));
-                                } else Launchpad.launch(modelData.a);
+                                    win.sel = cell.spot.index;
+                                    menu.openFor(modelData, cell.mapToItem(stage, mouse.x, mouse.y));
+                                } else Launchpad.launch(modelData);
                             }
                             // Icons load once they come near the view (what's on
                                 // screen first), then stay loaded; the rest follow
                                 // in the background a moment after opening.
-                                readonly property bool near: modelData.y + win.cellH > flick.contentY - flick.height * 0.5
-                                                             && modelData.y < flick.contentY + flick.height * 1.5
+                                readonly property bool near: !!spot && spot.y + win.cellH > flick.contentY - flick.height * 0.5
+                                                             && spot.y < flick.contentY + flick.height * 1.5
                                 property bool want: false
                                 onNearChanged: if (near) want = true
                                 Component.onCompleted: if (near) want = true
@@ -460,7 +468,7 @@ Scope {
                                 y: Math.round(8 * win.pt)
                                 implicitSize: win.isz
                                 rasterSize: win.isz * win.dpr
-                                name: cell.want || win.prefetch ? cell.modelData.a.icon : ""
+                                name: cell.want || win.prefetch ? cell.modelData.icon : ""
                                 opacity: cell.dragging ? 0.3 : 1
                                 scale: cell.pressed && !cell.dragging ? 0.92 : 1
                                 Behavior on scale { NumberAnimation { duration: 90 } }
@@ -471,12 +479,12 @@ Scope {
                                 width: win.cellW - Math.round(8 * win.pt)
                                 horizontalAlignment: Text.AlignHCenter
                                 elide: Text.ElideRight
-                                text: cell.modelData.a.name
+                                text: cell.modelData.name
                                 font.pointSize: Theme.fontSize
                             }
                             onContainsMouseChanged: {
-                                if (containsMouse) hoverCard.restFor(cell.modelData.a, cell);
-                                else hoverCard.leave(cell.modelData.a);
+                                if (containsMouse) hoverCard.restFor(cell.modelData, cell);
+                                else hoverCard.leave(cell.modelData);
                             }
                             onPressedChanged: if (pressed) hoverCard.hide()
                         }
@@ -536,6 +544,12 @@ Scope {
                 }
                 function close() { visible = false; }
                 MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton }
+                // Solid enough that the icons under it don't show through.
+                Rectangle {
+                    anchors.fill: parent
+                    radius: menu.radius
+                    color: Theme.dark ? Qt.rgba(0.13, 0.135, 0.15, 0.94) : Qt.rgba(0.97, 0.97, 0.975, 0.94)
+                }
                 Column {
                     id: menuCol
                     x: Theme.menuPadding
