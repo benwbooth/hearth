@@ -408,7 +408,7 @@ def attempt_windows(attr, before, win, wait_menu, escaped=False):
     best = None
     for cw in cands[:4]:
         rig("run", "arbor", "msg", "action", "focus-window", "--id", str(cw["id"]))
-        menus, dump, t1, refocused = [], {}, time.time(), False
+        menus, dump, t1, refocused, dump_ok = [], {}, time.time(), False, False
         while time.time() - t1 < wait_menu:
             time.sleep(1.0)
             if not refocused and time.time() - t1 > wait_menu / 2 and not any(n for _, n in menus):
@@ -422,6 +422,7 @@ def attempt_windows(attr, before, win, wait_menu, escaped=False):
             r = rig("dump", timeout=20)
             try:
                 dump = json.loads(r.stdout)
+                dump_ok = True
             except Exception:
                 dump = {}
             menus = app_menus(dump)
@@ -437,7 +438,8 @@ def attempt_windows(attr, before, win, wait_menu, escaped=False):
                                gtk_menu=w.get("gtk_menu")),
                    route=route, request=req,
                    menus=[f"{l}:{n}" for l, n in menus], n_items=count_items(dump.get("tree") or dump.get("menu") or {}),
-                   result="menus" if any(n for _, n in menus) else "fallback", n_windows=len(cands))
+                   result="menus" if any(n for _, n in menus) else ("fallback" if dump_ok else "dump-failed"),
+                   n_windows=len(cands))
         if best is None or cur["n_items"] > best["n_items"]:
             best = cur
         if cur["result"] == "menus":
