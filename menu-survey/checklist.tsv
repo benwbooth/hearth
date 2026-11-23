@@ -71,7 +71,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 70	krita	nixpkgs	qt6-widgets	22.310	untested		todo	retest			
 71	gnome-music	nixpkgs	gtk4-adwaita	21.921	burger	atspi	general:atspi-burger	partial		2026-11-22	
 72	obsidian	nixpkgs-unfree	electron	21.840	none	x11	todo	todo		2026-11-22	
-73	gnome-text-editor	nixpkgs	gtk4-adwaita	21.168	burger	atspi	general:atspi-burger	partial		2026-11-22	
+73	gnome-text-editor	nixpkgs	gtk4-adwaita	21.168	burger	atspi	general:atspi-burger+shortcuts+gtk-actions	done		2026-11-22	☰ over AT-SPI (read unseen under ProbeWindow), File/Edit/View/Go/General harvested from its AdwShortcutsDialog (File/New window verified), app actions in the bold menu
 74	telegram-desktop	nixpkgs	qt6-widgets	21.160	full	dbusmenu	general:dbusmenu	done		2026-11-22	
 75	kdePackages.qt6ct	nixpkgs	qt6-widgets	20.770	none	x11	todo	todo		2026-11-22	
 76	zathura	nixpkgs	gtk4	20.230	none	x11	todo	todo		2026-11-22	
