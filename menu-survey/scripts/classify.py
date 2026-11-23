@@ -46,7 +46,8 @@ SYMS = [
     "libdbusmenu", "QMenuBar", "_ZN8QMenuBar", "libmono", "libSkiaSharp", "libHarfBuzzSharp",
     "libgdk_pixbuf", "libnotcurses", "libncurses", "libimgui", "libelementary", "libefl",
     "GTK_IS_MENU_BAR", "gtk_menu_shell_append", "libslint", "winit", "eframe", "egui", "iced",
-    "gpui", "libghostty", "Electron", "libnode.so", "libcairo.so",
+    "gpui", "libghostty", "Electron", "libnode.so", "libcairo.so", "accesskit", "libcosmic", "iced_",
+    "org/eclipse/swt",
 ]
 
 # Closure store-path names -> markers (prefix match on the name after the hash).
@@ -76,6 +77,7 @@ FILES = [
     ("pyfile", r"\.py$"), ("jsfile", r"/share/[^/]+/js/.*\.js$|\.src\.gresource$"), ("gresource", r"\.gresource$"),
     ("exe", r"\.exe$"), ("love", r"\.love$"), ("pck", r"\.pck$"), ("unity", r"UnityPlayer\.so$"),
     ("electron_ver", r"/electron/version$"),
+    ("swt", r"(^|/)(org\.eclipse\.swt[^/]*\.jar|swt[^/]*\.jar|libswt-[^/]*\.so)$"),
 ]
 
 
@@ -261,9 +263,14 @@ def decide(cm, fm, sm):
         return "chromium", "dbusmenu"
     if has("libflutter", "libflutter_linux_gtk.so", "flutter"):
         return "flutter", "custom"
-    if has("wine", "exe", "script:wine"):
+    # Wine only when the program runs through it: a bundled .exe (VirtualBox's
+    # guest tools, Ghidra's...) next to a native toolkit is not a Wine app.
+    if (has("wine", "script:wine") or (has("exe") and not has("jar", "jdk"))) and not main_tk \
+            and not has("libSDL2-2.0.so", "libSDL3.so", "sdl2", "sdl3", "mono", "dotnet", "libmono"):
         return "wine", "custom"
     if has("jar", "libjvm.so", "script:java") or (has("jdk") and not main_tk and not has("qtbase6", "qtbase5", "gtk4")):
+        if has("swt", "org/eclipse/swt"):
+            return "java-swt", "menubar"  # SWT: real GTK 3 menu bars
         return ("javafx" if has("openjfx") else "java-swing"), "menubar"
     if has("libKF6XmlGui.so", "libKF5XmlGui.so") and not has("libKF6Kirigami", "libKirigami"):
         return ("qt6-widgets" if has("libKF6XmlGui.so") else "qt5-widgets"), "menubar"
@@ -307,6 +314,8 @@ def decide(cm, fm, sm):
         return "game-engine", "none"
     if has("sdl2", "sdl3", "glfw", "libSDL2-2.0.so", "libSDL3.so", "libglfw.so"):
         return "sdl-glfw", "none"
+    if has("libcosmic", "iced_") or (has("accesskit") and has("libxkbcommon.so", "libwayland-client.so")):
+        return "custom-accesskit", "menubar"  # iced/libcosmic, egui, Slint: AT-SPI through AccessKit
     if has("libxkbcommon.so", "libwayland-client.so", "libvulkan.so", "libEGL.so", "libGL.so", "libX11.so"):
         return "custom-drawn", "none"
     if has("ncurses", "libncurses"):

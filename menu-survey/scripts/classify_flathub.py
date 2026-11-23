@@ -47,6 +47,8 @@ def decide(app_id, text, runtime):
     rt = (re.search(r"^\s*\"?runtime\"?\s*:\s*\"?([\w.]+)", text, re.M) or [None, runtime])[1] or runtime or ""
     base = (re.search(r"^\s*\"?base\"?\s*:\s*\"?([\w.]+)", text, re.M) or [None, ""])[1]
     hints = []
+    if re.search(r"firefox|gecko|librewolf|waterfox|floorp|zen[-_]browser|betterbird|thunderbird|libxul", t):
+        return "firefox-xul", "menubar-hidden", rt, hints
     if "electron2.baseapp" in t or "electron" in base.lower() or re.search(r"\belectron\b", t) and "zypak" in t:
         return "electron", "menubar", base or rt, hints
     if "org.winehq.wine" in t or re.search(r"\bwine\b", t) and "wine" in base.lower():
