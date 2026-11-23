@@ -839,6 +839,9 @@ class AtspiMenu:
                                 todo.append((c, d + 1))
         except Exception:
             pass
+        if not found:
+            self.pump()
+            found = self.shown_popups()
         if not found and self.frame is not None and self.toolkit.startswith(("GTK", "Qt")):
             # GTK 4 popovers are in the window's own tree, under the button
             # that opened them; so are Qt Quick menus (Kirigami's overflow
@@ -950,6 +953,7 @@ class AtspiMenu:
     def wait(self, test, tries=30):
         """Poll test() every 40 ms (the app answers asynchronously)."""
         for _ in range(tries):
+            self.pump()
             try:
                 r = test()
             except Exception:
@@ -958,6 +962,64 @@ class AtspiMenu:
                 return r
             time.sleep(0.04)
         return None
+
+    # Qt Widgets leave their popup menus (a QToolButton's ☰, submenus) out of
+    # the application's children: they're only announced, by a "showing"
+    # event whose source is the popup. While a Qt ☰ is read, listen for that
+    # (a second or two; no main loop: events are dispatched only here, see
+    # main()) and offer what showed as the app's popups.
+    def listen_popups(self, on):
+        if on and getattr(self, "_pl", None) is None and self.toolkit.startswith("Qt"):
+            self.shown = []
+            pid = self.pid_of_app()
+
+            def cb(e):
+                try:
+                    o = e.source
+                    if e.detail1 and o.get_process_id() == pid and o.get_role() in (
+                            Atspi.Role.POPUP_MENU, Atspi.Role.MENU):
+                        self.shown.append(o)
+                except Exception:
+                    pass
+            self._pl = Atspi.EventListener.new(cb)
+            try:
+                self._pl.register("object:state-changed:showing")
+            except Exception as e:
+                err(f"AT-SPI listener: {e}")
+                self._pl = None
+        elif not on and getattr(self, "_pl", None) is not None:
+            try:
+                self._pl.deregister("object:state-changed:showing")
+            except Exception:
+                pass
+            self._pl = None
+            self.shown = []
+
+    def pid_of_app(self):
+        try:
+            return self.app.get_process_id()
+        except Exception:
+            return -1
+
+    def pump(self):
+        if getattr(self, "_pl", None) is None:
+            return
+        from gi.repository import GLib
+        ctx = GLib.MainContext.default()
+        for _ in range(50):
+            if not ctx.iteration(False):
+                break
+
+    def shown_popups(self):
+        """Qt popups announced since listen_popups(True), still showing."""
+        res = []
+        for o in getattr(self, "shown", []):
+            try:
+                if o.get_state_set().contains(Atspi.StateType.SHOWING) and o.get_child_count() > 0 and o not in res:
+                    res.append(o)
+            except Exception:
+                continue
+        return res
 
     def open_burger(self):
         """Click the ☰ and wait for its popup. A button that keeps its own
@@ -1192,6 +1254,13 @@ class AtspiMenu:
         return False
 
     def learn_burger(self):
+        self.listen_popups(True)
+        try:
+            self._learn_burger()
+        finally:
+            self.listen_popups(False)
+
+    def _learn_burger(self):
         """Read the whole ☰ in one look: are its items submenus (they
         become the menu bar's menus) or commands (one menu), and every
         submenu's items (three levels), kept in the cache file with the
