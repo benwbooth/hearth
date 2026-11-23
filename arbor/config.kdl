@@ -158,7 +158,6 @@ spawn-sh-at-startup "printf 'Xft.dpi: 128\\nXcursor.size: 32\\n' | xrdb -merge"
 // the times from Settings > Sleep & Power).
 // KWallet gets SDDM's password (as Plasma's startup does).
 spawn-at-startup "/run/current-system/sw/libexec/pam_kwallet_init"
-spawn-at-startup "kdeconnect-indicator"
 
 binds {
     Mod+Shift+Slash { show-hotkey-overlay; }
