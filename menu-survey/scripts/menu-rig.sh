@@ -30,7 +30,10 @@ priv_env() {
   export HOME=$R/home XDG_CONFIG_HOME=$R/home/.config XDG_CACHE_HOME=$R/home/.cache
   export XDG_DATA_HOME=$R/home/.local/share XDG_STATE_HOME=$R/home/.local/state
   export XDG_CURRENT_DESKTOP=arbor:KDE XDG_SESSION_DESKTOP=arbor
-  export QT_QPA_PLATFORM=wayland QT_QPA_PLATFORMTHEME=kde
+  # As the live session (arbor/config.kdl): Qt's xdgdesktopportal theme.
+  # Plasma's kde theme picks the org.kde.desktop style, whose Kirigami
+  # hearth no longer has: hearth failed to load, every app looked menu-less.
+  export QT_QPA_PLATFORM=wayland QT_QPA_PLATFORMTHEME=xdgdesktopportal
   unset DISPLAY
   [[ -s $R/arbor.env ]] && { export WAYLAND_DISPLAY=$(grep ^WAYLAND_DISPLAY= "$R/arbor.env" | cut -d= -f2-)
     export ARBOR_SOCKET=$(grep -E '^(ARBOR|NIRI)_SOCKET=' "$R/arbor.env" | head -1 | cut -d= -f2-)
@@ -70,7 +73,11 @@ EOF
   # hearth reads X11 windows' menus with xprop: it needs the satellite's
   # DISPLAY, as arbor gives it in a real session (priv_env unsets it for
   # apps, which get it explicitly when they should be X11).
+  # hearth with only its own Qt plugins and QML, as devloop starts it: the
+  # session's QT_PLUGIN_PATH still has Plasma's kde platform theme (the
+  # org.kde.desktop style, whose Kirigami hearth no longer ships).
   DISPLAY=$(grep ^DISPLAY= "$R/arbor.env" | cut -d= -f2-) \
+    QT_PLUGIN_PATH= QML2_IMPORT_PATH= \
     HEARTH_SESSION_DRYRUN=1 HEARTH_POLKIT=0 daemon "$R/hearth.pid" "$R/hearth.log" "$H/libexec/hearth-shell"
   sleep 4
   echo "rig up: WAYLAND_DISPLAY=$WAYLAND_DISPLAY bus=$DBUS_SESSION_BUS_ADDRESS hearth pid=$(hearth_pid)"
