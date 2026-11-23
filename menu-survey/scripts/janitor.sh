@@ -28,7 +28,11 @@ for fn in glob.glob("data/probe*.jsonl"):
 if stores:
     ours = set(run(["nix-store", "-qR", *sorted(stores)]).stdout.split())
     dead = set(run(["nix-store", "--gc", "--print-dead"]).stdout.split())
-    todo = ours & dead
+    # Dead paths that still reference ours (left from earlier runs) keep
+    # ours from going: nix refuses a path whose referrers stay. Take them too
+    # (dead means nothing roots them).
+    refs = set(run(["nix-store", "-q", "--referrers-closure", *sorted(ours & dead)]).stdout.split())
+    todo = (ours | refs) & dead
     print(time.strftime("%T"), f"nix: {len(todo)} dead paths from tested apps", flush=True)
     freed, rounds = 0.0, 0
     # One call for the whole set. A path that came alive meanwhile (a
