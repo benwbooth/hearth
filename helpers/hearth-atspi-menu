@@ -426,6 +426,13 @@ class AtspiMenu:
                                      web=True)
                     if mb is not None:
                         kind = "web"
+                    else:
+                        # A menu bar without the menu bar role: Thunderbird's
+                        # and Zen's hidden XUL menu bar shows as a toolbar of
+                        # menus. Kept like a real one.
+                        mb = self.search(A, f, self.is_menu_row, web=False)
+                        if mb is not None:
+                            kind = "kept"
                 trigger = None
                 if kind is None:
                     trigger = self.search(A, f, self.is_burger, web=True) or self.unnamed_burger(A, f)
@@ -461,6 +468,27 @@ class AtspiMenu:
         invisible menu bar, named "Popup menu", "Menu Popup HeaderBar"...
         (Remmina): never a title."""
         return bool(name) and "popup" not in name.lower()
+
+    STD_TITLES = {"file", "edit", "view", "help", "tools", "go", "bookmarks", "history", "window",
+                  "message", "insert", "format", "options", "settings"}
+
+    def is_menu_row(self, o, r):
+        """A container whose children are mostly titled menus, one of them a
+        standard title (File, Edit, View...): a menu bar in all but role."""
+        A = Atspi
+        if r in (A.Role.MENU, A.Role.MENU_BAR, A.Role.MENU_ITEM):
+            return False
+        try:
+            n = o.get_child_count()
+            if n < 3 or n > 30:
+                return False
+            kids = [o.get_child_at_index(i) for i in range(n)]
+            menus = [k for k in kids if k is not None and k.get_role() == A.Role.MENU
+                     and self.is_title(k.get_name() or "")]
+        except Exception:
+            return False
+        names = {(k.get_name() or "").strip().lower().replace("_", "") for k in menus}
+        return len(menus) >= 3 and len(menus) * 2 >= n and bool(names & self.STD_TITLES)
 
     def has_titles(self, mb):
         try:
