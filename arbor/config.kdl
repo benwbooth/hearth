@@ -243,8 +243,8 @@ binds {
     Mod+X hotkey-overlay-title="Zoom in (camera)" { camera-zoom-in; }
     Mod+A hotkey-overlay-title="Show all docked windows" { camera-show-all; }
     Mod+Shift+F hotkey-overlay-title="Frame this window" { camera-frame-window; }
-    Mod+Ctrl+Left hotkey-overlay-title="Camera back" { camera-back; }
-    Mod+Ctrl+Right hotkey-overlay-title="Camera forward" { camera-forward; }
+    Mod+Ctrl+Up hotkey-overlay-title="Camera back" { camera-back; }
+    Mod+Ctrl+Down hotkey-overlay-title="Camera forward" { camera-forward; }
 
     // Overview (Mission Control) and workspaces.
     Mod+W repeat=false hotkey-overlay-title="Overview" { toggle-overview; }
@@ -258,10 +258,21 @@ binds {
     Ctrl+F7 { focus-workspace 7; }
     Ctrl+F8 { focus-workspace 8; }
     Ctrl+F9 { focus-workspace 9; }
-    Mod+Ctrl+Up    { focus-workspace-up; }
-    Mod+Ctrl+Down  { focus-workspace-down; }
-    Mod+Ctrl+Shift+Up   { move-window-to-workspace-up; }
-    Mod+Ctrl+Shift+Down { move-window-to-workspace-down; }
+    // Workspaces run left to right: Super+Ctrl+arrows go there, with Shift
+    // the window comes along. Ctrl+Shift+F-number moves it to that workspace.
+    Mod+Ctrl+Left  { focus-workspace-up; }
+    Mod+Ctrl+Right { focus-workspace-down; }
+    Mod+Ctrl+Shift+Left  { move-window-to-workspace-up; }
+    Mod+Ctrl+Shift+Right { move-window-to-workspace-down; }
+    Ctrl+Shift+F1 { move-window-to-workspace 1; }
+    Ctrl+Shift+F2 { move-window-to-workspace 2; }
+    Ctrl+Shift+F3 { move-window-to-workspace 3; }
+    Ctrl+Shift+F4 { move-window-to-workspace 4; }
+    Ctrl+Shift+F5 { move-window-to-workspace 5; }
+    Ctrl+Shift+F6 { move-window-to-workspace 6; }
+    Ctrl+Shift+F7 { move-window-to-workspace 7; }
+    Ctrl+Shift+F8 { move-window-to-workspace 8; }
+    Ctrl+Shift+F9 { move-window-to-workspace 9; }
     Mod+WheelScrollDown cooldown-ms=150 { focus-workspace-down; }
     Mod+WheelScrollUp   cooldown-ms=150 { focus-workspace-up; }
 
