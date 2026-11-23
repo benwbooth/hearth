@@ -75,6 +75,8 @@
       usbutils vulkan-tools
       # Bluetooth settings (bar/indicators/Bluetooth.qml), in tessera.
       bluetuith
+      # Cloud drives (helpers/hearth-rclone, Settings > Accounts).
+      rclone
     ];
 
     # The `kde` platform theme picks the org.kde.desktop Controls style, which

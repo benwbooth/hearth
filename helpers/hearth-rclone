@@ -1,0 +1,399 @@
+#!/usr/bin/env python3
+"""hearth-rclone: cloud drives for Settings > Accounts > Cloud Drives.
+
+Every kind of drive rclone knows (Google Drive, OneDrive, S3, SFTP... about
+70 backends) is set up through rclone's own config, so all apps that use
+rclone (grove, mounts, backups) see the same drives. Prints one JSON line.
+
+  hearth-rclone providers          -> {"ok", "providers": [{name, prefix, title,
+                                       description, preset, popular, rank}]}
+                                      (S3's sub-providers are entries of their
+                                      own with preset {"provider": "..."})
+  hearth-rclone options TYPE       -> {"ok", "options": [...]} rclone's questions
+                                      for that backend (secrets never filled in)
+  hearth-rclone drives             -> {"ok", "drives": [{name, type, summary}]}
+                                      (no secrets: tokens, keys and passwords
+                                      are left out)
+  hearth-rclone get NAME           -> {"ok", "type", "values": {...}, "secrets": [...]}
+                                      its settings; passwords, keys and tokens
+                                      are only named in "secrets", never shown
+  hearth-rclone delete NAME
+  hearth-rclone rename OLD NEW
+  hearth-rclone test NAME          -> {"ok", "summary"} (rclone about / lsd, 25 s)
+  hearth-rclone cancel             stop a step that's waiting (a browser
+                                   sign-in the user gave up on)
+  hearth-rclone step               reads one JSON line on stdin:
+      {name, type, params: {option: value}, passwords: [option...],
+       state, result, password: bool, started: bool}
+    With "update": true the first call changes an existing drive's
+    settings instead (`rclone config update NAME k=v...`).
+    The first call (no state, started false) creates the drive from the
+    form's answers (`rclone config create NAME TYPE k=v... --non-interactive`;
+    password options obscured first); later calls answer the backend's own
+    questions (`config update NAME --continue --state S --result R`).
+    -> {"state", "option", "error"} for the next question, {"done": true},
+       or {"error"} (nothing changed when it fails on the first call).
+
+RCLONE_CONFIG picks the config file as for rclone itself (tests point it at
+a scratch file). On failure {"ok": false, "error": "<plain-language reason>"}.
+"""
+import configparser
+import json
+import os
+import re
+import shutil
+import signal
+import subprocess
+import sys
+
+RUNTIME = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
+PIDFILE = os.path.join(RUNTIME, "hearth-rclone-%d.pid" % os.getuid())
+
+# Backends people pick most, shown first (rclone names, "s3:<provider>").
+POPULAR = [
+    "drive", "onedrive", "dropbox", "iclouddrive", "protondrive", "box", "pcloud", "mega",
+    "s3:AWS", "s3:Cloudflare", "b2", "s3:Wasabi", "sftp", "webdav", "smb", "ftp",
+    "google photos", "koofr", "yandex", "seafile", "jottacloud", "s3:DigitalOcean",
+    "s3:Minio", "internetarchive", "crypt",
+]
+
+# Keys in a drive's config that say what it is without giving anything away.
+SUMMARY_KEYS = ["provider", "host", "user", "username", "url", "endpoint", "region", "remote",
+                "upstreams", "account", "vendor", "apple_id", "email", "drive_type", "scope"]
+SECRET = re.compile(r"pass|secret|token|key|cookie|credential|sas_url|connection_string|otp", re.I)
+
+
+def out(**kw):
+    print(json.dumps(kw), flush=True)
+
+
+def fail(msg):
+    out(ok=False, error=msg)
+    sys.exit(1)
+
+
+def have_rclone():
+    if not shutil.which("rclone"):
+        fail("Cloud drives need rclone, which isn't installed.")
+
+
+def run(args, timeout=60, stdin=None):
+    return subprocess.run(["rclone"] + args, capture_output=True, text=True, timeout=timeout,
+                          input=stdin, stdin=None if stdin is not None else subprocess.DEVNULL)
+
+
+def last_error(stderr, fallback="rclone stopped"):
+    lines = [l for l in (stderr or "").splitlines() if l.strip() and "NOTICE" not in l]
+    if not lines:
+        return fallback
+    line = lines[-1].strip()
+    # "2026/01/01 12:00:00 ERROR : x: message" / "Error: message"
+    line = re.sub(r"^\d{4}/\d\d/\d\d \d\d:\d\d:\d\d (ERROR|CRITICAL|Failed to \w+)\s*:?\s*", "", line)
+    line = re.sub(r"^(Error|Failed to \w+):\s*", "", line)
+    line = re.sub(r'^Failed to create file system for "[^"]*":\s*', "", line)
+    line = re.sub(r"^NewFs:\s*", "", line)
+    return line[:400]
+
+
+def all_providers():
+    r = run(["config", "providers"])
+    if r.returncode != 0:
+        fail("rclone couldn't list the kinds of drives.")
+    return json.loads(r.stdout)
+
+
+def short_desc(d):
+    m = re.match(r"^(.*?)(\s+including\b|\s*\(|,)", d or "")
+    return m.group(1) if m and len(m.group(1)) > 2 else (d or "")
+
+
+def cmd_providers():
+    have_rclone()
+    res = []
+    for p in all_providers():
+        if p.get("Hide"):
+            continue
+        name = p["Name"]
+        res.append({"name": name, "prefix": p.get("Prefix", name), "title": short_desc(p["Description"]),
+                    "description": p["Description"], "preset": {}})
+        if name == "s3":
+            for o in p["Options"]:
+                if o["Name"] == "provider":
+                    for e in o.get("Examples") or []:
+                        v = e["Value"]
+                        if v == "Other":
+                            title = "Other S3-compatible storage"
+                        else:
+                            title = (e.get("Help") or v).split("\n")[0]
+                        res.append({"name": "s3", "prefix": "s3", "title": title, "description": "S3 storage: " + title,
+                                    "preset": {"provider": v}, "key": "s3:" + v})
+                    break
+    for r in res:
+        key = r.get("key") or r["name"]
+        r["key"] = key
+        r["rank"] = POPULAR.index(key) if key in POPULAR else 999
+        r["popular"] = r["rank"] < 999
+    res.sort(key=lambda r: (r["rank"], r["title"].lower()))
+    out(ok=True, providers=res)
+
+
+def cmd_options(typ):
+    have_rclone()
+    for p in all_providers():
+        if p["Name"] == typ or p.get("Prefix") == typ:
+            opts = []
+            for o in p["Options"]:
+                if (o.get("Hide") or 0) & 2:      # hidden from the configurator
+                    continue
+                opts.append({k: o.get(k) for k in ("Name", "Help", "Provider", "DefaultStr", "Examples", "Required",
+                                                    "IsPassword", "Advanced", "Exclusive", "Type", "Sensitive")})
+            out(ok=True, type=p["Name"], options=opts)
+            return
+    fail("rclone doesn't know a drive of kind “%s”." % typ)
+
+
+def dump():
+    r = run(["config", "dump"])
+    if r.returncode != 0:
+        fail("Couldn't read rclone's drives: " + last_error(r.stderr))
+    try:
+        return json.loads(r.stdout or "{}")
+    except ValueError:
+        return {}
+
+
+def cmd_drives():
+    have_rclone()
+    drives = []
+    for name, conf in sorted(dump().items(), key=lambda kv: kv[0].lower()):
+        bits = []
+        for k in SUMMARY_KEYS:
+            v = conf.get(k)
+            if v and not SECRET.search(k):
+                bits.append(str(v))
+        drives.append({"name": name, "type": conf.get("type", ""), "summary": " · ".join(bits[:3]),
+                       "signedIn": "token" in conf})
+    out(ok=True, drives=drives)
+
+
+def cmd_get(name):
+    have_rclone()
+    conf = dump().get(name)
+    if conf is None:
+        fail("There's no drive called “%s”." % name)
+    values, secrets = {}, []
+    for k, v in conf.items():
+        if k == "type":
+            continue
+        if SECRET.search(k) and k not in ("key_file", "key_use_agent", "pubkey_file", "service_account_file", "box_config_file"):
+            secrets.append(k)
+        else:
+            values[k] = v
+    out(ok=True, type=conf.get("type", ""), values=values, secrets=secrets)
+
+
+def valid_name(name):
+    return bool(name) and not re.search(r"[:/\\]", name) and not name.startswith("-") and name == name.strip()
+
+
+def cmd_delete(name):
+    have_rclone()
+    r = run(["config", "delete", name])
+    if r.returncode != 0:
+        fail("Couldn't remove “%s”: %s" % (name, last_error(r.stderr)))
+    out(ok=True)
+
+
+def cmd_rename(old, new):
+    have_rclone()
+    new = new.strip()
+    if not valid_name(new):
+        fail("Give the drive a name without “:”, “/” or “\\”.")
+    if new in dump():
+        fail("There's already a drive called “%s”." % new)
+    # rclone has no rename: move the section in its config file (rclone
+    # writes the file the same way: no comments kept).
+    r = run(["config", "file"])
+    path = (r.stdout or "").strip().splitlines()[-1] if r.returncode == 0 else ""
+    try:
+        with open(path) as f:
+            text = f.read()
+    except OSError:
+        fail("Couldn't read rclone's config file.")
+    if text.startswith("# Encrypted rclone configuration"):
+        fail("rclone's config file is encrypted; rename the drive with `rclone config`.")
+    cp = configparser.RawConfigParser(interpolation=None, strict=False)
+    cp.optionxform = str
+    cp.read_string(text)
+    if not cp.has_section(old):
+        fail("There's no drive called “%s”." % old)
+    items = cp.items(old)
+    out_lines = []
+    for sec in cp.sections():
+        out_lines.append("[%s]" % (new if sec == old else sec))
+        for k, val in (items if sec == old else cp.items(sec)):
+            out_lines.append("%s = %s" % (k, val))
+        out_lines.append("")
+    tmp = path + ".hearth-tmp"
+    with open(tmp, "w") as f:
+        f.write("\n".join(out_lines))
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, path)
+    out(ok=True, name=new)
+
+
+def human(n):
+    for unit in ("bytes", "KB", "MB", "GB", "TB", "PB"):
+        if abs(n) < 1000 or unit == "PB":
+            return ("%d %s" % (n, unit)) if unit == "bytes" else ("%.1f %s" % (n, unit))
+        n /= 1000.0
+
+
+def cmd_test(name):
+    have_rclone()
+    try:
+        r = run(["about", name + ":", "--json"], timeout=25)
+        if r.returncode == 0:
+            a = json.loads(r.stdout or "{}")
+            if a.get("used") is not None and a.get("total"):
+                out(ok=True, summary="Works. %s used of %s." % (human(a["used"]), human(a["total"])))
+            elif a.get("used") is not None:
+                out(ok=True, summary="Works. %s used." % human(a["used"]))
+            else:
+                out(ok=True, summary="Works.")
+            return
+        r = run(["lsf", name + ":", "--max-depth", "1", "--dirs-only"], timeout=25)
+        if r.returncode == 0:
+            n = len([l for l in r.stdout.splitlines() if l.strip()])
+            out(ok=True, summary="Works. %d folder%s at the top." % (n, "" if n == 1 else "s"))
+            return
+        fail("It didn't answer: " + last_error(r.stderr))
+    except subprocess.TimeoutExpired:
+        fail("It didn't answer within 25 seconds.")
+
+
+def cmd_cancel():
+    try:
+        with open(PIDFILE) as f:
+            pid = int(f.read().strip())
+        os.kill(pid, signal.SIGTERM)
+    except (OSError, ValueError):
+        pass
+    out(ok=True)
+
+
+def obscure(pw):
+    r = run(["obscure", "-"], stdin=pw, timeout=20)
+    if r.returncode != 0:
+        fail("rclone couldn't prepare the password.")
+    return r.stdout.strip()
+
+
+def rclone_json(args):
+    """Run a config step; rclone waits here for browser sign-ins."""
+    p = subprocess.Popen(["rclone"] + args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE, text=True)
+    try:
+        with open(PIDFILE, "w") as f:
+            f.write(str(p.pid))
+    except OSError:
+        pass
+    so, se = p.communicate()
+    try:
+        os.unlink(PIDFILE)
+    except OSError:
+        pass
+    if p.returncode < 0:
+        fail("Stopped.")
+    try:
+        return json.loads(so.strip())
+    except ValueError:
+        if p.returncode == 0:
+            return {"State": ""}
+        fail(last_error(se))
+
+
+def cmd_step():
+    have_rclone()
+    try:
+        v = json.loads(sys.stdin.readline() or "{}")
+    except ValueError:
+        fail("The setup sent something rclone can't read.")
+    name = (v.get("name") or "").strip()
+    typ = v.get("type") or ""
+    state = v.get("state") or ""
+    result = str(v.get("result") if v.get("result") is not None else "")
+    if not valid_name(name):
+        fail("Give the drive a name without “:”, “/” or “\\”.")
+    if v.get("update") and not state:
+        if name not in dump():
+            fail("There's no drive called “%s”." % name)
+        secret = set(v.get("passwords") or [])
+        args = ["config", "update", name]
+        for k, val in (v.get("params") or {}).items():
+            val = str(val)
+            if k in secret and val:
+                val = obscure(val)
+            args.append("%s=%s" % (k, val))
+        if len(args) == 3:
+            out(ok=True, done=True, name=name, error="")
+            return
+        args += ["--non-interactive", "--no-obscure"]
+    elif not state and not v.get("started"):
+        if name in dump():
+            fail("There's already a drive called “%s”. Pick another name." % name)
+        secret = set(v.get("passwords") or [])
+        args = ["config", "create", name, typ]
+        for k, val in (v.get("params") or {}).items():
+            val = str(val)
+            if val == "":
+                continue
+            if k in secret:
+                val = obscure(val)
+            args.append("%s=%s" % (k, val))
+        args += ["--non-interactive", "--no-obscure"]
+    else:
+        if v.get("password") and result:
+            result = obscure(result)
+        args = ["config", "update", name, "--continue", "--state", state, "--result", result,
+                "--non-interactive", "--no-obscure"]
+    r = rclone_json(args)
+    nxt = r.get("State") or ""
+    if not nxt:
+        out(ok=True, done=True, name=name, error=r.get("Error") or "")
+        return
+    out(ok=True, state=nxt, option=r.get("Option"), error=r.get("Error") or "")
+
+
+def main():
+    a = sys.argv[1:]
+    if not a:
+        fail("usage: hearth-rclone providers|options|drives|delete|rename|test|cancel|step")
+    c = a[0]
+    try:
+        if c == "providers":
+            cmd_providers()
+        elif c == "options" and len(a) == 2:
+            cmd_options(a[1])
+        elif c == "drives":
+            cmd_drives()
+        elif c == "get" and len(a) == 2:
+            cmd_get(a[1])
+        elif c == "delete" and len(a) == 2:
+            cmd_delete(a[1])
+        elif c == "rename" and len(a) == 3:
+            cmd_rename(a[1], a[2])
+        elif c == "test" and len(a) == 2:
+            cmd_test(a[1])
+        elif c == "cancel":
+            cmd_cancel()
+        elif c == "step":
+            cmd_step()
+        else:
+            fail("unknown command")
+    except subprocess.TimeoutExpired:
+        fail("rclone didn't answer in time.")
+
+
+if __name__ == "__main__":
+    main()
