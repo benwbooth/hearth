@@ -272,6 +272,10 @@ def _label(v, tr):
         for k in (key, key.replace("|", "."), key.split(":")[-1], key.split(".")[-1], key.split("|")[-1]):
             if tr.get(k):
                 return tr[k]
+    # Tagged template translation: jt("Menu").t`File`.
+    m = re.search(r"\.t\s*`([^`$]+)`", v)
+    if m:
+        return m.group(1)
     # `__DARWIN__ ? "Preferences…" : "Options…"`: on Linux the else branch.
     m = re.fullmatch(r".+\?\s*(.+?)\s*:\s*([\"'`][^\"'`]*[\"'`])\s*", v, re.S)
     if m:
@@ -399,6 +403,8 @@ def menus_for(path):
                                     best = menus
                         break
                     depth -= 1
+    if not best:
+        best = _loose(files, tr)
     out = []
     for menu in best:
         items = _tidy([it for it in menu["items"] if it == "separator" or "keys" in it
@@ -406,6 +412,48 @@ def menus_for(path):
         if items:
             out.append({"title": menu["label"], "items": items})
     return out
+
+
+def _loose(files, tr):
+    """No array of top-level menus (Bitwarden builds each in its own getter,
+    Teams for Linux exports one): every labelled object with a submenu that
+    isn't inside another, with at least one item hearth can run; at most
+    eight."""
+    found = []
+    for n in files.names():
+        if not n.endswith((".js", ".cjs", ".mjs")) or "node_modules" in n or files.size(n) > MAX_JS:
+            continue
+        try:
+            t = files.read(n)
+        except Exception:
+            continue
+        if "submenu" not in t:
+            continue
+        spans = []
+        for m in re.finditer(r"submenu\s*:\s*\[", t):
+            i, depth = m.start(), 0
+            while i > 0:
+                i -= 1
+                c = t[i]
+                if c in ")]}":
+                    depth += 1
+                elif c in "([{":
+                    if depth == 0:
+                        break
+                    depth -= 1
+            if t[i] != "{":
+                continue
+            end = _match(t, i)
+            if any(a <= i and end <= b for a, b in spans):
+                continue  # inside a menu already taken
+            spans = [(a, b) for a, b in spans if not (i <= a and b <= end)] + [(i, end)]
+        for a, b in spans:
+            menu = _item(t[a:b], tr, 0)
+            if isinstance(menu, dict) and any(isinstance(x, dict) and "keys" in x for x in menu.get("items", [])):
+                found.append(menu)
+        if len(found) >= 8:
+            break
+    return found[:8]
 
 
 def app_path(pid):
