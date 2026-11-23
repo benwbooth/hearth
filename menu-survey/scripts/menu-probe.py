@@ -385,6 +385,8 @@ def desktop_exec(out):
     """First visible Application entry: (exec argv, desktop id)."""
     files = sorted(glob.glob(os.path.join(out, "share/applications/*.desktop")))
     best = None
+    pname = re.sub(r"-(\d[^-]*|wrapped|bin|unwrapped)$", "", re.sub(r"-(\d[^-]*|wrapped|bin|unwrapped)$", "",
+                   os.path.basename(out).split("-", 1)[-1])).lower()
     for fn in files:
         cp = configparser.RawConfigParser(strict=False, interpolation=None)
         try:
@@ -403,15 +405,16 @@ def desktop_exec(out):
         argv = [a for a in argv if not (len(a) == 2 and a.startswith("%"))]
         if not argv:
             continue
-        cand = (argv, os.path.basename(fn))
-        # Prefer the entry named like the package.
-        if best is None or os.path.basename(fn).split(".")[-2].lower() in out.lower():
-            best = cand
-            if os.path.basename(fn).split(".")[-2].lower() in out.lower():
-                break
+        stem = os.path.basename(fn)[:-len(".desktop")].split(".")[-1].lower()
+        # Prefer the entry named like the package, then the plain launcher
+        # (LibreOffice's startcenter "libreoffice %U" over "--base", whose
+        # first window is a wizard dialog without menus).
+        score = (stem == pname or stem.endswith("-" + pname), not any(a.startswith("-") for a in argv[1:]))
+        if best is None or score > best[0]:
+            best = (score, argv, os.path.basename(fn))
     if not best:
         return None, None
-    argv, did = best
+    _, argv, did = best
     while argv and argv[0] == "env":
         argv = argv[1:]
         while argv and "=" in argv[0]:

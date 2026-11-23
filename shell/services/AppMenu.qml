@@ -194,9 +194,9 @@ Singleton {
         // menus' titles with item counts, small enough for any menu (dump of a
         // big menu, KSystemLog's, outgrows an IPC reply).
         function summary(): string {
-            const top = root.tree ? (root.tree.children || []) : [];
+            // What the bar shows (deduped titles), not the raw tree.
             return JSON.stringify({ request: root.request,
-                menus: top.filter(i => i.type !== "separator").map(i => ({ label: i.label,
+                menus: root.topLevel.map(i => ({ label: i.label,
                     items: (i.children || []).filter(c => c.type !== "separator").length })),
                 appMenu: root.gtkAppMenu ? (root.gtkAppMenu.children || []).length : 0 });
         }
