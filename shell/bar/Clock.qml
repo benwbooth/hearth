@@ -78,8 +78,15 @@ Indicator {
         }
     }
 
-    popupContent: ColumnLayout {
+    // A fixed width (a Layout's own implicitWidth follows its widest line, so
+    // the popup grew when a day with long event titles was picked): long
+    // titles end in "…" instead.
+    popupContent: Item {
+        implicitWidth: 360
+        implicitHeight: cal.implicitHeight
+    ColumnLayout {
         id: cal
+        width: parent.width
         property date shown: new Date(clock.date.getFullYear(), clock.date.getMonth(), 1)
         // The day whose events are listed ("" = today, with tomorrow after it).
         property string picked: ""
@@ -87,7 +94,6 @@ Indicator {
         readonly property string dayKey: picked || todayKey
         onShownChanged: Calendar.month = shown
         Component.onCompleted: Calendar.month = shown
-        implicitWidth: 300
         spacing: 6
 
         RowLayout {
@@ -356,5 +362,6 @@ Indicator {
                 }
             }
         }
+    }
     }
 }
