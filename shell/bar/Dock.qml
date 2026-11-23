@@ -419,12 +419,25 @@ PanelWindow {
                 // An arbor from before SetDockTargets: windows shrink toward
                 // the bottom edge instead.
                 if (/unknown variant|SetDockTargets/.test(rep.Err)) dockWin.targetsUnsupported = true;
-                else console.warn("hearth: dock targets:", rep.Err);
+                else { console.warn("hearth: dock targets:", rep.Err); resendTimer.restart(); }
                 dockWin.sentTargets = "";
             }
         });
     }
     Component.onDestruction: sendTargets([])
+    // arbor restarted in place (this shell survives through its Wayland
+    // proxy): the new arbor starts with no slots, so send them again once
+    // the event stream is back (and the window list with it).
+    Connections {
+        target: Compositor.backend
+        ignoreUnknownSignals: true
+        function onStreamingChanged() {
+            if (!Compositor.backend.streaming) return;
+            dockWin.sentTargets = "";
+            resendTimer.restart();
+        }
+    }
+    Timer { id: resendTimer; interval: 700; onTriggered: { dockWin.sentTargets = ""; dockWin.sendTargets(dockWin.minimizeTargets); } }
 
     // --- drag to reorder / remove ---
     property string dragKey: ""
