@@ -19,6 +19,13 @@ Singleton {
         const unit = "app-" + id + "-" + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
         const args = ["systemd-run", "--user", "--collect", "--quiet", "--unit=" + unit,
                       "-p", "ExitType=cgroup"];
+        // On hearth's own display: the user manager's WAYLAND_DISPLAY can be
+        // stale (a nested test session had set it to its own, so apps from
+        // the Dock opened there, or not at all).
+        for (const v of ["WAYLAND_DISPLAY", "DISPLAY"]) {
+            const val = Quickshell.env(v);
+            if (val) args.push("--setenv=" + v + "=" + val);
+        }
         if (entry.workingDirectory) args.push("--working-directory=" + entry.workingDirectory);
         Quickshell.execDetached(args.concat(["--"], cmd));
     }

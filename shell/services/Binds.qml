@@ -176,7 +176,7 @@ Singleton {
         { value: "screenshot-window", label: "arbor's quick window screenshot", group: "Screenshots" },
         { value: "spawn \"hearth-ipc\" \"call\" \"session\" \"lock\"", label: "Lock the screen", group: "System" },
         { value: "spawn \"hearth-ipc\" \"call\" \"session\" \"open\"", label: "Log out, restart or shut down", group: "System" },
-        { value: "spawn \"hearth-ipc\" \"call\" \"settings\" \"open\"", label: "Open hearth Settings", group: "System" },
+        { value: "spawn \"hearth-ipc\" \"call\" \"settings\" \"open\"", label: "Open Settings", group: "System" },
         { value: "spawn \"hearth-ipc\" \"call\" \"help\" \"shortcuts\"", label: "Show keyboard shortcuts", group: "System" },
         { value: "spawn \"hearth-ipc\" \"call\" \"spotlight\" \"toggle\"", label: "Search (apps, files, settings)", group: "Apps & Launcher" },
         { value: "spawn \"hearth-ipc\" \"call\" \"voice\" \"toggle\"", label: "Voice assistant (start/stop listening)", group: "Apps & Launcher" },

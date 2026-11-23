@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 import "../widgets"
 import "../services"
@@ -14,7 +15,9 @@ import ".."
 // will land); right-click for Open, Keep in Dock / Remove from Dock, Open at
 // Login, Show in Files. Typing searches (Enter opens the first match),
 // arrows move the selection, Page Up/Down scroll, Esc clears the search,
-// then closes; a click on empty space closes it.
+// then closes; a click on empty space closes it. Click a section's title
+// to fold it shut or open (remembered). Resting the pointer on an app shows
+// a card with what it is, its command, package, desktop file and more.
 //
 // Motion after macOS: the grid zooms in from slightly larger while it fades
 // in (and back out when it closes), over a dimmed, blurred desktop.
@@ -25,8 +28,18 @@ Scope {
         id: win
         readonly property var targetScreen: Quickshell.screens.find(s => s.name === Launchpad.screenName) || Compositor.focusedScreen
         screen: targetScreen
-        visible: Launchpad.open || stage.opacity > 0.01
-        anchors { top: true; bottom: true; left: true; right: true }
+        // Never unmapped: closed, it's a 1x1 surface that takes no input and
+        // draws nothing. Unmapping dropped the window to a pixel ratio of 1,
+        // so every icon was rasterised again on each open (seconds of blank
+        // icons); this way they're loaded once and opening is instant.
+        readonly property bool shown: Launchpad.open || stage.opacity > 0.01
+        visible: true
+        anchors { top: true; left: true; bottom: shown; right: shown }
+        implicitWidth: shown ? 0 : 1
+        implicitHeight: shown ? 0 : 1
+        mask: shown ? allInput : noInput
+        Region { id: noInput }
+        Region { id: allInput; item: stage }
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Top
         WlrLayershell.namespace: "hearth-launchpad"
@@ -37,6 +50,9 @@ Scope {
         // Device pixels per logical one (4/3 on Ben's display): icons are
         // rasterised at their device size and placed on whole device pixels.
         readonly property real dpr: devicePixelRatio || 1
+        // The screen's size, so the layout doesn't change while it's 1x1.
+        readonly property real sw: targetScreen ? targetScreen.width : width
+        readonly property real sh: targetScreen ? targetScreen.height : height
         function snap(v) { return Math.round(v * dpr) / dpr; }
         readonly property int isz: Math.max(48, Math.min(160, Number(Settings.launchpad.iconSize) || 88))
         readonly property real labelH: Math.round(20 * pt)
@@ -48,7 +64,7 @@ Scope {
         readonly property real sideL: Settings.dock.position === "left" ? dockRoom : 0
         readonly property real sideR: Settings.dock.position === "right" ? dockRoom : 0
         readonly property real bottomRoom: Settings.dock.position === "left" || Settings.dock.position === "right" ? 24 : dockRoom
-        readonly property int cols: Math.max(3, Math.min(9, Math.floor((width - sideL - sideR) * 0.86 / cellW)))
+        readonly property int cols: Math.max(3, Math.min(9, Math.floor((sw - sideL - sideR) * 0.86 / cellW)))
         readonly property real gridW: cols * cellW
 
         // Where every icon goes: items [{ key, a, x, y, row, col }] and
@@ -57,7 +73,8 @@ Scope {
             const items = [], heads = [];
             let y = 0, row = 0;
             for (const g of Launchpad.groups) {
-                if (g.title) { heads.push({ key: "h:" + g.title, title: g.title, y: y }); y += headH; }
+                if (g.title) { heads.push({ key: "h:" + g.id, id: g.id, title: g.title, collapsed: g.collapsed, count: g.items.length, y: y }); y += headH; }
+                if (g.collapsed) { y += Math.round(6 * pt); continue; }
                 for (let i = 0; i < g.items.length; i++) {
                     const c = i % cols, r = Math.floor(i / cols);
                     items.push({ key: g.items[i].key, a: g.items[i], x: c * cellW, y: y + r * cellH, row: row + r, col: c });
@@ -68,6 +85,10 @@ Scope {
             }
             return { items: items, heads: heads, height: y };
         }
+
+        // Loading the icons out of view waits until the visible ones are in.
+        property bool prefetch: false
+        Timer { running: true; interval: 4000; onTriggered: win.prefetch = true }
 
         // --- selection (keyboard) ---
         property int sel: 0
@@ -90,8 +111,56 @@ Scope {
         function ensureVisible() {
             const it = current;
             if (!it) return;
-            if (it.y < flick.contentY) flick.contentY = Math.max(0, it.y - headH);
-            else if (it.y + cellH > flick.contentY + flick.height) flick.contentY = it.y + cellH - flick.height;
+            if (it.y < flick.contentY) scrollTo(Math.max(0, it.y - headH));
+            else if (it.y + cellH > flick.contentY + flick.height) scrollTo(it.y + cellH - flick.height);
+        }
+
+        // --- scrolling ---
+        // One wheel handler over the whole Launchpad (the grid's own
+        // Flickable wheel handling only worked beside the grid, and a
+        // pixel snap on every change stopped its flicks). Mouse wheel:
+        // smooth steps of about a row. Trackpad: follows the fingers, then
+        // glides on with the speed it had when they lift.
+        readonly property real maxY: Math.max(0, layout.height - flick.height)
+        function clampY(v) { return Math.max(0, Math.min(maxY, v)); }
+        function scrollTo(v) {
+            glide.stop();
+            wheelAnim.stop();
+            wheelAnim.to = snap(clampY(v));
+            wheelAnim.start();
+        }
+        property real wheelTarget: 0
+        property real velocity: 0          // px per ms, trackpad
+        property real lastPadT: 0
+        NumberAnimation { id: wheelAnim; target: flick; property: "contentY"; duration: 220; easing.type: Easing.OutCubic }
+        NumberAnimation { id: glide; target: flick; property: "contentY"; easing.type: Easing.OutQuad }
+        Timer { id: padEnd; interval: 70; onTriggered: win.startGlide() }
+        function startGlide() {
+            const v = velocity;
+            velocity = 0;
+            if (Math.abs(v) < 0.15) { flick.contentY = snap(flick.contentY); return; }
+            // Distance as if decelerating evenly: v * 350 ms, over ~0.7 s.
+            glide.stop();
+            glide.to = snap(clampY(flick.contentY + v * 350));
+            glide.duration = Math.min(900, Math.max(300, Math.abs(v) * 420));
+            glide.start();
+        }
+        function onWheel(e) {
+            hoverCard.hide();
+            if (e.pixelDelta.y !== 0) {
+                wheelAnim.stop();
+                glide.stop();
+                const now = Date.now(), dt = Math.max(1, Math.min(60, now - lastPadT));
+                lastPadT = now;
+                const d = -e.pixelDelta.y;
+                flick.contentY = clampY(flick.contentY + d);
+                velocity = velocity * 0.6 + (d / dt) * 0.4;
+                if (e.phase === Qt.ScrollEnd) { padEnd.stop(); startGlide(); }
+                else padEnd.restart();
+            } else if (e.angleDelta.y !== 0) {
+                const from = wheelAnim.running ? wheelAnim.to : flick.contentY;
+                scrollTo(from - e.angleDelta.y / 120 * cellH * 0.75);
+            }
         }
 
         // --- the app being dragged toward the Dock ---
@@ -100,6 +169,7 @@ Scope {
         property bool dragOverDock: false
         readonly property var dockHost: screen ? Launchpad.dockHosts[screen.name] || null : null
         function dragMove(a, p) {
+            hoverCard.hide();
             dragApp = a;
             dragPos = p;
             const h = dockHost;
@@ -130,6 +200,7 @@ Scope {
                     win.sel = 0;
                     flick.contentY = 0;
                     menu.close();
+                    hoverCard.hide();
                     closeAnim.stop();
                     openAnim.restart();
                 } else {
@@ -140,12 +211,14 @@ Scope {
                     win.dragApp = null;
                 }
             }
-            function onQueryChanged() { if (field.text !== Launchpad.query) field.text = Launchpad.query; win.sel = 0; flick.contentY = 0; }
+            function onQueryChanged() { if (field.text !== Launchpad.query) field.text = Launchpad.query; win.sel = 0; wheelAnim.stop(); glide.stop(); flick.contentY = 0; hoverCard.hide(); }
         }
 
         Item {
             id: stage
-            anchors.fill: parent
+            width: win.sw
+            height: win.sh
+            visible: win.shown
             opacity: 0
             transform: Translate { x: 0.001; y: 0.001 }
 
@@ -178,7 +251,11 @@ Scope {
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                 onClicked: { if (menu.visible) menu.close(); else Launchpad.hide(); }
-                onWheel: w => { flick.flick(0, w.angleDelta.y * 6); }
+            }
+            WheelHandler {
+                target: null
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                onWheel: e => win.onWheel(e)
             }
 
             Item {
@@ -192,7 +269,7 @@ Scope {
                     id: fieldGlass
                     width: Math.round(280 * win.pt)
                     height: Math.round(32 * win.pt)
-                    x: win.snap((win.width - width) / 2)
+                    x: win.snap((win.sw - width) / 2)
                     y: win.snap(Math.round(46 * win.pt))
                     radius: height / 2
                     tint: Theme.glassColor(Theme.dark ? Qt.rgba(0.2, 0.205, 0.22, 1) : Qt.rgba(0.97, 0.97, 0.975, 1), 0.7)
@@ -255,17 +332,18 @@ Scope {
                 // --- the apps ---
                 Flickable {
                     id: flick
-                    x: win.snap(win.sideL + (win.width - win.sideL - win.sideR - win.gridW) / 2)
+                    x: win.snap(win.sideL + (win.sw - win.sideL - win.sideR - win.gridW) / 2)
                     y: fieldGlass.y + fieldGlass.height + Math.round(26 * win.pt)
                     width: win.gridW
-                    height: win.height - y - win.bottomRoom
+                    height: win.sh - y - win.bottomRoom
                     contentWidth: width
                     contentHeight: win.layout.height
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
                     flickableDirection: Flickable.VerticalFlick
-                    // Scrolled position on whole device pixels (crisp icons).
-                    onContentYChanged: { const s = win.snap(contentY); if (s !== contentY && !moving) contentY = s; }
+                    // Scrolled by win.onWheel / scrollTo (whole device
+                    // pixels at rest, so the icons stay crisp).
+                    interactive: false
 
                     // Empty space between icons closes too.
                     MouseArea {
@@ -276,14 +354,48 @@ Scope {
 
                     Repeater {
                         model: ScriptModel { values: win.layout.heads; objectProp: "key" }
-                        Label {
+                        // A section's title: click to fold it shut or open.
+                        MouseArea {
+                            id: head
                             required property var modelData
-                            x: Math.round(8 * win.pt)
-                            y: modelData.y + Math.round(8 * win.pt)
-                            text: modelData.title
-                            color: Theme.fgSecondary
-                            font.pointSize: Theme.fontSize + 1
-                            font.weight: Font.DemiBold
+                            x: 0
+                            y: modelData.y
+                            width: headRow.implicitWidth + Math.round(20 * win.pt)
+                            height: win.headH
+                            hoverEnabled: true
+                            onClicked: { hoverCard.hide(); Launchpad.toggleSection(modelData.id); }
+                            Rectangle {
+                                anchors.fill: parent
+                                anchors.topMargin: Math.round(4 * win.pt)
+                                anchors.bottomMargin: Math.round(4 * win.pt)
+                                radius: height / 2
+                                color: head.containsMouse ? (Theme.dark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06)) : "transparent"
+                            }
+                            Row {
+                                id: headRow
+                                x: Math.round(10 * win.pt)
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: Math.round(6 * win.pt)
+                                Label {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: head.modelData.collapsed ? "▸" : "▾"
+                                    color: Theme.fgSecondary
+                                    font.pointSize: Theme.fontSize
+                                }
+                                Label {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: head.modelData.title
+                                    color: head.containsMouse ? Theme.fg : Theme.fgSecondary
+                                    font.pointSize: Theme.fontSize + 1
+                                    font.weight: Font.DemiBold
+                                }
+                                Label {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: head.modelData.collapsed ? head.modelData.count + (head.modelData.count === 1 ? " app" : " apps") : ""
+                                    color: Theme.fgDim
+                                    font.pointSize: Theme.fontSize
+                                }
+                            }
                         }
                     }
 
@@ -333,12 +445,22 @@ Scope {
                                     menu.openFor(modelData.a, cell.mapToItem(stage, mouse.x, mouse.y));
                                 } else Launchpad.launch(modelData.a);
                             }
+                            // Icons load once they come near the view (what's on
+                                // screen first), then stay loaded; the rest follow
+                                // in the background a moment after opening.
+                                readonly property bool near: modelData.y + win.cellH > flick.contentY - flick.height * 0.5
+                                                             && modelData.y < flick.contentY + flick.height * 1.5
+                                property bool want: false
+                                onNearChanged: if (near) want = true
+                                Component.onCompleted: if (near) want = true
+                                Connections { target: win; function onPrefetchChanged() { if (win.prefetch) cell.want = true; } }
                             Icon {
+                                visible: cell.want
                                 x: win.snap((win.cellW - win.isz) / 2)
                                 y: Math.round(8 * win.pt)
                                 implicitSize: win.isz
                                 rasterSize: win.isz * win.dpr
-                                name: cell.modelData.a.icon
+                                name: cell.want || win.prefetch ? cell.modelData.a.icon : ""
                                 opacity: cell.dragging ? 0.3 : 1
                                 scale: cell.pressed && !cell.dragging ? 0.92 : 1
                                 Behavior on scale { NumberAnimation { duration: 90 } }
@@ -352,11 +474,11 @@ Scope {
                                 text: cell.modelData.a.name
                                 font.pointSize: Theme.fontSize
                             }
-                            Tooltip {
-                                anchorItem: cell
-                                text: (cell.modelData.a.entry.comment || cell.modelData.a.name) + " · click to open, drag to the Dock to keep it, right-click for options"
-                                hovered: cell.containsMouse && !cell.pressed && !menu.visible && !win.dragApp
+                            onContainsMouseChanged: {
+                                if (containsMouse) hoverCard.restFor(cell.modelData.a, cell);
+                                else hoverCard.leave(cell.modelData.a);
                             }
+                            onPressedChanged: if (pressed) hoverCard.hide()
                         }
                     }
                 }
@@ -406,9 +528,10 @@ Scope {
                 height: menuCol.implicitHeight + 2 * Theme.menuPadding
                 radius: Theme.menuRadius
                 function openFor(a, p) {
+                    hoverCard.hide();
                     app = a;
-                    x = Math.max(8, Math.min(win.width - width - 8, p.x));
-                    y = Math.max(8, Math.min(win.height - height - 8, p.y));
+                    x = Math.max(8, Math.min(win.sw - width - 8, p.x));
+                    y = Math.max(8, Math.min(win.sh - height - 8, p.y));
                     visible = true;
                 }
                 function close() { visible = false; }
@@ -457,6 +580,165 @@ Scope {
                         text: "Show in Files"
                         icon: "system-file-manager"
                         onTriggered: { const k = menuCol.key; menu.close(); Launchpad.hide(); Launchpad.showInFiles(k); }
+                    }
+                }
+            }
+
+            // Details about the app under the pointer, after it rests there:
+            // what it is, its kind and categories, the command it runs, its
+            // package (Flatpak or Nix store), its desktop file, whether it's
+            // in the Dock, running, opened at login, and how often you open it.
+            GlassFrame {
+                id: hoverCard
+                property var app: null
+                property var pending: null
+                property Item anchorCell: null
+                property string fileInfo: ""
+                readonly property var e: app ? app.entry : null
+                visible: opacity > 0.01
+                opacity: shown ? 1 : 0
+                property bool shown: false
+                Behavior on opacity { NumberAnimation { duration: hoverCard.shown ? 140 : 90 } }
+                width: Math.round(360 * win.pt)
+                height: cardCol.implicitHeight + 2 * Math.round(14 * win.pt)
+                radius: Math.round(14 * win.pt)
+                // Nearly solid: the icons under it must not show through.
+                tint: Theme.dark ? Qt.rgba(0.15, 0.155, 0.17, 0.97) : Qt.rgba(0.97, 0.97, 0.975, 0.97)
+                compositorGlass: false
+                shadowBlur: 18
+                shadowY: 5
+                function restFor(a, cell) { pending = a; anchorCell = cell; restTimer.restart(); }
+                function leave(a) { if (pending === a) { restTimer.stop(); pending = null; } if (app === a) hide(); }
+                function hide() { restTimer.stop(); shown = false; }
+                Timer {
+                    id: restTimer
+                    interval: 550
+                    onTriggered: {
+                        const c = hoverCard.anchorCell;
+                        if (!hoverCard.pending || !c || menu.visible || win.dragApp || !Launchpad.open) return;
+                        hoverCard.app = hoverCard.pending;
+                        hoverCard.fileInfo = "";
+                        // Beside the icon, on whichever side has room.
+                        const p = c.mapToItem(stage, 0, 0);
+                        const right = p.x + c.width + 8;
+                        hoverCard.x = win.snap(right + hoverCard.width < stage.width - 16 ? right : p.x - hoverCard.width - 8);
+                        hoverCard.y = win.snap(Math.max(16, Math.min(stage.height - hoverCard.height - 16, p.y)));
+                        hoverCard.shown = true;
+                        fileProc.running = false;
+                        fileProc.command = ["sh", "-c",
+                            'id="$1"; for d in "${XDG_DATA_HOME:-$HOME/.local/share}" $(echo "${XDG_DATA_DIRS:-/run/current-system/sw/share}" | tr : " "); do '
+                            + 'f="$d/applications/$id.desktop"; if [ -f "$f" ]; then echo "$f"; r=$(readlink -f "$f"); [ "$r" != "$f" ] && echo "$r"; '
+                            + 'case "$r" in /nix/store/*) ;; *) stat -c %y "$r" | cut -c1-16 ;; esac; exit 0; fi; done', "sh", hoverCard.app.key];
+                        fileProc.running = true;
+                    }
+                }
+                Process {
+                    id: fileProc
+                    stdout: StdioCollector { onStreamFinished: hoverCard.fileInfo = text.trim() }
+                }
+                // The package, from the command: Flatpak, a Nix store path, or the PATH.
+                readonly property string pkg: {
+                    if (!e) return "";
+                    const x = e.execString || "";
+                    const fp = x.match(/flatpak\s+run\s+(?:--\S+\s+)*([\w.-]+)/);
+                    if (fp) return "Flatpak · " + fp[1];
+                    const ns = x.match(/\/nix\/store\/[a-z0-9]{32}-([^/\s]+)/);
+                    if (ns) return "Nix · " + ns[1];
+                    const f = fileInfo.match(/\/nix\/store\/[a-z0-9]{32}-([^/\s]+)/);
+                    if (f) return "Nix · " + f[1];
+                    if (/flatpak\/exports/.test(fileInfo)) return "Flatpak";
+                    return "";
+                }
+                readonly property var group: app ? TaskGroups.groups.find(g => g.key === app.key) : null
+                readonly property int windows: group ? group.windows.length : 0
+                readonly property int opens: app ? (Spotlight.usage["app:" + app.key] || 0) : 0
+                function row(label, value) { return value ? [{ l: label, v: value }] : []; }
+                readonly property var rows: !e ? [] : [].concat(
+                    row("Kind", Launchpad.sectionTitle(app.section)),
+                    row("Categories", (e.categories || []).join(", ")),
+                    row("Keywords", (e.keywords || []).join(", ")),
+                    row("Runs", (e.execString || "") + (e.runInTerminal ? "  (in a terminal)" : "")),
+                    row("Package", pkg),
+                    row("App ID", app.key),
+                    row("Desktop file", fileInfo.split("\n").filter(l => l.startsWith("/")).join("\n→ ")),
+                    row("Modified", fileInfo.split("\n").filter(l => /^\d{4}-/.test(l))[0] || ""),
+                    row("Shortcuts", (e.actions || []).map(a => a.name).join(", ")),
+                    row("Dock", Pins.isPinned(app.key) ? "Kept in the Dock" : "Not in the Dock"),
+                    row("Running", windows ? windows + (windows === 1 ? " window" : " windows") : "No"),
+                    row("At login", Autostart.isOn(app.key) ? "Opens at login" : ""),
+                    row("Opened", opens ? opens + (opens === 1 ? " time from Search or Launchpad" : " times from Search or Launchpad") : ""))
+                Rectangle {
+                    anchors.fill: parent
+                    radius: hoverCard.radius
+                    color: Theme.dark ? Qt.rgba(0.13, 0.135, 0.15, 0.94) : Qt.rgba(0.97, 0.97, 0.975, 0.94)
+                }
+                Column {
+                    id: cardCol
+                    x: Math.round(14 * win.pt)
+                    y: Math.round(14 * win.pt)
+                    width: hoverCard.width - 2 * x
+                    spacing: Math.round(8 * win.pt)
+                    Row {
+                        spacing: Math.round(12 * win.pt)
+                        Icon {
+                            implicitSize: Math.round(52 * win.pt)
+                            rasterSize: Math.round(52 * win.pt) * win.dpr
+                            name: hoverCard.app ? hoverCard.app.icon : ""
+                        }
+                        Column {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: cardCol.width - Math.round(64 * win.pt)
+                            Label {
+                                width: parent.width
+                                text: hoverCard.e ? hoverCard.e.name : ""
+                                font.pointSize: Theme.fontSize + 3
+                                font.weight: Font.DemiBold
+                            }
+                            Label {
+                                width: parent.width
+                                visible: text !== ""
+                                text: hoverCard.e ? hoverCard.e.genericName : ""
+                                color: Theme.fgSecondary
+                            }
+                        }
+                    }
+                    Label {
+                        width: parent.width
+                        visible: text !== ""
+                        text: hoverCard.e ? hoverCard.e.comment : ""
+                        wrapMode: Text.Wrap
+                        elide: Text.ElideNone
+                    }
+                    Rectangle { width: parent.width; height: 1; color: Theme.dark ? Qt.rgba(1, 1, 1, 0.1) : Qt.rgba(0, 0, 0, 0.08) }
+                    Repeater {
+                        model: hoverCard.rows
+                        Row {
+                            required property var modelData
+                            spacing: Math.round(8 * win.pt)
+                            Label {
+                                width: Math.round(86 * win.pt)
+                                text: modelData.l
+                                color: Theme.fgSecondary
+                                font.pointSize: Theme.smallFontSize
+                                horizontalAlignment: Text.AlignRight
+                            }
+                            Label {
+                                width: cardCol.width - Math.round(94 * win.pt)
+                                text: modelData.v
+                                font.pointSize: Theme.smallFontSize
+                                wrapMode: Text.WrapAnywhere
+                                elide: Text.ElideNone
+                                maximumLineCount: 4
+                            }
+                        }
+                    }
+                    Label {
+                        width: parent.width
+                        text: "Click to open · drag to the Dock to keep it · right-click for options"
+                        color: Theme.fgDim
+                        font.pointSize: Theme.smallFontSize
+                        wrapMode: Text.Wrap
+                        elide: Text.ElideNone
                     }
                 }
             }

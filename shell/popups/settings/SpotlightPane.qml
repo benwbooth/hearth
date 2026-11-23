@@ -92,7 +92,7 @@ ColumnLayout {
                 { key: "documents", label: "Documents", note: "Text, PDFs, office files: by name and by what's inside." },
                 { key: "folders", label: "Folders", note: "Folders whose names match." },
                 { key: "images", label: "Images", note: "Pictures and photos, with thumbnails." },
-                { key: "settings", label: "System Settings", note: "hearth Settings panes, like Wallpaper or Displays." },
+                { key: "settings", label: "System Settings", note: "Settings panes, like Wallpaper or Displays." },
                 { key: "actions", label: "Actions", note: "Things hearth can do right away: lock, screenshot, next wallpaper…" },
                 { key: "calculator", label: "Calculator and conversions", note: "Type 2^10, 15% of 80, 5 ft to m, 72F in C or 100 USD in EUR." },
                 { key: "other", label: "Other files", note: "Music, videos and everything else." }

@@ -60,7 +60,16 @@ Singleton {
         return out.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
     }
 
-    // What the grid shows: [{ title, items }]. A search is one flat,
+    // Collapse or expand a section (remembered in settings).
+    function toggleSection(id) {
+        const shut = (Settings.launchpad.collapsed || []).slice();
+        const i = shut.indexOf(id);
+        if (i >= 0) shut.splice(i, 1); else shut.push(id);
+        Settings.set("launchpad.collapsed", shut);
+    }
+    function sectionTitle(id) { const s = sections.find(x => x.id === id); return s ? s.title : ""; }
+
+    // What the grid shows: [{ id, title, collapsed, items }]. A search is one flat,
     // best-first list ("Results").
     readonly property var groups: {
         const q = query.trim().toLowerCase();
@@ -75,10 +84,12 @@ Singleton {
                 if (s > 0) hits.push({ a: a, s: s + Spotlight.boost("app:" + e.id) });
             }
             hits.sort((x, y) => y.s - x.s);
-            return [{ title: "", items: hits.map(h => h.a) }];
+            return [{ id: "", title: "", collapsed: false, items: hits.map(h => h.a) }];
         }
-        if (Settings.launchpad.group !== "category") return [{ title: "", items: apps }];
-        return sections.map(s => ({ title: s.title, items: apps.filter(a => a.section === s.id) }))
+        if (Settings.launchpad.group !== "category") return [{ id: "", title: "", collapsed: false, items: apps }];
+        const shut = Settings.launchpad.collapsed || [];
+        return sections.map(s => ({ id: s.id, title: s.title, collapsed: shut.indexOf(s.id) >= 0,
+                                    items: apps.filter(a => a.section === s.id) }))
                        .filter(g => g.items.length > 0);
     }
 
@@ -106,6 +117,7 @@ Singleton {
         function open(): void { root.show(); }
         function close(): void { root.hide(); }
         function search(text: string): void { if (!root.open) root.show(); root.query = text; }
+        function toggleSection(id: string): void { root.toggleSection(id); }
         function state(): string { return JSON.stringify({ open: root.open, apps: root.apps.length, groups: root.groups.map(g => g.title + ":" + g.items.length) }); }
     }
 }

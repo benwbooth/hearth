@@ -488,7 +488,7 @@ Scope {
                                     const r = preview.r;
                                     if (!r) return "";
                                     if (r.kind === "app") return (r.entry.comment || r.entry.genericName || "Application");
-                                    if (r.kind === "settings") return "Opens " + r.title + " in hearth Settings";
+                                    if (r.kind === "settings") return "Opens " + r.title + " in Settings";
                                     if (r.kind === "action") return r.item.keys ? "Shortcut: " + r.item.keys : "Runs this action";
                                     if (r.kind === "calc") return "Enter copies the result";
                                     if (r.kind === "web") return "Opens a web search in your browser";

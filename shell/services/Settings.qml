@@ -67,7 +67,8 @@ Singleton {
         // Launchpad (popups/LaunchpadWindow.qml): every installed app.
         launchpad: {
             group: "category",          // "category" (sections like Internet, Games...) | "name" (A to Z)
-            iconSize: 88                // px
+            iconSize: 88,               // px
+            collapsed: []               // section ids folded shut (click a section's title)
         },
         notifications: {
             timeout: 6,                 // s a banner stays

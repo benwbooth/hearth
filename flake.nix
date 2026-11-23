@@ -190,13 +190,19 @@
         # sessions, which run with their own). A test shell that shares the
         # runtime dir anyway (HEARTH_SESSION_DRYRUN=1, or another Wayland
         # display) is skipped: it took Super+L and every shortcut once.
-        pid=""
+        # When no shell is on our WAYLAND_DISPLAY, the newest non-test one is
+        # used: apps started as user services get the user manager's
+        # WAYLAND_DISPLAY, which a test session had once left pointing at its
+        # own display (the Settings app then never opened).
+        pid="" any=""
         for p in \$(${quickshell}/bin/quickshell list --all --json 2>/dev/null | ${pkgs.jq}/bin/jq -r '[.[] | select(.config_path | test("^/nix/store/[^/]*-hearth-[^/]*/share/hearth/shell/shell.qml\$"))] | sort_by(.launch_time) | reverse | .[].pid'); do
           env=\$(tr '\\0' '\\n' < /proc/\$p/environ 2>/dev/null) || continue
           case "\$env" in *HEARTH_SESSION_DRYRUN=1*) continue ;; esac
+          [ -z "\$any" ] && any=\$p
           if [ -n "\$WAYLAND_DISPLAY" ] && ! printf '%s\\n' "\$env" | grep -qx "WAYLAND_DISPLAY=\$WAYLAND_DISPLAY"; then continue; fi
           pid=\$p; break
         done
+        [ -z "\$pid" ] && pid=\$any
         if [ -n "\$pid" ]; then exec ${quickshell}/bin/quickshell ipc --pid "\$pid" "\$@"; fi
         exec ${quickshell}/bin/quickshell ipc -p $out/share/hearth/shell "\$@"
         EOF

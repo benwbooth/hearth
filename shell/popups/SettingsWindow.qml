@@ -36,7 +36,7 @@ Scope {
 
         FloatingWindow {
             id: win
-            title: "hearth Settings"
+            title: "Settings"
             visible: true
             implicitWidth: 920
             implicitHeight: 640

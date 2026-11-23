@@ -223,7 +223,7 @@ Singleton {
         const out = [];
         for (const p of panes) {
             const s = Math.max(score(p.label, q), p.words.split(" ").some(w => w.startsWith(q)) ? 55 : 0);
-            if (s > 0) out.push({ kind: "settings", pane: p.id, title: p.label, subtitle: "hearth Settings", icon: p.icon, score: s, key: "pane:" + p.id });
+            if (s > 0) out.push({ kind: "settings", pane: p.id, title: p.label, subtitle: "Settings", icon: p.icon, score: s, key: "pane:" + p.id });
         }
         return out.sort((a, b) => b.score - a.score).slice(0, 4);
     }
