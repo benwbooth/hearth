@@ -97,7 +97,8 @@ def main():
     a.update(found=True, toolkit=app.get_toolkit_name() or "", name=app.get_name() or "", nodes=0,
              roles={}, menubars=0, menus=0, menu_items=0, menu_buttons=[])
     interesting = {"menu bar", "menu", "menu item", "check menu item", "radio menu item", "push button",
-                   "toggle button", "tool bar", "frame", "document web", "popup menu", "page tab list"}
+                   "button", "push button menu", "toggle button", "tool bar", "frame", "document web",
+                   "popup menu", "page tab list"}
     stack = [app]
     while stack and a["nodes"] < CAP:
         o = stack.pop()
@@ -115,13 +116,13 @@ def main():
             a["menus"] += 1
         elif "menu item" in role:
             a["menu_items"] += 1
-        elif role in ("push button", "toggle button", "menu button"):
+        elif role in ("push button", "button", "toggle button", "menu button", "push button menu"):
             try:
                 name = o.get_name() or ""
                 popup = o.get_state_set().contains(Atspi.StateType.HAS_POPUP)
             except Exception:
                 name, popup = "", False
-            if (popup or MENU_NAME.search(name)) and len(a["menu_buttons"]) < 12:
+            if (popup or role == "push button menu" or MENU_NAME.search(name)) and len(a["menu_buttons"]) < 12:
                 a["menu_buttons"].append({"role": role, "name": name[:60], "popup": popup})
         for i in range(min(n, 400)):
             try:

@@ -463,6 +463,9 @@ def app_path(pid):
         args = open(f"/proc/{pid}/cmdline", "rb").read().decode(errors="replace").split("\0")
     except OSError:
         return ""
+    if len([a for a in args if a]) == 1 and " " in args[0]:
+        # Chromium rewrites its process title: one string, spaces between.
+        args = args[0].split(" ")
     for a in args[1:]:
         if a.endswith(".asar") and os.path.isfile(a):
             return a

@@ -263,9 +263,23 @@ CACHE_FILE = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser
 
 # A ☰ button: an app's whole menu behind one button (Claude Desktop, GNOME
 # apps' "Main Menu", Slack...). Matched by name, in the top of the window.
+def BUTTON_ROLES():
+    """Buttons a ☰ can be: push and toggle buttons, and the "push button
+    menu" role newer AT-SPI gives a button that opens a menu (Qt Quick /
+    Kirigami overflow menus)."""
+    A = Atspi
+    roles = {A.Role.PUSH_BUTTON, A.Role.TOGGLE_BUTTON}
+    if hasattr(A.Role, "PUSH_BUTTON_MENU"):
+        roles.add(A.Role.PUSH_BUTTON_MENU)
+    return roles
+
+
 BURGER_NAMES = {"menu", "main menu", "application menu", "app menu", "open menu",
                 "open application menu", "open main menu", "show menu", "menu button",
-                "hamburger menu", "more options", "options menu"}
+                "hamburger menu", "more options", "options menu",
+                # Kirigami's global drawer: a side panel of the app's actions
+                # (read as a "drawer", see learn_drawer).
+                "open drawer", "show drawer"}
 
 
 def load_cache():
@@ -457,7 +471,7 @@ class AtspiMenu:
 
     def is_burger(self, o, r):
         A = Atspi
-        if r not in (A.Role.PUSH_BUTTON, A.Role.TOGGLE_BUTTON):
+        if r not in BUTTON_ROLES():
             return False
         name = (o.get_name() or "").strip().lower()
         if name not in BURGER_NAMES and not self.holds_items(o):
@@ -478,9 +492,10 @@ class AtspiMenu:
         found = []
 
         def test(o, r):
-            if r not in (A.Role.PUSH_BUTTON, A.Role.TOGGLE_BUTTON) or (o.get_name() or "").strip():
+            if r not in BUTTON_ROLES() or (o.get_name() or "").strip():
                 return False
-            if not o.get_state_set().contains(A.StateType.HAS_POPUP):
+            menu_role = getattr(A.Role, "PUSH_BUTTON_MENU", None)
+            if r != menu_role and not o.get_state_set().contains(A.StateType.HAS_POPUP):
                 return False
             try:
                 e = o.get_component_iface().get_extents(A.CoordType.WINDOW)
@@ -795,9 +810,10 @@ class AtspiMenu:
                                 todo.append((c, d + 1))
         except Exception:
             pass
-        if not found and self.frame is not None and self.toolkit.startswith("GTK"):
+        if not found and self.frame is not None and self.toolkit.startswith(("GTK", "Qt")):
             # GTK 4 popovers are in the window's own tree, under the button
-            # that opened them.
+            # that opened them; so are Qt Quick menus (Kirigami's overflow
+            # menu), drawn inside the window.
             A = Atspi
             test = (lambda o, r: r in (A.Role.MENU, A.Role.POPUP_MENU) and o.get_child_count() > 0
                     and o.get_state_set().contains(A.StateType.SHOWING))
@@ -1023,7 +1039,9 @@ class AtspiMenu:
                 # Then read again, unseen (arbor ProbeWindow), so items the
                 # app changed (recent files, toggles) show while it's open;
                 # at most every 10 s.
-                if time.monotonic() - self.refreshed > 10:
+                # (Not a drawer: it's part of the window, the probe can't
+                # hide it opening; its cache is renewed when a click misses.)
+                if time.monotonic() - self.refreshed > 10 and not (self.burger or {}).get("drawer"):
                     self.refreshed = time.monotonic()
                     self.busy = True
                     self.probe(True)
@@ -1069,14 +1087,91 @@ class AtspiMenu:
         if self.window:
             arbor("probe-window", "--id", str(self.window), "--seconds", "3" if on else "0")
 
+    def visible_actions(self):
+        """Named things the user can press that are showing in the window:
+        {label: accessible}."""
+        A = Atspi
+        roles = {A.Role.PUSH_BUTTON, A.Role.TOGGLE_BUTTON, A.Role.LIST_ITEM, A.Role.MENU_ITEM,
+                 A.Role.PAGE_TAB, A.Role.LINK, A.Role.CHECK_BOX, A.Role.RADIO_BUTTON}
+        if hasattr(A.Role, "PUSH_BUTTON_MENU"):
+            roles.add(A.Role.PUSH_BUTTON_MENU)
+        found = {}
+
+        def test(o, r):
+            if r in roles and o is not self.trigger:
+                try:
+                    name = (o.get_name() or "").strip()
+                    if name and name not in found and o.get_state_set().contains(A.StateType.SHOWING):
+                        found[name] = o
+                except Exception:
+                    pass
+            return False
+        try:
+            self.app.clear_cache()
+        except Exception:
+            pass
+        self.search(A, self.frame, test, web=False)
+        return found
+
+    def learn_drawer(self, before):
+        """The ☰ opened no menu: a drawer or panel (Kirigami's global
+        drawer). Its items are what became visible when it opened; they're
+        read as one flat menu and pressed by name later (click_drawer)."""
+        if not self.press(self.trigger):
+            return
+        new = {}
+        for _ in range(12):
+            time.sleep(0.1)
+            new = {k: v for k, v in self.visible_actions().items() if k not in before}
+            if new:
+                time.sleep(0.25)  # the panel's slide-in: let it finish
+                new = {k: v for k, v in self.visible_actions().items() if k not in before}
+                break
+        self.press(self.trigger)  # close it again
+        if not new:
+            return
+        self.cache = {}
+        items = []
+        for i, label in enumerate(list(new)[:40]):
+            path = (-1, i)
+            items.append(item(self.nid(path), label))
+        self.cache[(-1,)] = items
+        self.tree_read = True
+        self.burger = {"flat": True, "drawer": True,
+                       "labels": [(self.trigger.get_name() or "Menu").strip().title()], "exe": self.exe(),
+                       "tree": {"-1": [self.saved(it) for it in items]}}
+        c = load_cache()
+        c[self.burger_key()] = self.burger
+        save_cache(c)
+
+    def click_drawer(self, label):
+        """Open the drawer, press the item called `label`."""
+        before = self.visible_actions()
+        if label in before:
+            self.press(before[label])
+            return True
+        if not self.press(self.trigger):
+            return False
+        for _ in range(15):
+            time.sleep(0.1)
+            now = self.visible_actions()
+            if label in now:
+                time.sleep(0.2)
+                self.press(self.visible_actions().get(label) or now[label])
+                return True
+        self.press(self.trigger)
+        return False
+
     def learn_burger(self):
         """Read the whole ☰ in one look: are its items submenus (they
         become the menu bar's menus) or commands (one menu), and every
         submenu's items (three levels), kept in the cache file with the
         app's binary, so the menu bar shows them without opening the ☰ again
         (Claude Desktop: each look flashes its menu and takes a second)."""
+        before = self.visible_actions()
         menus = self.open_burger()
         if not menus:
+            self.learn_drawer(before)
             return
         root = menus[0]
         labels, subs = [], 0
@@ -1199,6 +1294,16 @@ class AtspiMenu:
                 self.act(c)  # GTK 3's menu items take the accessible click
             return
         if self.busy:
+            return
+        if self.kind == "burger" and (self.burger or {}).get("drawer"):
+            want = next((k["label"] for k in self.cache.get(tuple(path[:-1]), []) if k["id"] == nid), None)
+            if want:
+                self.busy = True
+                try:
+                    if not self.click_drawer(want):
+                        self.forget_tree()
+                finally:
+                    self.busy = False
             return
         self.busy = True
         try:
