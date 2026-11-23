@@ -41,7 +41,7 @@ Singleton {
         { group: "Windows", title: "Resize window with the mouse", keys: "Super+right-drag" },
         { group: "Windows", title: "Snap window into a zone", keys: "Super+Ctrl+1 … 9, or hold Shift while dragging" },
         { group: "Windows", title: "Next / previous zone layout", keys: "Super+Ctrl+PgDn, Super+Ctrl+PgUp" },
-        { group: "Workspaces & Overview", title: "Overview of all windows", keys: "Super+W, Super+G" },
+        { group: "Workspaces & Overview", title: "Overview of all windows", keys: "Tap Super, or Super+W, Super+G" },
         { group: "Workspaces & Overview", title: "Show desktop", keys: "Super+D" },
         { group: "Workspaces & Overview", title: "Go to workspace 1 … 4", keys: "Ctrl+F1 … F4" },
         { group: "Workspaces & Overview", title: "Previous / next workspace", keys: "Super+Ctrl+Left / Right" },

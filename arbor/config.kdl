@@ -4,6 +4,8 @@
 // Super+Shift+/ shows every shortcut.
 
 input {
+    // Tap Super on its own to show the overview (arbor 929425f9+).
+    mod-tap-overview
     keyboard {
         numlock
     }
