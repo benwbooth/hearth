@@ -55,6 +55,7 @@ minimal one, which records X11 window ids for apps that use RegisterWindow.
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -679,8 +680,9 @@ class AppActions:
              ("app", "show-help-overlay", "Keyboard Shortcuts"), ("app", "help", "Help")]
     FIRST_ID = -3000
 
-    def __init__(self, key, busname, app="", win=""):
+    def __init__(self, key, busname, app="", win="", sink=None):
         self.key, self.bus, self.alive, self.ids, self.sent = key, busname, True, {}, None
+        self.sink, self.menus_sent = sink, None
         self.groups = {}
         for prefix, path in (("app", app), ("win", win)):
             if path:
@@ -706,6 +708,57 @@ class AppActions:
         if menu != self.sent:
             self.sent = menu
             out({"type": "appactions", "key": self.key, "menu": menu})
+        if self.sink:
+            menus = self.action_menus(len(items))
+            if menus != self.menus_sent:
+                self.menus_sent = menus
+                self.sink("gtkactions", menus)
+
+    # Names never shown as commands: internal, or the app menu's already.
+    SKIP = re.compile(r"(^|[-_.])(inspector|debug|show-help-overlay|shortcuts|about|preferences|settings|"
+                      r"prefs|help|quit|new-window|activate|startup|dbus|test)([-_.]|$)")
+    FOLD = [("File", ("new", "open", "save", "close", "print", "export", "import", "tab", "window", "file",
+                      "document", "reload", "rename")),
+            ("Edit", ("undo", "redo", "cut", "copy", "paste", "delete", "select", "find", "search",
+                      "replace", "edit", "clear")),
+            ("View", ("zoom", "fullscreen", "show", "hide", "toggle", "view", "sidebar", "panel", "sort",
+                      "mode", "theme", "layout"))]
+
+    def action_menus(self, first_id_offset):
+        """The window's other exported actions as menus (for a GTK window
+        with no menus and no shortcuts window): labels from the action
+        names, stateful booleans as checkmarks, folded into File / Edit /
+        View / Actions."""
+        menus, order, seen_labels = {}, [], set()
+        for prefix in ("win", "app"):
+            g = self.groups.get(prefix)
+            if not g:
+                continue
+            for name, (enabled, sig, state) in sorted(g.actions.items()):
+                if sig != "" or self.SKIP.search(name):
+                    continue
+                if (prefix, name) in self.ids.values():
+                    continue
+                words = re.split(r"[-_.]+", name)
+                label = " ".join(w[:1].upper() + w[1:] for w in words if w)
+                if not label or label in seen_labels:
+                    continue  # the window's action and the app's of one name: once
+                seen_labels.add(label)
+                low = name.lower()
+                title = next((t for t, keys in self.FOLD if any(k in low for k in keys)), "Actions")
+                nid = self.FIRST_ID - 50 - len(self.ids)
+                self.ids[nid] = (prefix, name)
+                kw = {"enabled": enabled}
+                if state and isinstance(state[0], (bool, dbus.Boolean)):
+                    kw.update(toggleType="checkmark", toggleState=1 if state[0] else 0)
+                if title not in menus:
+                    menus[title] = []
+                    order.append(title)
+                menus[title].append(item(nid, label, **kw))
+        known = ["File", "Edit", "View", "Actions"]
+        order.sort(key=known.index)
+        return [item(self.FIRST_ID - 400 - i, t, submenu=True, children=menus[t]) for i, t in enumerate(order)
+                if len(menus[t]) <= 40]
 
     def click(self, nid):
         prefix, name = self.ids.get(nid, (None, None))
@@ -1285,10 +1338,10 @@ class X11Window:
         # A GTK window with actions but no menus (arbor's gtk_menu without
         # a menu bar): its app actions, besides whatever is found below.
         gbus, gapp, gwin = gtk or ("", "", "")
-        self.actions = AppActions(key, gbus, gapp, gwin) if gbus and (gapp or gwin) else None
+        self.extras = {}
+        self.actions = AppActions(key, gbus, gapp, gwin, self.set_extra) if gbus and (gapp or gwin) else None
         # Menus added to whatever else is found: a media player's Playback
         # (MPRIS), the commands of a GTK app's shortcuts window.
-        self.extras = {}
         self.mpris = Mpris(key, pid, self.set_extra) if pid else None
         self.shortcuts = Shortcuts(key, pid, window, gtk, self.set_extra) \
             if pid and not is_satellite(pid) and not module_for(appid) else None
@@ -1344,7 +1397,10 @@ class X11Window:
         if not self.alive:
             return
         self.extras[name] = menus
-        merged = [m for n in ("electron", "shortcuts", "mpris") for m in self.extras.get(n, [])]
+        names = ["electron", "shortcuts", "mpris"]
+        if not self.extras.get("shortcuts"):
+            names.insert(2, "gtkactions")  # the actions only where no shortcuts window says more
+        merged = [m for n in names for m in self.extras.get(n, [])]
         out({"type": "extramenus", "key": self.key, "menus": merged})
 
     def same(self, other):
