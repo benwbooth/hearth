@@ -301,7 +301,7 @@ Scope {
             Para { text: "That's why the login screen asks for your password rather than your fingerprint: the keyring needs the password itself. The lock screen can use your fingerprint, because the keyring stays unlocked until you log out." }
             Para { text: "If the keyring ever stays locked (its password no longer matches your login password, say after you changed one of them), the first app that needs a saved password brings up an \"Unlock Your Saved Passwords\" box. Type the keyring's password there: usually your login password, or your old one if you changed it recently. Cancel leaves it locked, and that app goes without its saved passwords for now." }
             Para { text: "Changing your password with passwd in a Terminal changes the keyring's password too, so the next login still unlocks it. Other ways of setting a password (an administrator's sudo passwd, for example) don't know the old one: then the box above asks once for the old password. To make the keyring follow your new login password after that, run oo7-cli change-secret in a Terminal and give it the new one. (The keyring is the oo7 Secret Service; its file is ~/.local/share/keyrings/v1/login.keyring.)" }
-            Para { text: "To see what's saved from a Terminal: oo7-cli list. To look one up: oo7-cli search --all application=brave." }
+            Para { text: "To see what's saved, open Settings › Passwords & Keys: search, show or copy a password, change, rename or delete it, add one of your own, lock the keyring, and see your SSH keys (forget a saved passphrase, or lock a key until it's next used). From a Terminal: oo7-cli list." }
             Item { Layout.fillHeight: true }
         }
     }

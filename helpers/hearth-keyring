@@ -1,0 +1,326 @@
+#!/usr/bin/env python3
+"""Saved passwords for Settings > Passwords & Keys: talks to the keyring
+(oo7-daemon, or any org.freedesktop.secrets service) and the SSH agent.
+
+One command per run; the answer is one JSON line on stdout:
+
+  list                 {"ok", "service", "locked", "items": [...], "ssh": [...]}
+                       (no secret values)
+  secret PATH          {"ok", "secret"} (or "binary": true, "size")
+  copy PATH            copies the secret (marked sensitive, so clipboard
+                       history skips it) and clears it after 45 s if it's
+                       still there
+  set-secret PATH...   new value on stdin (one line), for each PATH
+  rename PATH LABEL
+  add LABEL SERVER USER   a new password, value on stdin (one line)
+  delete PATH...
+  lock | unlock        unlock asks through the keyring's prompt (hearth's)
+  ssh-forget KEYPATH   forget a key's saved passphrase
+  ssh-lock KEYPATH     take the key out of the agent (asked for again on
+                       next use)
+
+Secret values are only ever written for `secret`, and never logged.
+"""
+import json
+import os
+import subprocess
+import sys
+
+import dbus
+import dbus.mainloop.glib
+from gi.repository import GLib
+
+dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+
+SS = "org.freedesktop.secrets"
+SVC_PATH = "/org/freedesktop/secrets"
+SVC = "org.freedesktop.Secret.Service"
+COL = "org.freedesktop.Secret.Collection"
+ITEM = "org.freedesktop.Secret.Item"
+PROMPT = "org.freedesktop.Secret.Prompt"
+PROPS = "org.freedesktop.DBus.Properties"
+CHROME = "chrome_libsecret_os_crypt_password_v2"
+GENERIC = "org.freedesktop.Secret.Generic"
+SSH_DIR = os.path.expanduser("~/.ssh")
+
+bus = dbus.SessionBus()
+
+
+def out(**kw):
+    kw.setdefault("ok", True)
+    print(json.dumps(kw), flush=True)
+
+
+def fail(msg):
+    out(ok=False, error=msg)
+    sys.exit(0)
+
+
+def obj(path):
+    return bus.get_object(SS, path)
+
+
+def service():
+    try:
+        return dbus.Interface(obj(SVC_PATH), SVC)
+    except dbus.DBusException:
+        fail("The keyring isn't running.")
+
+
+def prop(path, iface, name):
+    return obj(path).Get(iface, name, dbus_interface=PROPS)
+
+
+def run_prompt(path):
+    """Show a keyring prompt (hearth's dialog) and wait; True unless dismissed."""
+    if str(path) == "/":
+        return True
+    loop = GLib.MainLoop()
+    result = {"dismissed": True}
+
+    def done(dismissed, _value):
+        result["dismissed"] = bool(dismissed)
+        loop.quit()
+
+    p = obj(path)
+    p.connect_to_signal("Completed", done, dbus_interface=PROMPT)
+    p.Prompt("", dbus_interface=PROMPT)
+    GLib.timeout_add_seconds(300, loop.quit)
+    loop.run()
+    return not result["dismissed"]
+
+
+def default_collection(svc):
+    path = svc.ReadAlias("default")
+    if str(path) == "/":
+        cols = prop(SVC_PATH, SVC, "Collections")
+        if not cols:
+            fail("The keyring has no collection yet.")
+        path = cols[0]
+    return str(path)
+
+
+def session(svc):
+    _, s = svc.OpenSession("plain", dbus.String("", variant_level=1))
+    return s
+
+
+def get_secret(svc, path):
+    s = session(svc)
+    secret = dbus.Interface(obj(path), ITEM).GetSecret(s)
+    return bytes(secret[2])
+
+
+def classify(label, a):
+    """(kind, title, subtitle) for the list."""
+    schema = a.get("xdg:schema", "")
+    if schema == CHROME:
+        app = a.get("application", "")
+        return ("appkeys", app[:1].upper() + app[1:] if app else label,
+                "Encrypts this app's saved sign-ins and cookies")
+    uniq = a.get("unique", "")
+    if uniq.startswith("ssh-store:"):
+        return ("sshpass", os.path.basename(uniq[10:]), uniq[10:])
+    if a.get("server") == "ksshaskpass":
+        user = a.get("user", "")
+        return ("sshpass", os.path.basename(user) or user, user)
+    if "app_id" in a and len(a) <= 3:
+        return ("appkeys", a["app_id"], "This app's own storage key (Flatpak)")
+    server = a.get("server") or a.get("host") or a.get("domain") or a.get("url") or a.get("origin_url")
+    user = a.get("user") or a.get("username") or a.get("account") or a.get("username_value")
+    if server:
+        return ("passwords", str(server), str(user or ""))
+    app = a.get("application") or a.get("service") or schema
+    return ("other", label or app, str(app if app != label else ""))
+
+
+def list_items(svc):
+    col = default_collection(svc)
+    locked = bool(prop(col, COL, "Locked"))
+    items = []
+    if not locked:
+        for path in prop(col, COL, "Items"):
+            p = obj(path)
+            allp = p.GetAll(ITEM, dbus_interface=PROPS)
+            a = {str(k): str(v) for k, v in allp.get("Attributes", {}).items()}
+            label = str(allp.get("Label", ""))
+            kind, title, sub = classify(label, a)
+            items.append({
+                "path": str(path), "label": label, "kind": kind, "title": title, "subtitle": sub,
+                "attributes": {k: v for k, v in a.items() if not k.startswith("xdg:")},
+                "created": int(allp.get("Created", 0)), "modified": int(allp.get("Modified", 0)),
+            })
+    items.sort(key=lambda i: (i["kind"], i["title"].lower()))
+    return col, locked, items
+
+
+def ssh_keys(items):
+    agent = set()
+    try:
+        r = subprocess.run(["ssh-add", "-l"], capture_output=True, text=True, timeout=10)
+        for line in r.stdout.splitlines():
+            parts = line.split()
+            if len(parts) >= 2:
+                agent.add(parts[1])
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    saved = set()
+    for i in items:
+        a = i["attributes"]
+        if a.get("unique", "").startswith("ssh-store:"):
+            saved.add(a["unique"][10:])
+        if a.get("server") == "ksshaskpass":
+            saved.add(a.get("user", ""))
+    keys = []
+    try:
+        names = sorted(os.listdir(SSH_DIR))
+    except OSError:
+        names = []
+    for n in names:
+        if not n.endswith(".pub"):
+            continue
+        priv = os.path.join(SSH_DIR, n[:-4])
+        if not os.path.isfile(priv):
+            continue
+        try:
+            r = subprocess.run(["ssh-keygen", "-lf", os.path.join(SSH_DIR, n)],
+                               capture_output=True, text=True, timeout=10)
+            bits, fp, rest = (r.stdout.split(None, 2) + ["", "", ""])[:3]
+        except (OSError, subprocess.TimeoutExpired):
+            bits, fp, rest = "", "", ""
+        comment, _, ktype = rest.strip().rpartition(" ")
+        keys.append({"name": n[:-4], "path": priv, "fingerprint": fp, "comment": comment,
+                     "type": ktype.strip("()"), "bits": bits,
+                     "loaded": fp in agent, "saved": priv in saved})
+    return keys
+
+
+def unlock_item_col(svc, path):
+    """Unlock (with the prompt) when needed; False if the user cancelled."""
+    unlocked, prompt = svc.Unlock([dbus.ObjectPath(path)])
+    if unlocked:
+        return True
+    return run_prompt(prompt)
+
+
+def main():
+    args = sys.argv[1:]
+    if not args:
+        fail("no command")
+    cmd = args[0]
+    svc = service()
+
+    if cmd == "list":
+        try:
+            col, locked, items = list_items(svc)
+        except dbus.DBusException as e:
+            fail("Couldn't read the keyring: " + e.get_dbus_message())
+        out(service=True, collection=str(prop(col, COL, "Label")), locked=locked, items=items,
+            ssh=ssh_keys(items))
+        return
+
+    if cmd in ("lock", "unlock"):
+        col = default_collection(svc)
+        if cmd == "lock":
+            _, prompt = svc.Lock([dbus.ObjectPath(col)])
+            run_prompt(prompt)
+            out()
+        else:
+            out() if unlock_item_col(svc, col) else fail("Not unlocked.")
+        return
+
+    if cmd in ("secret", "copy"):
+        path = args[1]
+        unlock_item_col(svc, path)
+        data = get_secret(svc, path)
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            if cmd == "copy":
+                fail("This one isn't text, so it can't be copied.")
+            out(binary=True, size=len(data))
+            return
+        if cmd == "secret":
+            out(secret=text)
+            return
+        try:
+            subprocess.run(["wl-copy", "--sensitive"], input=text.encode(), check=True, timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            fail("Couldn't copy (wl-copy).")
+        # Clear it in 45 s if nothing else was copied since.
+        clearer = ("sleep 45; [ \"$(wl-paste --no-newline 2>/dev/null | sha256sum)\" = \"$1\" ] && wl-copy --clear")
+        import hashlib
+        digest = hashlib.sha256(data).hexdigest() + "  -"
+        subprocess.Popen(["sh", "-c", clearer, "sh", digest], start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        out()
+        return
+
+    if cmd == "set-secret":
+        value = sys.stdin.readline().rstrip("\n")
+        unlock_item_col(svc, args[1])
+        s = session(svc)
+        for path in args[1:]:
+            dbus.Interface(obj(path), ITEM).SetSecret(
+                dbus.Struct((s, dbus.ByteArray(b""), dbus.ByteArray(value.encode()), "text/plain"), signature="oayays"))
+        out()
+        return
+
+    if cmd == "rename":
+        obj(args[1]).Set(ITEM, "Label", dbus.String(args[2]), dbus_interface=PROPS)
+        out()
+        return
+
+    if cmd == "add":
+        label, server, user = args[1], args[2], args[3]
+        value = sys.stdin.readline().rstrip("\n")
+        col = default_collection(svc)
+        unlock_item_col(svc, col)
+        s = session(svc)
+        attrs = {"xdg:schema": "org.gnome.keyring.NetworkPassword", "server": server}
+        if user:
+            attrs["user"] = user
+        props = {ITEM + ".Label": dbus.String(label or server),
+                 ITEM + ".Attributes": dbus.Dictionary(attrs, signature="ss")}
+        item, prompt = dbus.Interface(obj(col), COL).CreateItem(
+            dbus.Dictionary(props, signature="sv"),
+            dbus.Struct((s, dbus.ByteArray(b""), dbus.ByteArray(value.encode()), "text/plain"), signature="oayays"),
+            False)
+        if str(item) == "/" and not run_prompt(prompt):
+            fail("Not saved.")
+        out()
+        return
+
+    if cmd == "delete":
+        for path in args[1:]:
+            if not run_prompt(dbus.Interface(obj(path), ITEM).Delete()):
+                fail("Not deleted.")
+        out()
+        return
+
+    if cmd == "ssh-forget":
+        key = args[1]
+        col = default_collection(svc)
+        unlock_item_col(svc, col)
+        gone = 0
+        for attrs in ({"unique": "ssh-store:" + key}, {"server": "ksshaskpass", "user": key}):
+            for path in dbus.Interface(obj(col), COL).SearchItems(dbus.Dictionary(attrs, signature="ss")):
+                run_prompt(dbus.Interface(obj(path), ITEM).Delete())
+                gone += 1
+        out(removed=gone)
+        return
+
+    if cmd == "ssh-lock":
+        pub = args[1] + ".pub"
+        r = subprocess.run(["ssh-add", "-d", pub], capture_output=True, text=True, timeout=10)
+        out() if r.returncode == 0 else fail((r.stderr or "ssh-add failed").strip())
+        return
+
+    fail("unknown command " + cmd)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except dbus.DBusException as e:
+        fail(e.get_dbus_message() or str(e))

@@ -24,7 +24,7 @@ Scope {
         users: "settings/UsersPane.qml", spotlight: "settings/SpotlightPane.qml",
         ai: "settings/AiPane.qml", voice: "settings/VoicePane.qml",
         bluetooth: "settings/BluetoothPane.qml", menubar: "settings/MenuBarPane.qml",
-        accounts: "settings/AccountsPane.qml"
+        accounts: "settings/AccountsPane.qml", passwords: "settings/PasswordsPane.qml"
     })
     // What follows ":" in an opened pane name ("accounts:<id>").
     property string paneArg: ""
@@ -83,6 +83,7 @@ Scope {
                             model: [
                                 { id: "users", label: "Users & Accounts", icon: "system-users" },
                                 { id: "accounts", label: "Internet Accounts", icon: "applications-internet" },
+                                { id: "passwords", label: "Passwords & Keys", icon: "dialog-password" },
                                 { id: "appearance", label: "Appearance", icon: "preferences-desktop-theme-global" },
                                 { id: "menubar", label: "Menu Bar", icon: "preferences-desktop" },
                                 { id: "dock", label: "Desktop & Dock", icon: "preferences-system-windows" },
@@ -158,7 +159,7 @@ Scope {
                                      wallpaper: "Wallpaper", mouse: "Mouse & Touchpad", night: "Night Light", notifications: "Notifications",
                                      hotcorners: "Hot Corners", displays: "Displays", keyboard: "Keyboard", shortcuts: "Keyboard Shortcuts",
                                      windowrules: "Window Rules", power: "Sleep & Power", lockscreen: "Lock Screen", clipboard: "Clipboard", screenshots: "Screenshots",
-                                     users: "Users & Accounts", accounts: "Internet Accounts", spotlight: "Search", bluetooth: "Bluetooth", ai: "AI", voice: "Voice Assistant" })[root.pane] || ""
+                                     users: "Users & Accounts", accounts: "Internet Accounts", passwords: "Passwords & Keys", spotlight: "Search", bluetooth: "Bluetooth", ai: "AI", voice: "Voice Assistant" })[root.pane] || ""
                             font.pointSize: Theme.fontSize + 6
                             font.weight: Font.Bold
                         }
