@@ -933,8 +933,8 @@ class Mpris:
     PATH = "/org/mpris/MediaPlayer2"
     FIRST_ID = -6000
 
-    def __init__(self, key, pid):
-        self.key, self.pid, self.alive = key, pid, True
+    def __init__(self, key, pid, sink):
+        self.key, self.pid, self.alive, self.sink = key, pid, True, sink
         self.name, self.props, self.matches, self.ids, self.sent = None, {}, [], {}, None
         self.owner_match = bus.add_signal_receiver(
             self.owner_changed, signal_name="NameOwnerChanged", dbus_interface="org.freedesktop.DBus")
@@ -1028,7 +1028,7 @@ class Mpris:
             menus = [item(self.FIRST_ID - 200, "Playback", submenu=True, children=items)]
         if menus != self.sent:
             self.sent = menus
-            out({"type": "extramenus", "key": self.key, "menus": menus})
+            self.sink("mpris", menus)
 
     def click(self, nid):
         action = self.ids.get(nid)
@@ -1055,6 +1055,149 @@ class Mpris:
             m.remove()
 
 
+class Shortcuts:
+    """Menus from the shortcuts window a GTK app ships in its binary
+    (GtkShortcutsWindow help-overlay / AdwShortcutsDialog, in the GResource
+    of /proc/PID/exe): every documented command with its title, section and
+    accelerator. Sections fold into File / Edit / View / Go by their title
+    (the rest keep theirs, at most six menus); pure cursor movement is left
+    out. An item runs the action it names when the app exports it, else its
+    accelerator through arbor send-keys. Read in a thread (gresource), once
+    per binary."""
+
+    FIRST_ID = -7000
+    CACHE = {}  # exe path -> parsed sections
+    FOLD = [("File", ("window", "tab", "document", "file", "project", "session", "print", "open", "save")),
+            ("Edit", ("copy", "paste", "clipboard", "undo", "redo", "edit", "select", "delet", "find",
+                      "search", "replace", "text", "format")),
+            ("View", ("zoom", "view", "display", "panel", "sidebar", "fullscreen", "layout", "appearance")),
+            ("Go", ("navigat", "movement", "go", "history", "jump"))]
+    NAV = {"Left", "Right", "Up", "Down", "Home", "End", "PgUp", "PgDown", "Tab", "Return", "Space"}
+
+    def __init__(self, key, pid, window, gtk, sink):
+        self.key, self.pid, self.window, self.sink, self.alive = key, pid, window, sink, True
+        self.ids = {}
+        gbus, gapp, gwin = gtk or ("", "", "")
+        self.gtk = (gbus, gapp, gwin)
+        try:
+            self.exe = os.path.realpath(f"/proc/{pid}/exe")
+        except OSError:
+            self.exe = ""
+        if not self.exe.startswith("/nix/store/") and not self.exe.startswith("/usr/"):
+            self.exe = ""  # not a binary we may read (and never a Flatpak's inner one)
+        if self.exe in self.CACHE:
+            GLib.idle_add(self.emit)
+        elif self.exe:
+            import threading
+            threading.Thread(target=self.harvest, daemon=True).start()
+
+    def harvest(self):
+        sections = []
+        try:
+            files = subprocess.run(["gresource", "list", self.exe], capture_output=True, text=True,
+                                   timeout=5).stdout.split()
+            ui = [f for f in files if f.endswith(("shortcuts-dialog.ui", "help-overlay.ui", "shortcuts.ui",
+                                                  "shortcuts-window.ui"))]
+            for f in ui[:1]:
+                xml = subprocess.run(["gresource", "extract", self.exe, f], capture_output=True, text=True,
+                                     timeout=5).stdout
+                sections = self.parse(xml)
+        except Exception as e:
+            GLib.idle_add(lambda: err(f"shortcuts of {self.exe}: {e}") and False)
+        self.CACHE[self.exe] = sections
+        GLib.idle_add(self.emit)
+
+    @staticmethod
+    def parse(xml):
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(xml)
+
+        def prop(o, name):
+            for p in o.findall("property"):
+                if p.get("name") == name:
+                    return (p.text or "").strip()
+            return ""
+        sections = []
+        for sec in root.iter("object"):
+            if sec.get("class") not in ("AdwShortcutsSection", "GtkShortcutsGroup"):
+                continue
+            items = []
+            for o in sec.iter("object"):
+                if o.get("class") not in ("AdwShortcutsItem", "GtkShortcutsShortcut"):
+                    continue
+                title, accel = prop(o, "title"), prop(o, "accelerator").split(" ")[0]
+                action = prop(o, "action-name")
+                if title and (accel or action):
+                    items.append((title, accel, action))
+            if items:
+                sections.append((prop(sec, "title") or "", items))
+        return sections
+
+    def emit(self):
+        if not self.alive:
+            return False
+        sections = self.CACHE.get(self.exe) or []
+        menus, order, self.ids = {}, [], {}
+        nid = [self.FIRST_ID]
+
+        def new_id():
+            nid[0] -= 1
+            return nid[0]
+        for title, items in sections:
+            low = title.lower()
+            name = next((m for m, words in self.FOLD if any(w in low for w in words)), title or "Commands")
+            entries = []
+            for label, accel, action in items:
+                text = gtk_accel_text(accel) if accel else ""
+                if text and "+" not in text.rstrip("+") and text in self.NAV:
+                    continue  # plain cursor keys are not commands
+                if text.split("+")[-1] in self.NAV and len(text.split("+")) == 2 and text.startswith("Ctrl+") \
+                        and "Move" in label:
+                    continue
+                i = new_id()
+                self.ids[i] = (action, text)
+                entries.append(item(i, label[:1].upper() + label[1:], shortcut=text))
+            if not entries:
+                continue
+            if name not in menus:
+                menus[name] = []
+                order.append(name)
+            elif menus[name]:
+                menus[name].append(item(new_id(), type="separator"))
+            menus[name].extend(entries)
+        known = [m for m, _ in self.FOLD]
+        order.sort(key=lambda m: known.index(m) if m in known else len(known))
+        if len(order) > 6:
+            rest = order[6:]
+            order = order[:6]
+            more = []
+            for m in rest:
+                more.append(item(new_id(), m, submenu=True, children=menus[m]))
+            menus["More"] = more
+            order.append("More")
+        tops = [item(new_id(), m, submenu=True, children=menus[m]) for m in order]
+        self.sink("shortcuts", tops)
+        return False
+
+    def click(self, nid):
+        action, keys = self.ids.get(nid, ("", ""))
+        gbus, gapp, gwin = self.gtk
+        prefix, _, name = action.partition(".")
+        path = {"app": gapp, "win": gwin}.get(prefix, "")
+        if gbus and path and name:
+            obj = bus.get_object(gbus, path, introspect=False)
+            dbus.Interface(obj, GTK_ACTIONS).Activate(
+                name, dbus.Array([], signature="v"), dbus.Dictionary({}, signature="sv"),
+                reply_handler=lambda *a: None, error_handler=err)
+        elif keys and self.window:
+            GLib.timeout_add(120, lambda: subprocess.Popen(
+                ["arbor", "msg", "action", "send-keys", "--id", str(self.window), "--keys", keys],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) and False)
+
+    def stop(self):
+        self.alive = False
+
+
 class X11Window:
     """The focused X11 window (xwayland-satellite): resolve, then delegate."""
 
@@ -1065,8 +1208,12 @@ class X11Window:
         # a menu bar): its app actions, besides whatever is found below.
         gbus, gapp, gwin = gtk or ("", "", "")
         self.actions = AppActions(key, gbus, gapp, gwin) if gbus and (gapp or gwin) else None
-        # A media player: its Playback menu, whatever else is found.
-        self.mpris = Mpris(key, pid) if pid else None
+        # Menus added to whatever else is found: a media player's Playback
+        # (MPRIS), the commands of a GTK app's shortcuts window.
+        self.extras = {}
+        self.mpris = Mpris(key, pid, self.set_extra) if pid else None
+        self.shortcuts = Shortcuts(key, pid, window, gtk, self.set_extra) \
+            if pid and not is_satellite(pid) and not module_for(appid) else None
         # A menu module for this app (no native menus to read): its menus.
         found = module_for(appid)
         self.module = None
@@ -1112,6 +1259,13 @@ class X11Window:
         if self.inner:
             self.inner.stop()
         self.inner = AtspiMenu(self.key, self.title, self.pid, self.window)
+
+    def set_extra(self, name, menus):
+        if not self.alive:
+            return
+        self.extras[name] = menus
+        merged = [m for n in ("shortcuts", "mpris") for m in self.extras.get(n, [])]
+        out({"type": "extramenus", "key": self.key, "menus": merged})
 
     def same(self, other):
         return isinstance(other, X11Window) and other.key == self.key
@@ -1187,6 +1341,8 @@ class X11Window:
             self.actions.stop()
         if self.mpris:
             self.mpris.stop()
+        if self.shortcuts:
+            self.shortcuts.stop()
 
     def open(self, nid):
         if self.inner:
@@ -1199,6 +1355,8 @@ class X11Window:
     def click(self, nid):
         if self.mpris and nid in self.mpris.ids:
             self.mpris.click(nid)
+        elif self.shortcuts and nid in self.shortcuts.ids:
+            self.shortcuts.click(nid)
         elif self.actions and nid in self.actions.ids:
             self.actions.click(nid)
         elif self.inner:
