@@ -20,9 +20,15 @@ Indicator {
     readonly property var mb: Settings.menubar
     readonly property string lineText: {
         const d = clock.date;
+        // Settings > Menu Bar > Clock > Custom format: Qt's date/time
+        // letters ("ddd d MMM HH:mm"), instead of the switches.
+        if (customFormat) return nextText + Qt.formatDateTime(d, customFormat);
         const parts = [];
-        if (mb.showWeekday) parts.push(Qt.formatDate(d, "ddd"));
-        if (mb.showDate) parts.push(Qt.formatDate(d, dayFirst ? "d MMM" : "MMM d"));
+        const style = BarItems.opt("clock", "dateStyle") || "short";
+        if (mb.showWeekday) parts.push(Qt.formatDate(d, style === "long" ? "dddd," : "ddd"));
+        if (mb.showDate) parts.push(style === "numeric" ? Qt.formatDate(d, Qt.locale().dateFormat(Locale.ShortFormat))
+                                  : style === "iso" ? Qt.formatDate(d, "yyyy-MM-dd")
+                                  : Qt.formatDate(d, style === "long" ? (dayFirst ? "d MMMM" : "MMMM d") : (dayFirst ? "d MMM" : "MMM d")));
         const t = mb.clock24h ? (mb.showSeconds ? "HH:mm:ss" : "HH:mm") : (mb.showSeconds ? "h:mm:ss AP" : "h:mm AP");
         parts.push(" " + Qt.formatTime(d, t));
         return nextText + parts.join(" ");
@@ -35,13 +41,14 @@ Indicator {
         const title = e.title.length > 28 ? e.title.substring(0, 27) + "…" : (e.title || "Event");
         return title + (m <= 0 ? " now" : " in " + m + " min") + "   ";
     }
+    readonly property string customFormat: String(BarItems.opt("clock", "format") || "").trim()
     function fmtTime(d) { return Qt.formatTime(d, mb.clock24h ? "HH:mm" : "h:mm AP"); }
     readonly property bool dayFirst: { const f = Qt.locale().dateFormat(Locale.ShortFormat); return f.indexOf("d") < f.indexOf("M"); }
     implicitWidth: compact ? line.implicitWidth + 2 * Math.round(8 * Theme.pt) : col.implicitWidth + 16
 
     SystemClock {
         id: clock
-        precision: root.compact && root.mb.showSeconds ? SystemClock.Seconds : SystemClock.Minutes
+        precision: root.compact && (root.customFormat ? /s/.test(root.customFormat.replace(/'[^']*'/g, "")) : root.mb.showSeconds) ? SystemClock.Seconds : SystemClock.Minutes
     }
 
     Label {

@@ -23,7 +23,7 @@ Scope {
         wallpaper: "settings/WallpaperPane.qml", lockscreen: "settings/LockScreenPane.qml",
         users: "settings/UsersPane.qml", spotlight: "settings/SpotlightPane.qml",
         ai: "settings/AiPane.qml", voice: "settings/VoicePane.qml",
-        bluetooth: "settings/BluetoothPane.qml"
+        bluetooth: "settings/BluetoothPane.qml", menubar: "settings/MenuBarPane.qml"
     })
 
     Connections {
@@ -163,7 +163,7 @@ Scope {
                             Layout.fillWidth: true
                             visible: !root.paneFiles[root.pane]
                             active: visible
-                            sourceComponent: ({ appearance: appearancePane, menubar: menubarPane, dock: dockPane, layout: layoutPane,
+                            sourceComponent: ({ appearance: appearancePane, dock: dockPane, layout: layoutPane,
                                                 mouse: mousePane, night: nightPane, notifications: notificationsPane })[root.pane]
                         }
                     }
@@ -301,132 +301,6 @@ Scope {
                     note: "Adwaita: a clean black arrow (the default). macOS-style: a black arrow with a white outline, sized like a Mac's. Breeze: KDE's pointer."
                     key: "appearance.cursor"
                     options: [{ value: "adwaita", label: "Adwaita" }, { value: "macos", label: "macOS-style" }, { value: "breeze", label: "Breeze" }]
-                }
-            }
-        }
-    }
-
-    Component {
-        id: menubarPane
-        ColumnLayout {
-            spacing: 14
-            Group {
-                ChoiceRow {
-                    label: "Menu bar style"
-                    note: "Transparent: items float on the wallpaper, like macOS 26. Glass: a frosted strip (macOS's \"Show menu bar background\"). Solid: no see-through."
-                    key: "menubar.style"
-                    enabled: !Settings.appearance.reduceTransparency
-                    options: [{ value: "transparent", label: "Transparent" }, { value: "glass", label: "Glass" }, { value: "solid", label: "Solid" }]
-                }
-                Divider {}
-                SliderRow {
-                    label: "Glass opacity"
-                    note: "How strongly the glass menu bar is tinted. Lower shows more of the blurred wallpaper."
-                    key: "menubar.opacity"
-                    from: 32; to: 95; step: 1; scale: 100; suffix: "%"
-                    enabled: Theme.menuBarStyle === "glass"
-                }
-                Divider {}
-                SwitchRow { label: "Show the workspace map"; note: "A small map of each workspace and its windows. Click one to go there; drag a window's box onto another to move it."; key: "menubar.showWorkspaces" }
-                SwitchRow { label: "Show the system monitor"; note: "treetop's CPU, memory and GPU graphs in the menu bar. Click them to open treetop."; key: "menubar.showSysMonitor" }
-                Divider {}
-                SwitchRow { label: "Monochrome icons"; note: "Menu bar icons in the text colour, like macOS's symbols. Apps' full-colour tray pictures keep their colours."; key: "menubar.monochromeIcons" }
-                Divider {}
-                SwitchRow { label: "Automatically hide and show the menu bar"; note: "Hidden until you move the pointer to the top edge."; key: "menubar.autohide" }
-                Divider {}
-                SwitchRow { label: "Show the app name"; note: "The bold name of the app you are using, next to the logo."; key: "menubar.showAppName" }
-                Divider {}
-                ChoiceRow {
-                    label: "Menu logo"
-                    note: "The button at the far left that opens the system menu."
-                    key: "menubar.logo"
-                    options: [{ value: "nixos", label: "NixOS" }, { value: "penguin", label: "Penguin" }, { value: "none", label: "None" }]
-                }
-            }
-            Label { text: "Clock"; font.weight: Font.DemiBold }
-            Group {
-                SwitchRow { label: "24-hour time"; note: "13:00 instead of 1:00 PM."; key: "menubar.clock24h" }
-                Divider {}
-                SwitchRow { label: "Show the date"; key: "menubar.showDate" }
-                Divider {}
-                SwitchRow { label: "Show the day of the week"; key: "menubar.showWeekday" }
-                Divider {}
-                SwitchRow { label: "Show seconds"; key: "menubar.showSeconds" }
-                Divider {}
-                SwitchRow { label: "Show your calendar from Almanac"; note: "Click the clock to see today's and tomorrow's events from Almanac, with dots under busy days. Click an event to open it in Almanac."; key: "menubar.showCalendar" }
-                Divider {}
-                SwitchRow { label: "Show the next event"; note: "An hour before your next event, its name and how soon it starts appear next to the clock (\"Standup in 10 min\")."; key: "menubar.showNextEvent" }
-            }
-            Label { text: "When the menu bar is full"; font.weight: Font.DemiBold }
-            Label {
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                color: Theme.fgDim
-                text: "On a small screen, items that don't fit next to the app's menus move into the ⌃ menu at the right of the menu bar. Switch an item off to keep it in the bar."
-            }
-            Group {
-                Repeater {
-                    model: [
-                        { id: "trayicons", label: "App icons (Slack, Teams…)", def: true },
-                        { id: "sysmonitor", label: "System monitor", def: true },
-                        { id: "workspaces", label: "Workspace map", def: true },
-                        { id: "weather", label: "Weather", def: true },
-                        { id: "devapps", label: "Dev apps", def: true },
-                        { id: "ai", label: "Assistant", def: true },
-                        { id: "help", label: "Help", def: true },
-                        { id: "media", label: "Now Playing", def: true }, { id: "clipboard", label: "Clipboard", def: true },
-                        { id: "zones", label: "Window zones", def: true }, { id: "rdp", label: "Remote desktop", def: true },
-                        { id: "printers", label: "Printers", def: true }, { id: "drives", label: "Drives", def: true },
-                        { id: "keyboard", label: "Keyboard", def: true }, { id: "brightness", label: "Brightness", def: true },
-                        { id: "bluetooth", label: "Bluetooth", def: true }, { id: "camera", label: "Camera in use", def: true },
-                        { id: "recording", label: "Screen recording", def: true },
-                        { id: "volume", label: "Sound", def: false }, { id: "network", label: "Network", def: false },
-                        { id: "battery", label: "Battery", def: false }
-                    ]
-                    Row_ {
-                        id: ovf
-                        required property var modelData
-                        label: modelData.label
-                        note: modelData.id === "trayicons" ? "Moved first, starting from the left." : ""
-                        Toggle {
-                            readonly property var rules: Settings.menubar.overflow || {}
-                            checked: rules[ovf.modelData.id] !== undefined ? !!rules[ovf.modelData.id] : ovf.modelData.def
-                            onToggled: c => {
-                                const r = Object.assign({}, rules);
-                                if (c === ovf.modelData.def) delete r[ovf.modelData.id];
-                                else r[ovf.modelData.id] = c;
-                                Settings.set("menubar.overflow", r);
-                            }
-                        }
-                    }
-                }
-            }
-            Label { text: "Menu bar items"; font.weight: Font.DemiBold }
-            Group {
-                Repeater {
-                    model: [
-                        { id: "media", label: "Now Playing" }, { id: "zones", label: "Window zones" },
-                        { id: "network", label: "Network" }, { id: "rdp", label: "Remote desktop" },
-                        { id: "camera", label: "Camera in use" }, { id: "printers", label: "Printers" },
-                        { id: "drives", label: "Drives" }, { id: "weather", label: "Weather" },
-                        { id: "keyboard", label: "Keyboard" }, { id: "battery", label: "Battery" },
-                        { id: "bluetooth", label: "Bluetooth" }, { id: "brightness", label: "Brightness" },
-                        { id: "volume", label: "Sound" }
-                    ]
-                    Row_ {
-                        id: ind
-                        required property var modelData
-                        label: modelData.label
-                        Toggle {
-                            readonly property var hidden: Settings.menubar.hiddenIndicators || []
-                            checked: hidden.indexOf(ind.modelData.id) < 0
-                            onToggled: c => {
-                                const h = hidden.filter(x => x !== ind.modelData.id);
-                                if (!c) h.push(ind.modelData.id);
-                                Settings.set("menubar.hiddenIndicators", h);
-                            }
-                        }
-                    }
                 }
             }
         }

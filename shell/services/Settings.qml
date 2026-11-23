@@ -31,8 +31,6 @@ Singleton {
             autohide: false,
             style: "transparent",       // "transparent" (macOS 26 default) | "glass" | "solid"
             opacity: 0.36,              // glass strip opacity, 0.32 .. 0.95
-            showWorkspaces: true,       // the workspace map
-            showSysMonitor: true,       // treetop's CPU/memory/GPU graphs
             monochromeIcons: true,      // status icons in the text colour, like SF Symbols
             showAppName: true,
             logo: "nixos",              // "nixos" | "penguin" | "none"   (shell/assets/<name>.svg)
@@ -42,11 +40,12 @@ Singleton {
             showSeconds: false,
             showCalendar: true,         // the clock's popup lists Almanac's events (helpers/hearth-calendar)
             showNextEvent: false,       // "Standup in 10 min" before the clock, from an hour ahead
-            hiddenIndicators: [],       // ipcNames from bar/Tray.qml
-            // Short of room (laptop): which items may move into the chevron
-            // dropdown (true) or always stay (false); unset: bar/MenuBar.qml's
-            // defaults (keys: trayicons, workspaces, sysmonitor, ipcNames...)
-            overflow: {}
+            // The status items, left to right, with where each shows and its
+            // options: [{ id, show: "bar"|"overflow"|"hidden", canMove, ... }]
+            // (services/BarItems.qml has the ids, defaults and the migration
+            // from showWorkspaces/showSysMonitor/hiddenIndicators/overflow).
+            // Unset: BarItems' default list.
+            items: null
         },
         dock: {
             size: 54,                   // icon px (macOS's 48 pt default)

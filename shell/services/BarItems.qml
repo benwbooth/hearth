@@ -18,6 +18,7 @@ import Quickshell.Io
 //   hearth-ipc call menubar items
 //   hearth-ipc call menubar place weather hidden     (bar | overflow | hidden)
 //   hearth-ipc call menubar move weather 0
+//   hearth-ipc call menubar settings clock
 //   hearth-ipc call menubar edit | done | reset
 Singleton {
     id: root
@@ -98,7 +99,7 @@ Singleton {
           note: "Ask by voice or by typing; the assistant's model and memory.", dropdown: true, canMove: true, opts: {},
           rightAction: "AI Settings…", when: "an assistant is set up" },
         { id: "clock", label: "Clock", icon: "preferences-system-time", group: "System",
-          note: "The date and time; click for the calendar.", dropdown: true, canMove: false, opts: {} }
+          note: "The date and time; click for the calendar.", dropdown: true, canMove: false, opts: { dateStyle: "short", format: "" } }
     ]
     readonly property var byId: { const m = {}; for (const c of catalog) m[c.id] = c; return m; }
     readonly property var treetopKinds: ({ "treetop.cpu": "cpu", "treetop.mem": "mem", "treetop.gpu": "gpu", "treetop.vram": "vram",
@@ -255,6 +256,8 @@ Singleton {
             try { v = JSON.parse(json); } catch (e) { v = json; }
             root.setOpt(id, key, v);
         }
+        // Settings > Menu Bar, scrolled to this item with its options open.
+        function settings(id: string): void { root.openSettings(id); }
         function edit(): void { root.editing = true; }
         function done(): void { root.editing = false; }
         function reset(): void { root.resetAll(); }
