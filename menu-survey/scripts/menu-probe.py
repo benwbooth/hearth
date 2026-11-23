@@ -456,6 +456,45 @@ def attempt_windows(attr, before, win, wait_menu, escaped=False):
     return best
 
 
+def full_menus(r):
+    return r.get("result") == "menus" and len([m for m in r.get("menus", []) if not m.endswith(":0")]) >= 2
+
+
+def late_check(rows):
+    """Slow starters (Inkscape after its start screen, darktable's splash,
+    Java workbenches): once more, the app's newest window as it is now. A
+    full menu bar there counts for the session attempt."""
+    if any(full_menus(r) for r in rows):
+        return
+    sess = next((r for r in rows if r.get("variant") == "session"), None)
+    pid = ((sess or {}).get("window") or {}).get("pid")
+    if not sess or not pid:
+        return
+    time.sleep(3)
+    tree = tree_pids(pid)
+    try:
+        ppid = open(f"/proc/{pid}/stat").read().rsplit(")", 1)[1].split()[1]
+        tree |= tree_pids(ppid)
+    except OSError:
+        pass
+    mine = [w for w in windows() if str(w.get("pid")) in tree and w.get("app_id") != "org.quickshell"]
+    if not mine:
+        return
+    w = max(mine, key=lambda x: x["id"])
+    rig("run", "arbor", "msg", "action", "focus-window", "--id", str(w["id"]))
+    time.sleep(5)
+    try:
+        dump = json.loads(rig("dump", timeout=20).stdout)
+    except Exception:
+        return
+    menus = app_menus(dump)
+    if len([n for _, n in menus if n]) >= 2:
+        sess.update(result="menus", menus=[f"{l}:{n}" for l, n in menus], late=True,
+                    n_items=count_items(dump.get("tree") or dump.get("menu") or {}),
+                    route=(dump.get("request") or {}).get("kind") or "?",
+                    window=dict(sess.get("window") or {}, title=w.get("title"), late_window=w["id"]))
+
+
 def tree_pids(pid):
     """pid and its descendants."""
     kids = {}
@@ -579,6 +618,7 @@ def probe_flatpak(attr):
         r1 = attempt(attr, argv2, "flatpak+registrar", {}, [])
         r1.update(toolkit=toolkit_of(attr))
         rows.append(r1)
+    late_check(rows)
     rows[-1]["shot"] = shot(attr)
     cleanup()
     return rows
@@ -659,6 +699,7 @@ def probe_store(attr, outs, err):
             rows.append(rr)
             if rr["result"] == "menus":
                 break
+    late_check(rows)
     rows[-1]["shot"] = shot(attr)
     cleanup()
     return rows

@@ -68,12 +68,16 @@ def gap_of(measured, toolkit, p):
     if measured == "burger":
         return "burger-only"
     w = p.get("window") or {}
-    if w.get("app_menu"):
-        return "dbusmenu-empty"
-    if (w.get("gtk_menu") or {}).get("menubar_path"):
-        return "gtkmenu-empty"
     ins = p.get("inspect") or {}
     a = ins.get("atspi") or {}
+    # An exported menu bar that came empty only counts when the app shows
+    # menus on AT-SPI (appmenu-gtk-module exports an empty one for every GTK
+    # 3 window, dialogs and splash screens included).
+    has_menus = a.get("menubars") or a.get("menus") or a.get("menu_items")
+    if w.get("app_menu") and (has_menus or not a.get("found")):
+        return "dbusmenu-empty"
+    if (w.get("gtk_menu") or {}).get("menubar_path") and has_menus:
+        return "gtkmenu-empty"
     if ins.get("mpris"):
         return "mpris-not-shown"
     if not a.get("found"):
