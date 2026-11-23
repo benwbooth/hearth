@@ -46,7 +46,7 @@ SYMS = [
     "libdbusmenu", "QMenuBar", "_ZN8QMenuBar", "libmono", "libSkiaSharp", "libHarfBuzzSharp",
     "libgdk_pixbuf", "libnotcurses", "libncurses", "libimgui", "libelementary", "libefl",
     "GTK_IS_MENU_BAR", "gtk_menu_shell_append", "libslint", "winit", "eframe", "egui", "iced",
-    "gpui", "libghostty", "Electron", "libnode.so", "libcairo.so", "accesskit", "libcosmic", "iced_",
+    "gpui", "libghostty", "libnode.so", "libcairo.so", "accesskit", "libcosmic", "iced_",
     "org/eclipse/swt",
 ]
 
@@ -253,7 +253,11 @@ def decide(cm, fm, sm):
         return "firefox-xul", "menubar-hidden"
     if has("chromium") or (has("electron_files") and not has("asar") and not has("electron") and has("libcef") is False and "chrome" in " ".join(sm).lower()):
         return "chromium", "dbusmenu"
-    if has("electron", "asar", "script:electron", "Electron", "electron_ver"):
+    # Electron only when the program doesn't link a toolkit of its own
+    # ("Electronics" in a calculator's strings is not Electron).
+    native_tk = has("libQt6Widgets.so", "libQt5Widgets.so", "libgtk-3.so", "libgtk-4.so", "libQt6Quick.so",
+                    "libQt5Quick.so", "libwx_gtk3u", "libKF6XmlGui.so")
+    if has("electron", "asar", "electron_ver") or (has("script:electron", "Electron") and not native_tk):
         return "electron", "menubar"
     main_tk = has("libQt6Widgets.so", "libQt5Widgets.so", "libgtk-3.so", "libgtk-4.so", "libQt6Quick.so",
                   "libQt5Quick.so", "libwx_gtk3u")
