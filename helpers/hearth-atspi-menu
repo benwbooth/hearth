@@ -1070,7 +1070,7 @@ class AtspiMenu:
                 # at most every 10 s.
                 # (Not a drawer: it's part of the window, the probe can't
                 # hide it opening; its cache is renewed when a click misses.)
-                if time.monotonic() - self.refreshed > 10 and not (self.burger or {}).get("drawer"):
+                if time.monotonic() - self.refreshed > 10 and (self.refreshed == 0 or not (self.burger or {}).get("drawer")):
                     self.refreshed = time.monotonic()
                     self.busy = True
                     self.probe(True)
@@ -1213,15 +1213,28 @@ class AtspiMenu:
             except Exception:
                 labels.append("")
         named = [l for l in labels if l]
+        if not named and self.cache:
+            # An empty look (the menu still drawing): keep the last one.
+            self.close_all((-1,))
+            return
         flat = subs < max(1, len(named) // 2)
+        # Read into a fresh cache, then keep what this look missed (a
+        # submenu slow to open) from the last one: the menu bar never shows
+        # a "…" for a menu it once knew.
+        old = self.cache
         self.cache = {}
         try:
             self.read_open(root, (-1,) if flat else (), 0)
         except Exception as e:
             err(f"AT-SPI: reading the ☰: {e}")
         self.close_all((-1,))
+        if (self.burger or {}).get("flat", flat) == flat:
+            for p, items in old.items():
+                if p not in self.cache and items:
+                    self.cache[p] = items
         self.tree_read = True
-        self.burger = {"flat": flat, "labels": labels, "exe": self.exe(),
+        self.burger = {"flat": flat, "labels": labels if named else (self.burger or {}).get("labels", labels),
+                       "exe": self.exe(),
                        "tree": {",".join(map(str, p)): [self.saved(it) for it in items]
                                 for p, items in self.cache.items()}}
         c = load_cache()
@@ -1283,21 +1296,22 @@ class AtspiMenu:
     def load_tree(self):
         """The cached ☰ tree, if it was read from this same app binary."""
         b = self.burger or {}
-        if not b.get("tree") or b.get("exe") != self.exe():
+        if not b.get("tree"):
             return
         for key, items in b["tree"].items():
             path = tuple(int(x) for x in key.split(",")) if key else ()
             self.cache[path] = [dict(it, id=self.nid(it.get("path", []))) for it in items]
-        self.tree_read = True
+        # From another build of the app (an update): shown anyway, read
+        # again on the first open.
+        self.tree_read = b.get("exe") == self.exe()
+        if not self.tree_read:
+            self.refreshed = 0
 
     def forget_tree(self):
-        """A click found the cache out of date: read again next time."""
-        self.tree_read = False
-        if self.burger:
-            self.burger.pop("tree", None)
-            c = load_cache()
-            c[self.burger_key()] = self.burger
-            save_cache(c)
+        """A click found the cache out of date: read again on the next
+        open. What's known stays shown (and on disk) until then: never a
+        "…" in its place."""
+        self.refreshed = 0
 
     def exe(self):
         try:
