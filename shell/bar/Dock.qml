@@ -96,10 +96,37 @@ PanelWindow {
     // `held` goes up when the pointer touches the edge strip or the dock and
     // drops `autohideDelay` ms after it leaves.
     // Always up in the overview, like macOS's Mission Control.
-    readonly property bool shown: !autohide || held || menuOpen || previews > 0 || dragKey !== "" || Compositor.overviewOpen
+    // Out while a window pours into it or out of it (minimize / restore),
+    // like macOS.
+    readonly property bool shown: !autohide || held || menuOpen || previews > 0 || dragKey !== "" || Compositor.overviewOpen || minimizePeek
     // True once the slide-in has finished (the name label waits for it).
     property bool settled: false
-    Component.onCompleted: settled = shown
+    Component.onCompleted: { settled = shown; targetsTimer.restart(); }
+
+    // A window on this screen was minimized or restored: show the Dock for
+    // the length of arbor's effect (it starts at the same moment, aimed at
+    // the slot where the Dock comes to rest).
+    property bool minimizePeek: false
+    property string minimizedKey: ""
+    readonly property string minimizedNow: Compositor.windows
+        .filter(w => w.minimized && (!w.output || !screen || w.output === screen.name))
+        .map(w => w.id).sort().join(",")
+    onMinimizedNowChanged: {
+        const was = minimizedKey;
+        minimizedKey = minimizedNow;
+        if (!Compositor.isArbor || !autohide || was === minimizedNow || !peekArmed) return;
+        minimizePeek = true;
+        peekTimer.restart();
+    }
+    // Not for the minimized windows already there when the shell starts.
+    property bool peekArmed: false
+    Timer { running: true; interval: 1500; onTriggered: dockWin.peekArmed = true }
+    Timer {
+        id: peekTimer
+        // The effect (500 ms) plus a moment to see the window land.
+        interval: 900
+        onTriggered: { dockWin.minimizePeek = false; if (!hover.hovered) hideTimer.restart(); }
+    }
     onShownChanged: { if (shown) slideInTimer.restart(); else { slideInTimer.stop(); settled = false; } }
     Timer { id: slideInTimer; interval: Math.max(0, Number(dockWin.cfg.animationMs) || 0) + 20; onTriggered: dockWin.settled = true }
     Timer {
