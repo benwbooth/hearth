@@ -13,8 +13,9 @@
 # does) instead of killing quickshell outright. --delay: seconds A lives on
 # after B's first refusal (default 1). --in-process: B runs without the
 # wrapper, so it asks again from the same process (needs an arbor whose
-# smithay keeps locked outputs per lock object). Runs entirely nested: virtual
-# KWin, nested arbor, private XDG_RUNTIME_DIR, HOME and session bus.
+# smithay keeps locked outputs per lock object). Runs entirely sandboxed:
+# arbor on its headless backend (no host compositor), private
+# XDG_RUNTIME_DIR, HOME and session bus.
 set -uo pipefail
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
@@ -31,10 +32,8 @@ while (($#)); do
     *) echo "usage: $0 [--hearth BIN] [--arbor BIN] [--term] [--keep] [--delay S] [--in-process]" >&2; exit 2 ;;
   esac
 done
-if [[ -z $arbor_bin ]]; then
-  arbor_bin=$state_root/devloop/arbor/bin/arbor
-  [[ -x $arbor_bin ]] || arbor_bin=$(command -v arbor) || { echo "no arbor" >&2; exit 2; }
-fi
+source "$repo/scripts/headless-arbor.sh"
+arbor_bin=$(headless_arbor_bin "$arbor_bin") || exit 2
 [[ -n $hearth_bin ]] || hearth_bin=$(nix build --no-link --print-out-paths "$repo#hearth" | tail -1)/bin/hearth
 hearth_bin=$(readlink -f "$hearth_bin")
 qs=$(grep -ho '/nix/store/[^ "]*-quickshell-[^/ "]*/bin/quickshell' \
@@ -60,23 +59,18 @@ cleanup() {
   sleep 0.5
   pids=$(ours | grep -vx "$$"); [[ -n $pids ]] && kill -9 $pids 2>/dev/null
   [[ -f $work/dbus.pid ]] && kill "$(cat "$work/dbus.pid")" 2>/dev/null
-  if [[ -n ${kwin_pid:-} ]]; then
-    kill -- "-$kwin_pid" "$kwin_pid" 2>/dev/null; sleep 0.3
-    kill -9 -- "-$kwin_pid" "$kwin_pid" 2>/dev/null
-  fi
   rm -rf "$run"
 }
 trap cleanup EXIT
 
-real_home=$HOME
 export HOME=$work/home XDG_CONFIG_HOME=$work/home/.config XDG_CACHE_HOME=$work/home/.cache \
   XDG_STATE_HOME=$work/home/.local/state XDG_DATA_HOME=$work/home/.local/share XDG_RUNTIME_DIR=$run
 unset WAYLAND_DISPLAY WAYLAND_SOCKET DISPLAY ARBOR_SOCKET NIRI_SOCKET NOTIFY_SOCKET \
   HYPRLAND_INSTANCE_SIGNATURE DBUS_SESSION_BUS_ADDRESS
 # HEARTH_LOCK_PAM_DIR: test mode (no real PAM, no hyprlock fallback).
 export QT_WAYLAND_RECONNECT=1 HEARTH_POLKIT=0 HEARTH_APPMENU_REGISTRAR=0 HEARTH_SESSION_DRYRUN=1 \
-  QT_QPA_PLATFORM=wayland HEARTH_LOCK_PAM_DIR=$work/pam
-mkdir -p "$XDG_CONFIG_HOME/arbor" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$work/kwin" "$work/pam"
+  QT_QPA_PLATFORM=wayland QT_QPA_PLATFORMTHEME=xdgdesktopportal HEARTH_LOCK_PAM_DIR=$work/pam
+mkdir -p "$XDG_CONFIG_HOME/arbor" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$work/pam"
 
 printf '%s\n' '<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN"' \
   ' "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">' \
@@ -87,25 +81,16 @@ dbus-daemon --config-file="$work/dbus.conf" --fork --print-address=1 --print-pid
   { log "can't start dbus"; exit 2; }
 export DBUS_SESSION_BUS_ADDRESS=$(cat "$work/dbus.addr")
 
-# (Real HOME for KWin: with a fresh one and the private bus it was killed
-# within a second here, 2026-11-21. Its config still goes to $work/kwin.)
-HOME=$real_home XDG_CONFIG_HOME=$work/kwin setsid env -u QT_QPA_PLATFORM -u QT_WAYLAND_RECONNECT -u HEARTH_LOCK_PAM_DIR \
-  -u XDG_CACHE_HOME -u XDG_DATA_HOME -u XDG_STATE_HOME kwin_wayland --virtual --no-lockscreen --socket=kwin \
-  --width 3840 --height 1620 >"$work/kwin.log" 2>&1 </dev/null &
-kwin_pid=$!
-for _ in $(seq 100); do [[ -S $run/kwin ]] && break; sleep 0.1; done
-[[ -S $run/kwin ]] || { log "nested KWin didn't start"; exit 2; }
+# Headless arbor with Ben's monitor (scripts/headless-arbor.sh).
+headless_arbor_env DP-1=5120x2160
 
-sed -e '/^spawn-/d' -e 's/^output "DP-1"/output "winit"/' -e '/mode "[0-9]*x[0-9]*/d' \
-  -e '/hdr {/,/}/d' -e '/variable-refresh-rate/d' \
+sed -e '/^spawn-/d' -e '/hdr {/,/}/d' -e '/variable-refresh-rate/d' \
   "$repo/arbor/config.kdl" >"$XDG_CONFIG_HOME/arbor/config.kdl"
 cp "$repo"/arbor/*.kdl.* "$repo/arbor/hearth-layer-rules.kdl" "$XDG_CONFIG_HOME/arbor/" 2>/dev/null
 
 log "arbor $arbor_bin, hearth $hearth_bin"
-# (KWin's socket can be up before it takes clients: try a few times.)
-sleep 1
 for try in 1 2 3; do
-  WAYLAND_DISPLAY=kwin setsid "$arbor_bin" -c "$XDG_CONFIG_HOME/arbor/config.kdl" \
+  setsid "$arbor_bin" -c "$XDG_CONFIG_HOME/arbor/config.kdl" \
     >"$work/arbor.log" 2>&1 </dev/null &
   arbor_pid=$!
   for _ in $(seq 150); do

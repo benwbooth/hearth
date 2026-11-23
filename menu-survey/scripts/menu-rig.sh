@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # (menu-survey copy of the global-menu rig: hearth gets DISPLAY.)
-# Nested arbor + installed hearth on a PRIVATE session bus, for checking that
+# Headless arbor (no host compositor) + installed hearth on a PRIVATE session bus, for checking that
 # an app's global menu reaches hearth's menu bar. Never touches the live bus.
 #
-#   menu-rig.sh start            # private dbus + kwin --virtual + arbor + hearth
+#   menu-rig.sh start            # private dbus + headless arbor (2560x1440) + hearth
+#                                # (arbor: ARBOR_BIN, else devloop's, else PATH's; needs
+#                                # the headless backend)
 #   menu-rig.sh run CMD ARGS...  # run an app inside (env: bus, wayland, kde theme)
 #   menu-rig.sh dump             # hearth-ipc call appmenu dump
 #   menu-rig.sh ipc ARGS...      # any hearth ipc call
@@ -41,6 +43,8 @@ hearth_pid() { # this rig's hearth (hearth-shell execs quickshell), never anothe
 
 case $cmd in
 start)
+  source "$(dirname "$(readlink -f "$0")")/../../scripts/headless-arbor.sh"
+  arbor_bin=$(headless_arbor_bin "${ARBOR_BIN:-}")
   mkdir -p "$R/home/.config" "$R/home/.cache" "$R/home/.local/share" "$R/home/.local/state"
   cat > "$R/bus.conf" <<EOF
 <!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
@@ -51,23 +55,18 @@ EOF
   for _ in $(seq 50); do [[ -S $R/bus.sock ]] && break; sleep 0.1; done
   echo "unix:path=$R/bus.sock" > "$R/bus"
   priv_env
-  sock=menu-rig-kwin-$(basename "$R")
-  XDG_CONFIG_HOME=$R/kwin-config WAYLAND_DISPLAY= daemon "$R/kwin.pid" "$R/kwin.log" \
-    "$(readlink -f /run/current-system/sw/bin/kwin_wayland)" --virtual --no-lockscreen --socket=$sock --width 2600 --height 1500
-  for _ in $(seq 80); do [[ -S $XDG_RUNTIME_DIR/$sock ]] && break; sleep 0.1; done
   mkdir -p "$R/home/.config/arbor"
   printf 'prefer-no-csd\nhotkey-overlay { skip-at-startup; }\n' > "$R/home/.config/arbor/config.kdl"
   rm -f "$R/arbor.env"
-  WAYLAND_DISPLAY=$sock ARBOR_NO_SUPERVISOR=1 daemon "$R/arbor.pid" "$R/arbor.log" \
-    arbor -c "$R/home/.config/arbor/config.kdl" -- bash -c "env > '$R/arbor.env.tmp'; mv '$R/arbor.env.tmp' '$R/arbor.env'; exec sleep infinity"
+  # 2560x1440: hearth's menu bar drops menus that don't fit beside its
+  # status items at 1280 wide.
+  ( headless_arbor_env headless-1=2560x1440
+    unset WAYLAND_DISPLAY WAYLAND_SOCKET
+    ARBOR_NO_SUPERVISOR=1 daemon "$R/arbor.pid" "$R/arbor.log" \
+    "$arbor_bin" -c "$R/home/.config/arbor/config.kdl" -- bash -c "env > '$R/arbor.env.tmp'; mv '$R/arbor.env.tmp' '$R/arbor.env'; exec sleep infinity" )
   for _ in $(seq 100); do [[ -s $R/arbor.env ]] && break; sleep 0.1; done
   [[ -s $R/arbor.env ]] || { echo "arbor did not start; see $R/arbor.log" >&2; exit 1; }
   priv_env
-  # The nested arbor's window fills a 2560x1440 KWin output (hearth's menu
-  # bar drops menus that don't fit beside its status items at 1280 wide).
-  echo 'for (const w of workspace.windowList()) { if (w.normalWindow) { w.noBorder = true; w.frameGeometry = {x: 0, y: 0, width: 2560, height: 1440}; } }' > "$R/resize.js"
-  busctl --user call org.kde.KWin /Scripting org.kde.kwin.Scripting loadScript ss "$R/resize.js" resize >/dev/null
-  busctl --user call org.kde.KWin /Scripting org.kde.kwin.Scripting start
   # hearth reads X11 windows' menus with xprop: it needs the satellite's
   # DISPLAY, as arbor gives it in a real session (priv_env unsets it for
   # apps, which get it explicitly when they should be X11).
@@ -91,7 +90,7 @@ kill) # kill NAME: only processes on this rig's private bus
     { tr '\0' '\n' < /proc/$pid/environ; } 2>/dev/null | grep -qx "DBUS_SESSION_BUS_ADDRESS=unix:path=$R/bus.sock" && kill "$pid" && echo "killed $pid"
   done; true ;;
 stop)
-  for p in hearth arbor kwin dbus; do
+  for p in hearth arbor dbus; do
     [[ -f $R/$p.pid ]] && kill -- -"$(cat "$R/$p.pid")" 2>/dev/null || true
   done
   sleep 0.5; rm -rf "$R" ;;

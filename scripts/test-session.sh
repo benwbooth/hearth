@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Headless test session for hearth: a virtual KWin hosts a nested Hyprland,
-# and hearth runs inside that from this checkout. Works while the real
+# Headless test session for hearth: arbor on its headless backend (its own
+# HOME and private bus, so it never touches the real session's) hosts a
+# nested Hyprland, and hearth runs inside that from this checkout. Works while the real
 # screen is locked, and several named sessions can run side by side.
 #
-#   scripts/test-session.sh start NAME     # KWin + Hyprland
+#   scripts/test-session.sh start NAME     # headless arbor + Hyprland
 #   scripts/test-session.sh run NAME       # (re)start hearth from ./shell
 #   scripts/test-session.sh shot NAME [OUT.png]   # full screenshot (3840x1620)
 #   scripts/test-session.sh hyprctl NAME ARGS...  # talk to the nested Hyprland
@@ -12,7 +13,8 @@
 #   scripts/test-session.sh stop NAME
 #
 # The nested output is 3840x1620 at scale 1 (Ben's 5120x2160 at 4/3 in
-# logical pixels). Tools come from /etc/nixos's nixpkgs.
+# logical pixels). Tools come from /etc/nixos's nixpkgs; arbor is devloop's
+# (or ARBOR_BIN), as it needs the headless backend.
 set -euo pipefail
 
 cmd=${1:?command}
@@ -60,15 +62,39 @@ hypr_wayland() { cat "$dir/wayland"; }
 
 case $cmd in
 start)
-  sock=hearth-kwin-$name
-  if ! [[ -S $XDG_RUNTIME_DIR/$sock ]]; then
-    # Own config dir: KWin writes [Xwayland] Scale from its outputs into
-    # kwinrc, and the 1x virtual output would reset the real session's 1.3.
-    mkdir -p "$dir/kwin-config"
-    WAYLAND_DISPLAY= DISPLAY= XDG_CONFIG_HOME="$dir/kwin-config" daemon "$dir/kwin.pid" "$dir/kwin.log" \
-      kwin_wayland --virtual --no-lockscreen --socket="$sock" --width 4000 --height 1720
-    for _ in $(seq 50); do [[ -S $XDG_RUNTIME_DIR/$sock ]] && break; sleep 0.1; done
+  if ! [[ -s $dir/host-wayland && -S $XDG_RUNTIME_DIR/$(cat "$dir/host-wayland") ]]; then
+    source "$repo/scripts/headless-arbor.sh"
+    arbor_bin=$(headless_arbor_bin "${ARBOR_BIN:-}")
+    # The host arbor gets its own HOME (window memory, state) and a bus with
+    # nothing to activate: its D-Bus services must not meet the real ones.
+    ah=$dir/arbor-home
+    mkdir -p "$ah/.config/arbor" "$ah/.cache" "$ah/.local/share" "$ah/.local/state"
+    printf '%s\n' '<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN"' \
+      ' "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">' \
+      "<busconfig><type>session</type><listen>unix:path=$dir/host-bus</listen><auth>EXTERNAL</auth>" \
+      '<policy context="default"><allow send_destination="*" eavesdrop="true"/><allow eavesdrop="true"/><allow own="*"/></policy></busconfig>' \
+      >"$dir/host-bus.conf"
+    daemon "$dir/host-dbus.pid" "$dir/host-dbus.log" dbus-daemon --nofork --config-file="$dir/host-bus.conf"
+    for _ in $(seq 50); do [[ -S $dir/host-bus ]] && break; sleep 0.1; done
+    # Every window fullscreen: Hyprland's fills the output.
+    printf '%s\n' 'prefer-no-csd' 'hotkey-overlay { skip-at-startup; }' \
+      'window-rule { open-fullscreen true; }' >"$ah/.config/arbor/config.kdl"
+    ( headless_arbor_env headless-1=3840x1620
+      export HOME=$ah XDG_CONFIG_HOME=$ah/.config XDG_CACHE_HOME=$ah/.cache XDG_DATA_HOME=$ah/.local/share \
+        XDG_STATE_HOME=$ah/.local/state DBUS_SESSION_BUS_ADDRESS=unix:path=$dir/host-bus ARBOR_NO_SUPERVISOR=1
+      unset WAYLAND_DISPLAY WAYLAND_SOCKET DISPLAY ARBOR_SOCKET NIRI_SOCKET NOTIFY_SOCKET HYPRLAND_INSTANCE_SIGNATURE
+      daemon "$dir/arbor.pid" "$dir/arbor.log" "$arbor_bin" -c "$ah/.config/arbor/config.kdl" )
+    for _ in $(seq 100); do grep -aq "listening on Wayland socket" "$dir/arbor.log" 2>/dev/null && break; sleep 0.1; done
+    grep -ao 'listening on Wayland socket: [^ ]*' "$dir/arbor.log" | head -1 | awk '{print $NF}' >"$dir/host-wayland"
+    [[ -s $dir/host-wayland ]] || { echo "headless arbor did not start; see $dir/arbor.log" >&2; exit 1; }
+    # Until arbor answers and has settled: Hyprland's Wayland backend draws
+    # its first frame without waiting for the initial configure (a protocol
+    # error if arbor is still busy starting and sends it late).
+    host_ipc=$XDG_RUNTIME_DIR/arbor.$(cat "$dir/host-wayland").$(cat "$dir/arbor.pid").sock
+    for _ in $(seq 50); do ARBOR_SOCKET=$host_ipc timeout 2 "$arbor_bin" msg version >/dev/null 2>&1 && break; sleep 0.1; done
+    sleep 1
   fi
+  sock=$(cat "$dir/host-wayland")
   cat > "$dir/hyprland.lua" <<'EOF'
 hl.monitor({ output = "", mode = "3840x1620", position = "0x0", scale = "1" })
 hl.config({
@@ -131,7 +157,7 @@ log)
   cat "$dir/qs.log"
   ;;
 stop)
-  for p in qs hypr kwin; do
+  for p in qs hypr arbor host-dbus; do
     [[ -f $dir/$p.pid ]] && kill -- -"$(cat "$dir/$p.pid")" 2>/dev/null || true
   done
   sleep 0.5

@@ -5,8 +5,9 @@
 #   scripts/smoke-test.sh [--arbor BIN] [--hearth BIN] [--no-reload] [--keep]
 #
 # Runs BIN (default: devloop's build, else the one on PATH) in a throwaway
-# nested session: a virtual KWin, a private D-Bus, its own HOME and runtime
-# dir, Ben's arbor config (outputs at 4/3), no startup programs. Starts
+# session: arbor on its headless backend (a 5120x2160 "DP-1" drawn offscreen
+# on the 7900 XTX, no host compositor), a private D-Bus, its own HOME and
+# runtime dir, Ben's arbor config (DP-1 at 4/3), no startup programs. Starts
 # hearth, opens tray menus, Settings, the overview, the screenshot overlay
 # (screencopy) with a new window opening on top, and the screenshot editor;
 # restarts arbor in place (reload-binary) and checks the shell comes back.
@@ -27,10 +28,8 @@ while (($#)); do
     *) echo "usage: $0 [--arbor BIN] [--hearth BIN] [--no-reload] [--keep]" >&2; exit 2 ;;
   esac
 done
-if [[ -z $arbor_bin ]]; then
-  arbor_bin=$state_root/devloop/arbor/bin/arbor
-  [[ -x $arbor_bin ]] || arbor_bin=$(command -v arbor) || { echo "no arbor" >&2; exit 2; }
-fi
+source "$repo/scripts/headless-arbor.sh"
+arbor_bin=$(headless_arbor_bin "$arbor_bin") || exit 2
 if [[ -z $hearth_bin ]]; then
   hearth_bin=$state_root/devloop/hearth/bin/hearth
   [[ -x $hearth_bin ]] || hearth_bin=$(command -v hearth) || { echo "no hearth" >&2; exit 2; }
@@ -64,27 +63,20 @@ cleanup() {
   pids=$(ours | grep -vx "$$")
   [[ -n $pids ]] && kill -9 $pids 2>/dev/null
   [[ -f $work/dbus.pid ]] && kill "$(cat "$work/dbus.pid")" 2>/dev/null
-  # KWin runs through a capability wrapper: its environment isn't readable,
-  # so it's ended by pid and process group (Xwayland).
-  if [[ -n ${kwin_pid:-} ]]; then
-    kill -- "-$kwin_pid" "$kwin_pid" 2>/dev/null
-    sleep 0.3
-    kill -9 -- "-$kwin_pid" "$kwin_pid" 2>/dev/null
-  fi
   fusermount -u "$run/doc" 2>/dev/null
   rm -rf "$run"
 }
 trap cleanup EXIT
 
-real_home=$HOME
 export HOME=$work/home XDG_CONFIG_HOME=$work/home/.config XDG_CACHE_HOME=$work/home/.cache \
   XDG_STATE_HOME=$work/home/.local/state XDG_DATA_HOME=$work/home/.local/share XDG_RUNTIME_DIR=$run
 unset WAYLAND_DISPLAY WAYLAND_SOCKET DISPLAY ARBOR_SOCKET NIRI_SOCKET NOTIFY_SOCKET \
   HYPRLAND_INSTANCE_SIGNATURE DBUS_SESSION_BUS_ADDRESS
 # As in the arbor session; a test shell must never act on the real session.
+# (Platform theme as arbor/config.kdl sets it.)
 export QT_WAYLAND_RECONNECT=1 HEARTH_POLKIT=0 HEARTH_APPMENU_REGISTRAR=0 HEARTH_SESSION_DRYRUN=1 \
-  QT_QPA_PLATFORM=wayland
-mkdir -p "$XDG_CONFIG_HOME/arbor" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$work/kwin"
+  QT_QPA_PLATFORM=wayland QT_QPA_PLATFORMTHEME=xdgdesktopportal
+mkdir -p "$XDG_CONFIG_HOME/arbor" "$XDG_STATE_HOME" "$XDG_CACHE_HOME"
 
 # A private bus with nothing to activate: the real session's services
 # (portals, the keyring...) must not start in here.
@@ -97,25 +89,16 @@ dbus-daemon --config-file="$work/dbus.conf" --fork --print-address=1 --print-pid
   { log "can't start dbus"; exit 2; }
 export DBUS_SESSION_BUS_ADDRESS=$(cat "$work/dbus.addr")
 
-# KWin with the real HOME, cache and data dirs (its config stays in
-# $work/kwin): with fresh ones and the private bus it was SIGKILLed within a
-# second of starting (2026-11-21), and arbor's winit backend panicked.
-HOME=$real_home XDG_CONFIG_HOME=$work/kwin setsid env -u QT_QPA_PLATFORM -u QT_WAYLAND_RECONNECT \
-  -u XDG_CACHE_HOME -u XDG_DATA_HOME -u XDG_STATE_HOME kwin_wayland --virtual --no-lockscreen --socket=kwin \
-  --width 3840 --height 1620 >"$work/kwin.log" 2>&1 </dev/null &
-kwin_pid=$!
-for _ in $(seq 100); do [[ -S $run/kwin ]] && break; sleep 0.1; done
-[[ -S $run/kwin ]] || { log "nested KWin didn't start (see $work/kwin.log)"; exit 2; }
+# Headless arbor with Ben's monitor (scripts/headless-arbor.sh).
+headless_arbor_env DP-1=5120x2160
 
-# Ben's config, without startup programs, its display settings on the
-# nested window (scale 4/3).
-sed -e '/^spawn-/d' -e 's/^output "DP-1"/output "winit"/' -e '/mode "[0-9]*x[0-9]*/d' \
-  -e '/hdr {/,/}/d' -e '/variable-refresh-rate/d' \
+# Ben's config, without startup programs, HDR or VRR.
+sed -e '/^spawn-/d' -e '/hdr {/,/}/d' -e '/variable-refresh-rate/d' \
   "$repo/arbor/config.kdl" >"$XDG_CONFIG_HOME/arbor/config.kdl"
 cp "$repo"/arbor/*.kdl.* "$repo/arbor/hearth-layer-rules.kdl" "$XDG_CONFIG_HOME/arbor/" 2>/dev/null
 
 log "arbor $arbor_bin, hearth $hearth_bin"
-WAYLAND_DISPLAY=kwin setsid "$arbor_bin" --supervise -c "$XDG_CONFIG_HOME/arbor/config.kdl" \
+setsid "$arbor_bin" --supervise -c "$XDG_CONFIG_HOME/arbor/config.kdl" \
   >"$work/arbor.log" 2>&1 </dev/null &
 sock=""
 for _ in $(seq 150); do
