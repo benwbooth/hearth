@@ -515,13 +515,17 @@ def access_token(aid, purpose):
 
 
 def mark(aid, **kw):
+    """Sets an account's state; Changed only when something really changed."""
+    changed = False
     with _lock:
         d = load()
         for a in d["accounts"]:
-            if a["id"] == aid:
+            if a["id"] == aid and any(a.get(k) != v for k, v in kw.items()):
                 a.update(kw)
-        save_store(d)
-    if SERVICE:
+                changed = True
+        if changed:
+            save_store(d)
+    if changed and SERVICE:
         SERVICE.changed_soon()
 
 
