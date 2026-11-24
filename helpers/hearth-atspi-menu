@@ -451,10 +451,18 @@ class AtspiMenu:
                         if mb is not None:
                             kind = "kept"
                 trigger = None
+                toolbar = None
                 if kind is None:
                     trigger = self.search(A, f, self.is_burger, web=True) or self.unnamed_burger(A, f)
                     if trigger is None:
-                        continue
+                        # 4. No menus at all, but a toolbar of named buttons
+                        # (ScreenGrab's New/Save/Copy/Options/About/Quit):
+                        # its buttons, as an Actions menu.
+                        toolbar = self.search(A, f, lambda o, r: r == A.Role.TOOL_BAR
+                                              and len(self.toolbar_buttons(o)) >= 2, web=False)
+                        if toolbar is None:
+                            continue
+                        trigger = toolbar
                     kind = "burger"
                 self.app, self.frame, self.mb, self.trigger, self.kind = app, f, mb, trigger, kind
                 self.toolkit = toolkit(app)
@@ -468,7 +476,9 @@ class AtspiMenu:
                     app.set_cache_mask(A.Cache.NONE)
                 except Exception:
                     pass
-                if kind == "burger" and self.holds_items(trigger):
+                if toolbar is not None:
+                    self.read_toolbar()
+                elif kind == "burger" and self.holds_items(trigger):
                     # Readable while closed (GTK 3): read now, nothing cached.
                     self.burger = {"flat": True, "labels": [(trigger.get_name() or "Menu").strip().title()]}
                     self.read(trigger, (-1,))
@@ -478,6 +488,34 @@ class AtspiMenu:
                     self.load_tree()
                 return True
         return False
+
+    def toolbar_buttons(self, tb):
+        """{label: button} of a toolbar's showing, named buttons."""
+        A = Atspi
+        roles = set(BUTTON_ROLES()) | {A.Role.TOGGLE_BUTTON}
+        found = {}
+        try:
+            for i in range(min(tb.get_child_count(), 60)):
+                c = tb.get_child_at_index(i)
+                if c is None or c.get_role() not in roles:
+                    continue
+                name = split_shortcut((c.get_name() or "").strip())[0]
+                if name and name not in found and c.get_state_set().contains(A.StateType.SHOWING):
+                    found[name] = c
+        except Exception:
+            pass
+        return found
+
+    def read_toolbar(self):
+        """The toolbar's buttons as one flat menu, pressed by name like a
+        drawer's entries (click_drawer); read again each time it opens."""
+        self.cache = {}
+        items = []
+        for i, label in enumerate(list(self.toolbar_buttons(self.trigger))[:40]):
+            items.append(item(self.nid((-1, i)), label))
+        self.cache[(-1,)] = items
+        self.tree_read = True
+        self.burger = {"flat": True, "drawer": True, "toolbar": True, "labels": ["Actions"]}
 
     @staticmethod
     def is_title(name):
@@ -807,6 +845,8 @@ class AtspiMenu:
             b = self.burger
             if not b:
                 return [((-2,), (self.trigger.get_name() or "Menu").strip().title(), None)]
+            if b.get("toolbar"):
+                return [((-1,), "Actions", None)]
             if b.get("flat"):
                 return [((-1,), (self.trigger.get_name() or "Menu").strip().title(), None)]
             return [((i,), l, None) for i, l in enumerate(b.get("labels", [])) if l]
@@ -1150,6 +1190,10 @@ class AtspiMenu:
                     self.act(o)
             finally:
                 self.probe(False)
+            self.emit()
+            return
+        if self.kind == "burger" and (self.burger or {}).get("toolbar"):
+            self.read_toolbar()  # it's on screen: read it as it is now
             self.emit()
             return
         if self.kind == "burger" and self.holds_items(self.trigger):
