@@ -26,6 +26,7 @@ if os.environ.get("HEARTH_ATSPI_TYPELIB"):
         os.environ["HEARTH_ATSPI_TYPELIB"].split(os.pathsep)
         + [p for p in os.environ.get("GI_TYPELIB_PATH", "").split(os.pathsep) if p])
 
+import re  # noqa: E402
 import time  # noqa: E402
 
 current = None
@@ -940,11 +941,18 @@ class AtspiMenu:
         except Exception:
             return None
 
+    ACTIVATE = ("press", "click", "activate", "toggle", "showmenu", "open", "jump")
+
     def act(self, o):
         try:
             a = o.get_action_iface()
             if a and a.get_n_actions():
-                a.do_action(0)
+                # The activating action by name, not the first one: Qt
+                # Quick's page tabs (Kirigami drawers) list SetFocus first.
+                n = a.get_n_actions()
+                names = [(a.get_action_name(i) or "").replace(" ", "").lower() for i in range(n)]
+                idx = next((i for i, nm in enumerate(names) if nm in self.ACTIVATE), 0)
+                a.do_action(idx)
                 return True
         except Exception as e:
             err(f"AT-SPI action: {e}")
@@ -1224,6 +1232,18 @@ class AtspiMenu:
                 break
         self.press(self.trigger)  # close it again
         if not new:
+            # Nothing new: the drawer is already open, beside the page (a
+            # wide window: KClock's Time/Timers/Stopwatch/Alarms/Settings).
+            # Its pages are the window's page tabs.
+            tabs = {}
+            for k, v in before.items():
+                try:
+                    if v.get_role() == Atspi.Role.PAGE_TAB:
+                        tabs[k] = v
+                except Exception:
+                    continue
+            new = tabs
+        if not new:
             return
         self.cache = {}
         items = []
@@ -1264,6 +1284,8 @@ class AtspiMenu:
         finally:
             self.listen_popups(False)
 
+    DRAWER = re.compile(r"\b(open|show) drawer\b", re.I)
+
     def _learn_burger(self):
         """Read the whole ☰ in one look: are its items submenus (they
         become the menu bar's menus) or commands (one menu), and every
@@ -1271,7 +1293,10 @@ class AtspiMenu:
         app's binary, so the menu bar shows them without opening the ☰ again
         (Claude Desktop: each look flashes its menu and takes a second)."""
         before = self.visible_actions()
-        menus = self.open_burger()
+        # Kirigami's "Open drawer" opens a panel, never a menu: don't wait
+        # for one (6 s).
+        drawer = bool(self.DRAWER.search(self.trigger.get_name() or ""))
+        menus = None if drawer else self.open_burger()
         if not menus:
             self.learn_drawer(before)
             return
