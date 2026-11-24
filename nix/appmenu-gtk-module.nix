@@ -16,17 +16,23 @@
 # - The module and its parser library carry no DT_NEEDED on GTK/GLib: they
 #   use the host app's (always loaded before a GTK module), so an app built
 #   against another nixpkgs never ends up with two GTKs in one process.
-{ lib, stdenv, meson, ninja, pkg-config, glib, gtk3, patchelf, appmenu-glib-translator }:
+# Built twice: for GTK 3 (the default) and GTK 2 (`gtkVersion = "2"`, with
+# gtk2: Pidgin, Sublime Text, Gwyddion... X11-only, so the menu reaches
+# hearth through the _GTK_* window properties). GTK_MODULES names both; each
+# GTK loads its own from GTK_PATH's gtk-2.0 or gtk-3.0.
+{ lib, stdenv, meson, ninja, pkg-config, glib, gtk3, patchelf, appmenu-glib-translator
+, gtk ? gtk3, gtkVersion ? "3" }:
 
+let gtkdir = "gtk-${gtkVersion}.0"; in
 stdenv.mkDerivation {
-  pname = "appmenu-gtk-module";
+  pname = "appmenu-gtk${lib.optionalString (gtkVersion != "3") gtkVersion}-module";
   version = appmenu-glib-translator.version;
   src = appmenu-glib-translator.src;
   sourceRoot = "${appmenu-glib-translator.src.name}/subprojects/appmenu-gtk-module";
 
   nativeBuildInputs = [ meson ninja pkg-config glib patchelf ];
-  buildInputs = [ glib gtk3 ];
-  mesonFlags = [ "-Dgtk=3" ];
+  buildInputs = [ glib gtk ];
+  mesonFlags = [ "-Dgtk=${gtkVersion}" ];
 
   # Upstream registers a plain window's menu before the window is realized,
   # when it has no GdkWindow yet, so on Wayland set_dbus_properties fails
@@ -34,9 +40,9 @@ stdenv.mkDerivation {
   patches = [ ./appmenu-gtk-module-wayland-realize.patch ];
 
   postPatch = ''
-    substituteInPlace src/gtk-3.0/meson.build \
-      --replace-fail "join_paths(gtk3.get_variable(pkgconfig:'libdir'),'gtk-3.0','modules')" \
-                     "join_paths(get_option('libdir'),'gtk-3.0','modules')"
+    substituteInPlace src/${gtkdir}/meson.build \
+      --replace-fail "join_paths(gtk${gtkVersion}.get_variable(pkgconfig:'libdir'),'${gtkdir}','modules')" \
+                     "join_paths(get_option('libdir'),'${gtkdir}','modules')"
     # No systemd user unit (it only sets GTK_MODULES in the systemd env).
     substituteInPlace data/meson.build --replace-fail "if systemd.found()" "if false"
     cat >> src/consts.h <<EOF
@@ -68,11 +74,11 @@ stdenv.mkDerivation {
   '';
 
   postFixup = ''
-    for f in $out/lib/gtk-3.0/modules/libappmenu-gtk-module.so $out/lib/libappmenu-gtk3-parser.so.*.*; do
+    for f in $out/lib/${gtkdir}/modules/libappmenu-gtk-module.so $out/lib/libappmenu-gtk${gtkVersion}-parser.so.*.*; do
       [ -L "$f" ] && continue
       for n in $(patchelf --print-needed "$f"); do
         case "$n" in
-          libgtk-3.so*|libgdk-3.so*|libglib-2.0.so*|libgobject-2.0.so*|libgio-2.0.so*|libgmodule-2.0.so*|libpango*|libcairo*|libgdk_pixbuf*|libharfbuzz*|libatk*|libX11*|libwayland*)
+          libgtk-3.so*|libgdk-3.so*|libgtk-x11-2.0.so*|libgdk-x11-2.0.so*|libglib-2.0.so*|libgobject-2.0.so*|libgio-2.0.so*|libgmodule-2.0.so*|libpango*|libcairo*|libgdk_pixbuf*|libharfbuzz*|libatk*|libX11*|libwayland*)
             patchelf --remove-needed "$n" "$f" ;;
         esac
       done

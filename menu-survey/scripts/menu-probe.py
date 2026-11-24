@@ -548,6 +548,11 @@ def attempt(attr, argv, variant, extra_env, extra_args, wait_win=50, wait_menu=1
     # The arbor session has X11 too (xwayland-satellite): VLC 3 and other
     # X11-only apps need DISPLAY even when they run "natively".
     env = dict(SESSION_ENV, DISPLAY=arbor_display())
+    # GTK modules as the session finds them: GTK 2's folder before GTK 3's
+    # (each GTK loads appmenu-gtk-module from its own), from the hearth
+    # under test.
+    hp = HEARTH_PKG or "/run/current-system/sw"
+    env["GTK_PATH"] = f"{hp}/lib/gtk-2.0:{hp}/lib/gtk-3.0:/run/current-system/sw/lib/gtk-2.0:/run/current-system/sw/lib/gtk-3.0"
     # Java's accessibility bridge, as arbor/config.kdl loads it into every
     # JVM (from the hearth under test). Not for Flatpaks: the session blanks
     # it there (they can't see the jar), and the survey's own Flatpak
