@@ -87,6 +87,9 @@ Singleton {
         else go();
     }
 
+    // Asks the menu bar's tray (bar/Tray.qml) to open an icon's menu.
+    signal menuRequested(var item)
+
     // `hearth-ipc call tray click <id>`: a left click on that tray icon
     // (tests, scripts). `tray items` lists the ids.
     IpcHandler {
@@ -95,6 +98,14 @@ Singleton {
             const item = SystemTray.items.values.find(i => i.id === id);
             if (!item) return "no tray icon " + id;
             root.toggle(item);
+            return "ok";
+        }
+        // `tray menu <id>`: open that icon's menu (as a right click).
+        function menu(id: string): string {
+            const item = SystemTray.items.values.find(i => i.id === id);
+            if (!item) return "no tray icon " + id;
+            if (!item.hasMenu) return "no menu";
+            root.menuRequested(item);
             return "ok";
         }
         function items(): string {

@@ -16,6 +16,11 @@ MouseArea {
     readonly property bool isMenuItem: true
     property string text: ""
     property string icon: ""
+    // Icons from apps (tray menus): their colourless pixels (white or grey
+    // glyphs drawn for some other panel) take the row's text colour
+    // (shaders/trayicon.frag), so they read on light and dark menus and on
+    // the selection; coloured pixels stay as they are.
+    property bool adaptiveIcon: false
     property bool checked: false
     property bool checkable: false
     // A radio item (dbusmenu "radio"): a dot instead of a checkmark.
@@ -153,6 +158,11 @@ MouseArea {
             name: root.icon
             visible: root.icon !== ""
             opacity: root.enabled ? 1 : 0.35
+            layer.enabled: root.adaptiveIcon
+            layer.effect: ShaderEffect {
+                fragmentShader: "../shaders/trayicon.frag.qsb"
+                readonly property color target: root.enabled ? root.textColor : Theme.fg
+            }
         }
     }
 

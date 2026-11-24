@@ -14,14 +14,45 @@ import ".."
 // and slide/fade in. While the pointer heads for an open submenu (inside
 // the triangle from where it was to the submenu's near corners, macOS's
 // "safe triangle"), crossing other rows doesn't switch submenus.
+//
+// With `qsMenu` set (a Quickshell QsMenuHandle: a tray icon's
+// `modelData.menu`, or one of its entries for a submenu) the items come
+// from Quickshell's own dbusmenu client (QsMenuOpener) instead of the
+// AppMenu service: tray (StatusNotifierItem) menus, bar/Tray.qml.
 Item {
     id: root
     property int itemId: 0
+    property var qsMenu: null
+    QsMenuOpener {
+        id: opener
+        menu: root.qsMenu
+    }
+    // A Quickshell entry as the AppMenu tree's item shape.
+    function qsItem(e, i) {
+        return {
+            id: i + 1, entry: e, visible: true,
+            label: e.text.replace(/&(.)/g, "$1"),
+            type: e.isSeparator ? "separator" : "",
+            enabled: e.enabled,
+            icon: e.icon || "",
+            toggleType: e.buttonType === QsMenuButtonType.CheckBox ? "checkmark"
+                      : e.buttonType === QsMenuButtonType.RadioButton ? "radio" : "",
+            toggleState: e.checkState === Qt.Checked ? 1 : e.checkState === Qt.PartiallyChecked ? 2 : 0,
+            shortcut: "", submenu: e.hasChildren, children: []
+        };
+    }
     property var hostPopup: null    // unused; kept for callers
     // The row whose submenu this is (keyboard Left goes back to it).
     property Item ownerItem: null
     signal done()
-    readonly property var node: { void AppMenu.tree; return AppMenu.find(root.itemId); }
+    readonly property var node: {
+        if (root.qsMenu) {
+            const kids = opener.children ? opener.children.values : [];
+            return { children: kids.map((e, i) => root.qsItem(e, i)) };
+        }
+        void AppMenu.tree;
+        return AppMenu.find(root.itemId);
+    }
     // Items hearth adds (each with `run`, done here, not by the app): the
     // bold app menu's Hide / Hide Others / Show All, put before the app's
     // last "Quit…" item (with a separator), else at the end.
@@ -50,12 +81,12 @@ Item {
     implicitHeight: Math.max(pane.height, sub.item ? sub.y + sub.item.implicitHeight : 0)
     readonly property real overlap: Math.round(3 * Theme.pt)
 
-    Component.onCompleted: Qt.callLater(() => AppMenu.open(root.itemId))
-    Component.onDestruction: AppMenu.close(root.itemId)
+    Component.onCompleted: if (!root.qsMenu) Qt.callLater(() => AppMenu.open(root.itemId))
+    Component.onDestruction: if (!root.qsMenu) AppMenu.close(root.itemId)
 
     onOpenSubChanged: {
         if (openSub < 0) sub.source = "";
-        else sub.setSource("DBusMenuList.qml", { itemId: openSub, ownerItem: openSubRow });
+        else sub.setSource("DBusMenuList.qml", { itemId: openSub, ownerItem: openSubRow, qsMenu: openSubEntry });
     }
     function showSub(row) {
         if (!row || !row.modelData.submenu) { openSubRow = null; openSub = -1; return; }
@@ -63,9 +94,11 @@ Item {
         openSub = -1;
         openSubRow = row.entryItem;
         openSubY = row.y;
+        openSubEntry = row.modelData.entry || null;
         openSub = row.modelData.id;
     }
     property real openSubY: 0
+    property var openSubEntry: null
 
     // --- safe triangle ---
     property point lastPos: Qt.point(0, 0)
@@ -161,6 +194,9 @@ Item {
                         enabled: row.modelData.enabled
                         text: row.modelData.label
                         icon: row.modelData.icon || ""
+                        // Pixmaps from tray apps: their grey/white parts in
+                        // the menu's text colour.
+                        adaptiveIcon: !!row.modelData.entry
                         checkable: row.modelData.toggleType !== ""
                         radio: row.modelData.toggleType === "radio"
                         checked: row.modelData.toggleState === 1
@@ -175,6 +211,7 @@ Item {
                         onContainsMouseChanged: if (containsMouse) root.rowHovered(row)
                         onTriggered: {
                             if (row.modelData.run) row.modelData.run();
+                            else if (row.modelData.entry) row.modelData.entry.triggered();
                             else AppMenu.click(row.modelData.id);
                             root.done();
                         }

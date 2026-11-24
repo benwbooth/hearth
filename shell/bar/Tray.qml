@@ -37,6 +37,7 @@ Row {
     readonly property real chevronWidth: more.implicitWidth
 
     Repeater {
+        id: barRep
         model: root.barItems
         delegate: TrayItem {}
     }
@@ -72,6 +73,42 @@ Row {
             Repeater {
                 model: root.menuRows
                 delegate: OverflowRow { width: list.width }
+            }
+        }
+    }
+
+    // An app's tray menu, in hearth's own glass menu (the same as the
+    // global menu's: widgets/DBusMenuList.qml reading the item's dbusmenu
+    // through Quickshell), below its icon, or below the chevron for icons
+    // in the dropdown. One for all tray icons.
+    BarPopup {
+        id: trayMenu
+        property var sni: null
+        anchorItem: more
+        align: "start"
+        padding: 0
+        bare: true
+        function show(sni, anchor) {
+            if (open && trayMenu.sni === sni) { close(); return; }
+            open = false;
+            trayMenu.sni = sni;
+            trayMenu.anchorItem = anchor;
+            open = true;
+        }
+        Connections {
+            target: TrayWindows
+            function onMenuRequested(sni) {
+                const i = root.barItems.indexOf(sni);
+                const btn = i >= 0 ? barRep.itemAt(i) : null;
+                trayMenu.show(sni, btn || more);
+            }
+        }
+        Loader {
+            // Kept while the menu fades out.
+            active: trayMenu.visible && !!trayMenu.sni
+            sourceComponent: DBusMenuList {
+                qsMenu: trayMenu.sni ? trayMenu.sni.menu : null
+                onDone: trayMenu.close()
             }
         }
     }
@@ -174,12 +211,9 @@ Row {
         tooltip: modelData.tooltipTitle || modelData.title || modelData.id
         tooltipSub: modelData.tooltipDescription
 
-        function showMenu() {
-            const win = item.QsWindow.window;
-            const p = item.mapToItem(win.contentItem, 0, 0);
-            // Below the icon, like macOS, so the menu never covers the tray.
-            modelData.display(win, p.x, p.y + item.height);
-        }
+        // Below the icon, like macOS, so the menu never covers the tray
+        // (from the dropdown: below the chevron, as the dropdown closes).
+        function showMenu() { trayMenu.show(modelData, inMenu ? more : item); }
 
         onClicked: mouse => {
             if (mouse.button === Qt.LeftButton) {
