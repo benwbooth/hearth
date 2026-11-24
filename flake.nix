@@ -276,6 +276,12 @@
 
     # The login screen (README "Login screen"): greetd + arbor + hearth-greeter.
     nixosModules.greeter = import ./nix/greeter.nix self;
+    # The global menu's system side (README "Global menu"): the
+    # accessibility bus, the Flatpak guard for the Java bridge.
+    nixosModules.global-menu = import ./nix/global-menu.nix self;
+    # For app wrappers: Electron builds the accessibility tree hearth's
+    # global menu reads (menus it doesn't export) only with these flags.
+    lib.globalMenu.electronFlags = [ "--force-renderer-accessibility=basic" ];
     # Spotlight's indexer and the AI hub's llama.cpp server as user units
     # (README "Spotlight", "AI").
     nixosModules.ai = import ./nix/ai.nix self;
