@@ -28,6 +28,18 @@ Scope {
         id: win
         readonly property var targetScreen: Quickshell.screens.find(s => s.name === Launchpad.screenName) || Compositor.focusedScreen
         screen: targetScreen
+        // A surface lost while a monitor was away (put on Qt's placeholder
+        // screen, or dropped with its output) comes back on the next open:
+        // the window is made again on a real screen.
+        Connections {
+            target: Launchpad
+            function onOpenChanged() {
+                if (Launchpad.open && !win.backingWindowVisible) {
+                    win.visible = false;
+                    Qt.callLater(() => { win.visible = true; });
+                }
+            }
+        }
         // Never unmapped: closed, it's a 1x1 surface that takes no input and
         // draws nothing. Unmapping dropped the window to a pixel ratio of 1,
         // so every icon was rasterised again on each open (seconds of blank

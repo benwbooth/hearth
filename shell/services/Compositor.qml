@@ -85,7 +85,10 @@ Singleton {
 
     function screenFor(outputName) {
         const s = Quickshell.screens;
-        return s.find(x => x.name === outputName) || (s.length ? s[0] : null);
+        // Never Qt's placeholder screen (no name, no output: there while a
+        // monitor is off or being re-plugged): a window put on it gets no
+        // surface, and stays without one (the Launchpad did).
+        return s.find(x => x.name === outputName) || s.find(x => !!x.name) || null;
     }
 
     // Windows sorted most recently used first.
