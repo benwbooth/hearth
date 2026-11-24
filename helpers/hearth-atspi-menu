@@ -1220,6 +1220,16 @@ class AtspiMenu:
         """The ☰ opened no menu: a drawer or panel (Kirigami's global
         drawer). Its items are what became visible when it opened; they're
         read as one flat menu and pressed by name later (click_drawer)."""
+        # Already open beside the page: read it as it is (pressing would
+        # only fold it away).
+        new = self.drawer_items()
+        if not new:
+            new = self.drawer_open_and_read(before)
+        if not new:
+            return
+        self._store_drawer(new)
+
+    def drawer_open_and_read(self, before):
         if not self.press(self.trigger):
             return
         new = {}
@@ -1231,20 +1241,12 @@ class AtspiMenu:
                 new = {k: v for k, v in self.visible_actions().items() if k not in before}
                 break
         self.press(self.trigger)  # close it again
-        if not new:
-            # Nothing new: the drawer is already open, beside the page (a
-            # wide window: KClock's Time/Timers/Stopwatch/Alarms/Settings).
-            # Its pages are the window's page tabs.
-            tabs = {}
-            for k, v in before.items():
-                try:
-                    if v.get_role() == Atspi.Role.PAGE_TAB:
-                        tabs[k] = v
-                except Exception:
-                    continue
-            new = tabs
-        if not new:
-            return
+        return new
+
+    def _store_drawer(self, new):
+        """The drawer's entries (KClock: Time, Timers, Stopwatch, Alarms,
+        Settings; Discover: Home, Installed, Updates, the categories) as
+        one flat menu, pressed by name later (click_drawer)."""
         self.cache = {}
         items = []
         for i, label in enumerate(list(new)[:40]):
@@ -1258,6 +1260,40 @@ class AtspiMenu:
         c = load_cache()
         c[self.burger_key()] = self.burger
         save_cache(c)
+
+    def drawer_items(self):
+        A = Atspi
+        found = {}
+        try:
+            n = self.frame.get_child_count()
+        except Exception:
+            return found
+        for i in range(min(n, 30)):
+            try:
+                d = self.frame.get_child_at_index(i)
+                if d is None or d.get_role() != A.Role.DIALOG or \
+                        not d.get_state_set().contains(A.StateType.SHOWING):
+                    continue
+            except Exception:
+                continue
+            todo = [(d, 0)]
+            while todo and len(found) < 40:
+                o, depth = todo.pop(0)
+                try:
+                    r = o.get_role()
+                    name = (o.get_name() or "").strip()
+                    if r in (A.Role.PAGE_TAB, A.Role.LIST_ITEM) and name:
+                        if name not in found and o.get_state_set().contains(A.StateType.SHOWING):
+                            found[name] = o
+                        continue
+                    if depth < 6:
+                        for k in range(min(o.get_child_count(), 80)):
+                            c = o.get_child_at_index(k)
+                            if c:
+                                todo.append((c, depth + 1))
+                except Exception:
+                    continue
+        return found
 
     def click_drawer(self, label):
         """Open the drawer, press the item called `label`."""
