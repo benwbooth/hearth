@@ -212,6 +212,13 @@ def rig_up():
     r = rig("start", timeout=120)
     if "rig up" not in r.stdout:
         sys.exit("rig failed: " + r.stdout + r.stderr)
+    # A hearth that didn't load (a QML error) reads no menus at all: every
+    # app would be measured menu-less. Stop instead.
+    try:
+        if "Failed to load configuration" in open(os.path.join(RIGDIR, "hearth.log"), errors="replace").read():
+            sys.exit("rig's hearth failed to load: see " + os.path.join(RIGDIR, "hearth.log"))
+    except OSError:
+        pass
     subprocess.Popen(["setsid", RIG, "run", "/run/current-system/sw/libexec/at-spi-bus-launcher",
                       "--launch-immediately"], env=ENV, stdout=subprocess.DEVNULL,
                      stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
@@ -1009,6 +1016,7 @@ def main():
     print(f"{len(todo)} apps to probe", file=sys.stderr, flush=True)
     orphan_sweep()  # a previous run's apps (stopped or crashed worker)
     os.makedirs(LOCAL, exist_ok=True)
+    streak = 0
     with open(OUT, "a") as pub, open(os.path.join(LOCAL, f"probe{WORKER}.jsonl"), "a") as loc:
         for attr in todo:
             f = loc if attr.startswith("installed:") else pub
@@ -1032,6 +1040,13 @@ def main():
                 f.write(json.dumps(r) + "\n")
             f.flush()
             last = rows[-1]
+            # Ten apps in a row without a window: the harness is broken (an
+            # app launch that always fails), not the apps. Stop, loudly.
+            streak = streak + 1 if all(r.get("result") in ("no-window",) for r in rows) else 0
+            if streak >= 10:
+                print("10 apps in a row opened no window: the harness looks broken; stopping. Last log: "
+                      + " | ".join(rows[-1].get("log_tail") or []), file=sys.stderr, flush=True)
+                sys.exit(3)
             print(f"{attr}: {last.get('result')} via {last.get('variant')} route={last.get('route','')} "
                   f"{last.get('menus', '')} ({time.time() - t:.0f}s)", file=sys.stderr, flush=True)
     if not a.keep_rig:
