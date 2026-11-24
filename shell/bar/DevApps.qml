@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
@@ -8,7 +9,8 @@ import ".."
 
 // The panel's Dev apps button (ported from devloop's org.devloop.devapps
 // plasmoid): every devloop project, with buttons to open each way it runs
-// (app, web page, terminal), stop it, deploy its image and read its log, and
+// (app, web page, terminal), stop it, pause its watching, deploy its image
+// and read its log, and
 // what it's doing (building, failed, running, deployed). All of it comes
 // from `devloop status --json`, asked every few seconds.
 Indicator {
@@ -117,6 +119,8 @@ Indicator {
             p.icon = main.icon;
             p.main = main;
             p.running = v.filter(a => a.running);
+            // Paused (devloop pause): not watched, no builds, greyed here.
+            p.paused = v.some(a => a.paused);
             // The latest build of any of them.
             const last = v.reduce((x, y) => (y.buildStart > x.buildStart ? y : x));
             p.last = last;
@@ -156,7 +160,10 @@ Indicator {
     function status(p) {
         const parts = [];
         let bad = false;
-        if (p.building) {
+        if (p.paused && !p.building) {
+            parts.push("Paused" + (p.running.length ? ", still running" : "") + " — not watching for changes");
+            if (p.built) parts.push("built " + ago(p.built));
+        } else if (p.building) {
             const b = p.variants.find(a => a.buildState === "building" || a.buildState === "waiting");
             parts.push((p.waiting ? "Waiting for another cargo run (cargo test?)… " : "Building… ")
                        + Math.max(0, Math.round(now - b.buildStart)) + "s");
@@ -303,6 +310,10 @@ Indicator {
                             Item {
                                 Layout.preferredWidth: 32
                                 Layout.preferredHeight: 32
+                                // Paused: grey and faded, like a disabled app.
+                                opacity: row.p.paused ? 0.45 : 1
+                                layer.enabled: row.p.paused
+                                layer.effect: MultiEffect { saturation: -1 }
                                 Icon {
                                     anchors.fill: parent
                                     implicitSize: 32
@@ -327,6 +338,7 @@ Indicator {
                                     Layout.fillWidth: true
                                     text: row.p.name
                                     font.weight: Font.DemiBold
+                                    color: row.p.paused ? Theme.fgDim : Theme.fg
                                 }
                                 RowLayout {
                                     Layout.fillWidth: true
@@ -371,6 +383,18 @@ Indicator {
                                 tooltip: row.p.deploying ? "Deploying…" : "Deploy " + row.p.name
                                 tooltipSub: row.p.deploying ? "" : "Deploy the current build to its Docker container now (it also deploys after every build)"
                                 onClicked: root.act(["deploy-background", row.p.image.id])
+                            }
+                            BarButton {
+                                implicitHeight: 36
+                                implicitWidth: 32
+                                iconSize: 16
+                                icon: row.p.paused ? "media-playback-start" : "media-playback-pause"
+                                active: row.p.paused
+                                tooltip: row.p.paused ? "Resume watching " + row.p.name : "Pause watching " + row.p.name
+                                tooltipSub: row.p.paused
+                                    ? "Watch its source again (inotify), building whatever changed while paused"
+                                    : "Stop watching its source (frees its inotify watches) and stop rebuilding it; anything running keeps running its last build"
+                                onClicked: root.act([row.p.paused ? "resume" : "pause", row.p.main.id])
                             }
                             BarButton {
                                 enabled: row.p.running.length > 0
