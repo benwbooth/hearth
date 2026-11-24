@@ -1,0 +1,60 @@
+# COSMIC Text Editor draws its File/Edit/View menu bar itself (libcosmic,
+# built without its accessibility feature in nixpkgs), so hearth can't read
+# it. This mirrors it with the items that have a key binding (upstream
+# src/menu.rs, src/key_bind.rs). Items without one (Open Recent, Close
+# Project, Revert, Indentation, Word Wrap options...) need AT-SPI.
+schema: hearth-menu-module/1
+id: com.system76.CosmicEdit
+version: 1
+app:
+  match:
+    app_id: [com.system76.CosmicEdit]
+    desktop: [com.system76.CosmicEdit.desktop]
+    flatpak: [com.system76.CosmicEdit]
+    nixpkgs: [cosmic-edit]
+  versions: ">=1.0"
+  locales: [en]
+provenance:
+  generator: hand-written from upstream source (pop-os/cosmic-edit master, 2026-11-24)
+  inputs: [source:key_bind.rs, source:menu.rs]
+menus:
+  - title: File
+    items:
+      - { label: New File, shortcut: Ctrl+T, do: { keys: Ctrl+T } }
+      - { label: New Window, shortcut: Ctrl+N, do: { keys: Ctrl+N } }
+      - separator
+      - { label: Open File…, shortcut: Ctrl+O, do: { keys: Ctrl+O } }
+      - { label: Open Project…, shortcut: Ctrl+Shift+O, do: { keys: Ctrl+Shift+O } }
+      - separator
+      - { label: Save, shortcut: Ctrl+S, do: { keys: Ctrl+S } }
+      - { label: Save As…, shortcut: Ctrl+Shift+S, do: { keys: Ctrl+Shift+S } }
+      - separator
+      - { label: Close File, shortcut: Ctrl+W, do: { keys: Ctrl+W } }
+      - { label: Git Management, shortcut: Ctrl+Shift+G, do: { keys: Ctrl+Shift+G } }
+      - separator
+      - { label: Quit, shortcut: Ctrl+Q, do: { keys: Ctrl+Q } }
+  - title: Edit
+    items:
+      - { label: Undo, shortcut: Ctrl+Z, do: { keys: Ctrl+Z } }
+      - { label: Redo, shortcut: Ctrl+Shift+Z, do: { keys: Ctrl+Shift+Z } }
+      - separator
+      - { label: Cut, shortcut: Ctrl+X, do: { keys: Ctrl+X } }
+      - { label: Copy, shortcut: Ctrl+C, do: { keys: Ctrl+C } }
+      - { label: Paste, shortcut: Ctrl+V, do: { keys: Ctrl+V } }
+      - { label: Select All, shortcut: Ctrl+A, do: { keys: Ctrl+A } }
+      - separator
+      - { label: Find, shortcut: Ctrl+F, do: { keys: Ctrl+F } }
+      - { label: Replace, shortcut: Ctrl+H, do: { keys: Ctrl+H } }
+      - { label: Find in Project, shortcut: Ctrl+Shift+F, do: { keys: Ctrl+Shift+F } }
+  - title: View
+    items:
+      - { label: Zoom In, shortcut: Ctrl+=, do: { keys: Ctrl+= } }
+      - { label: Default Size, shortcut: Ctrl+0, do: { keys: Ctrl+0 } }
+      - { label: Zoom Out, shortcut: Ctrl+-, do: { keys: Ctrl+- } }
+      - separator
+      - { label: Word Wrap, shortcut: Alt+Z, do: { keys: Alt+Z } }
+      - separator
+      - { label: Next Tab, shortcut: Ctrl+Tab, do: { keys: Ctrl+Tab } }
+      - { label: Previous Tab, shortcut: Ctrl+Shift+Tab, do: { keys: Ctrl+Shift+Tab } }
+      - separator
+      - { label: Settings…, shortcut: "Ctrl+,", do: { keys: "Ctrl+," } }

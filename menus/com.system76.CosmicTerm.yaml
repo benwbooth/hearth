@@ -1,0 +1,54 @@
+# COSMIC Terminal draws its File/Edit/View menu bar itself (libcosmic,
+# built without its accessibility feature in nixpkgs), so hearth can't read
+# it. This mirrors it with the items that have a default key binding
+# (upstream src/menu.rs, src/shortcuts.rs fallback_shortcuts). Items
+# without one (Profiles, Color Schemes, About) need AT-SPI. Shortcuts you
+# changed in its settings won't match.
+schema: hearth-menu-module/1
+id: com.system76.CosmicTerm
+version: 1
+app:
+  match:
+    app_id: [com.system76.CosmicTerm]
+    desktop: [com.system76.CosmicTerm.desktop]
+    flatpak: [com.system76.CosmicTerm]
+    nixpkgs: [cosmic-term]
+  versions: ">=1.0"
+  locales: [en]
+provenance:
+  generator: hand-written from upstream source (pop-os/cosmic-term master, 2026-11-24)
+  inputs: [source:shortcuts.rs, source:menu.rs]
+menus:
+  - title: File
+    items:
+      - { label: New Tab, shortcut: Ctrl+Shift+T, do: { keys: Ctrl+Shift+T } }
+      - { label: New Window, shortcut: Ctrl+Shift+N, do: { keys: Ctrl+Shift+N } }
+      - separator
+      - { label: Close Tab, shortcut: Ctrl+Shift+W, do: { keys: Ctrl+Shift+W } }
+      - { label: Quit, shortcut: Ctrl+Shift+Q, do: { keys: Ctrl+Shift+Q } }
+  - title: Edit
+    items:
+      - { label: Copy, shortcut: Ctrl+Shift+C, do: { keys: Ctrl+Shift+C } }
+      - { label: Paste, shortcut: Ctrl+Shift+V, do: { keys: Ctrl+Shift+V } }
+      - { label: Paste Selection, shortcut: Shift+Insert, do: { keys: Shift+Insert } }
+      - { label: Select All, shortcut: Ctrl+Shift+A, do: { keys: Ctrl+Shift+A } }
+      - separator
+      - { label: Clear Scrollback, shortcut: Ctrl+Alt+L, do: { keys: Ctrl+Alt+L } }
+      - { label: Find, shortcut: Ctrl+Shift+F, do: { keys: Ctrl+Shift+F } }
+  - title: View
+    items:
+      - { label: Zoom In, shortcut: Ctrl+=, do: { keys: Ctrl+= } }
+      - { label: Zoom Reset, shortcut: Ctrl+0, do: { keys: Ctrl+0 } }
+      - { label: Zoom Out, shortcut: Ctrl+-, do: { keys: Ctrl+- } }
+      - separator
+      - { label: Next Tab, shortcut: Ctrl+Tab, do: { keys: Ctrl+Tab } }
+      - { label: Previous Tab, shortcut: Ctrl+Shift+Tab, do: { keys: Ctrl+Shift+Tab } }
+      - { label: Move Tab Left, shortcut: Ctrl+Shift+Page Up, do: { keys: Ctrl+Shift+PageUp } }
+      - { label: Move Tab Right, shortcut: Ctrl+Shift+Page Down, do: { keys: Ctrl+Shift+PageDown } }
+      - separator
+      - { label: Split Horizontal, shortcut: Ctrl+Alt+D, do: { keys: Ctrl+Alt+D } }
+      - { label: Split Vertical, shortcut: Ctrl+Alt+R, do: { keys: Ctrl+Alt+R } }
+      - { label: Maximize Split, shortcut: Ctrl+Shift+X, do: { keys: Ctrl+Shift+X } }
+      - separator
+      - { label: Password Manager…, shortcut: Ctrl+Alt+P, do: { keys: Ctrl+Alt+P } }
+      - { label: Settings…, shortcut: "Ctrl+,", do: { keys: "Ctrl+," } }
