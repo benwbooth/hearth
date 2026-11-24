@@ -1,0 +1,1147 @@
+#!/usr/bin/env python3
+"""hearth's desktop portal backend (org.freedesktop.impl.portal.desktop.hearth).
+
+xdg-desktop-portal asks a desktop's own backend for what only the desktop
+knows; in the arbor session that is this one (share/xdg-desktop-portal/
+portals/hearth.portal, routed in /etc/nixos's xdg.portal.config.arbor).
+Apps reach it through xdg-desktop-portal, never directly: Flatpaks for
+everything, browsers/Electron/Qt/GTK 4 for the colour scheme.
+
+  hearth-portal serve   the backend (D-Bus activated; runs without hearth)
+  hearth-portal ui      hearth's relay for the dialogs (services/Portal.qml)
+
+Interfaces:
+- Settings: org.freedesktop.appearance color-scheme / accent-color /
+  contrast / reduced-motion, from hearth's light/dark and accent
+  ($XDG_STATE_HOME/hearth/appearance.json, written by hearth-color-scheme),
+  plus every org.gnome.* key set in dconf (fonts, cursor, button layout for
+  GTK Flatpaks). SettingChanged when either changes.
+- Notification: handed to hearth's notification server
+  (org.freedesktop.Notifications), buttons and default action included.
+- Lockdown: the GNOME lockdown/privacy keys in dconf (all off by default).
+- Account, Access, AppChooser, DynamicLauncher, Print: a hearth sheet
+  (popups/PortalDialog.qml). With no hearth running they answer "cancelled".
+- Email: opens a mailto: link in almanac (or the default mail app).
+
+The dialog relay: `hearth-portal ui` owns io.github.benwbooth.hearth.PortalUI;
+the backend calls its Show(json) / Dismiss(id), and the relay prints those as
+JSON lines for the shell. The shell answers on the relay's stdin
+({"id": N, "response": 0|1|2, ...}), which the relay passes back with the
+backend's Answer(id, json).
+
+Options: --name NAME serves another bus name (tests).
+Env: HEARTH_PORTAL_STATE overrides the appearance file (tests).
+"""
+import hashlib
+import itertools
+import json
+import os
+import pwd
+import shlex
+import subprocess
+import sys
+import tempfile
+import threading
+import urllib.parse
+
+import dbus
+import dbus.mainloop.glib
+import dbus.service
+from gi.repository import GLib, Gio
+
+try:  # GLib 2.86 moved DesktopAppInfo to GioUnix
+    import gi
+    gi.require_version("GioUnix", "2.0")
+    from gi.repository import GioUnix
+    DesktopAppInfo = GioUnix.DesktopAppInfo
+except (ImportError, ValueError):
+    DesktopAppInfo = Gio.DesktopAppInfo
+
+BUS_NAME = "org.freedesktop.impl.portal.desktop.hearth"
+PATH = "/org/freedesktop/portal/desktop"
+IMPL = "org.freedesktop.impl.portal."
+REQUEST = IMPL + "Request"
+PROPS = "org.freedesktop.DBus.Properties"
+UI_NAME = "io.github.benwbooth.hearth.PortalUI"
+UI_PATH = "/io/github/benwbooth/hearth/PortalUI"
+UI_IFACE = UI_NAME
+BACKEND_IFACE = "io.github.benwbooth.hearth.PortalBackend"
+
+APPEARANCE = "org.freedesktop.appearance"
+STATE_HOME = os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state")
+STATE_FILE = os.environ.get("HEARTH_PORTAL_STATE") or os.path.join(STATE_HOME, "hearth", "appearance.json")
+
+OK, CANCELLED, ENDED = 0, 1, 2
+
+bus = None
+loop = None
+
+
+def log(*args):
+    print("hearth-portal:", *args, file=sys.stderr, flush=True)
+
+
+# --- GVariant <-> dbus-python -----------------------------------------------
+
+def gv_to_dbus(v, level=0):
+    """A GLib.Variant as the dbus-python value that sends the same type."""
+    t = v.get_type_string()
+    simple = {"b": dbus.Boolean, "y": dbus.Byte, "n": dbus.Int16, "q": dbus.UInt16,
+              "i": dbus.Int32, "u": dbus.UInt32, "x": dbus.Int64, "t": dbus.UInt64,
+              "d": dbus.Double, "s": dbus.String, "o": dbus.ObjectPath, "g": dbus.Signature}
+    if t in simple:
+        return simple[t](v.unpack(), variant_level=level)
+    if t == "v":
+        return gv_to_dbus(v.get_variant(), level + 1)
+    if t == "ay":
+        return dbus.ByteArray(bytes(v.unpack()), variant_level=level)
+    if t.startswith("a{"):
+        sig = t[2:-1]
+        d = {}
+        for i in range(v.n_children()):
+            e = v.get_child_value(i)
+            d[gv_to_dbus(e.get_child_value(0))] = gv_to_dbus(e.get_child_value(1))
+        return dbus.Dictionary(d, signature=sig, variant_level=level)
+    if t.startswith("a"):
+        return dbus.Array([gv_to_dbus(v.get_child_value(i)) for i in range(v.n_children())],
+                          signature=t[1:], variant_level=level)
+    if t.startswith("("):
+        return dbus.Struct([gv_to_dbus(v.get_child_value(i)) for i in range(v.n_children())],
+                           variant_level=level)
+    if t.startswith("m"):
+        return gv_to_dbus(v.get_maybe(), level) if v.get_maybe() is not None else dbus.String("", variant_level=level)
+    raise TypeError("unsupported GVariant type " + t)
+
+
+def plain(v):
+    """dbus-python value -> plain Python (for JSON and checks)."""
+    if isinstance(v, dbus.Boolean):
+        return bool(v)
+    if isinstance(v, (dbus.Byte, dbus.Int16, dbus.UInt16, dbus.Int32, dbus.UInt32, dbus.Int64, dbus.UInt64)):
+        return int(v)
+    if isinstance(v, dbus.Double):
+        return float(v)
+    if isinstance(v, (dbus.String, dbus.ObjectPath, dbus.Signature)):
+        return str(v)
+    if isinstance(v, dbus.ByteArray):
+        return bytes(v)
+    if isinstance(v, dict):
+        return {plain(k): plain(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        if v and all(isinstance(x, dbus.Byte) for x in v):
+            return bytes(int(x) for x in v)
+        return [plain(x) for x in v]
+    return v
+
+
+def icon_from_serialized(v, cache_dir):
+    """A serialized GIcon (('themed', ['name']), ('file', 'uri'), ('bytes', ay))
+    -> an icon name or a file path hearth can show, or ""."""
+    try:
+        v = plain(v)
+        if isinstance(v, (list, tuple)) and len(v) == 2:
+            kind, data = v
+            if kind == "themed" and data:
+                return data[0] if isinstance(data, list) else str(data)
+            if kind == "file":
+                return Gio.File.new_for_uri(data).get_path() or ""
+            if kind == "bytes" and isinstance(data, (bytes, bytearray)):
+                os.makedirs(cache_dir, exist_ok=True)
+                path = os.path.join(cache_dir, hashlib.sha1(data).hexdigest()[:16])
+                if not os.path.exists(path):
+                    with open(path, "wb") as f:
+                        f.write(data)
+                return path
+        if isinstance(v, str):
+            return v
+    except Exception as e:
+        log("icon:", e)
+    return ""
+
+
+def app_info(app_id):
+    if not app_id:
+        return None
+    try:
+        return DesktopAppInfo.new(app_id + ".desktop")
+    except TypeError:
+        return None
+
+
+def app_label(app_id):
+    info = app_info(app_id)
+    if info:
+        return info.get_display_name() or info.get_name()
+    if app_id:
+        return app_id.rsplit(".", 1)[-1]
+    return "An app"
+
+
+def app_icon(info):
+    if not info:
+        return ""
+    icon = info.get_icon()
+    if isinstance(icon, Gio.ThemedIcon):
+        names = icon.get_names()
+        return names[0] if names else ""
+    if isinstance(icon, Gio.FileIcon):
+        return icon.get_file().get_path() or ""
+    return icon.to_string() if icon else ""
+
+
+def runtime_dir(*parts):
+    base = os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()
+    return os.path.join(base, "hearth-portal", *parts)
+
+
+# --- dconf (org.gnome.* settings) -----------------------------------------------
+
+class Dconf:
+    """The org.gnome.* keys set in dconf, read with `dconf dump` and kept up
+    to date by a `dconf watch` child. Unset keys are left out: GTK uses its
+    own defaults for them, as with GNOME's backend minus schema defaults."""
+
+    def __init__(self, on_change):
+        self.values = {}  # namespace -> {key: GLib.Variant}
+        self.on_change = on_change
+        self.timer = 0
+        self.reload(initial=True)
+        self.watch()
+
+    def dump(self):
+        try:
+            text = subprocess.run(["dconf", "dump", "/org/gnome/"], capture_output=True, text=True,
+                                  timeout=5).stdout
+        except Exception as e:
+            log("dconf dump:", e)
+            return {}
+        out, ns = {}, None
+        for line in text.splitlines():
+            if line.startswith("[") and line.endswith("]"):
+                sect = line[1:-1].strip("/")
+                ns = "org.gnome" + ("." + sect.replace("/", ".") if sect else "")
+                out.setdefault(ns, {})
+            elif ns and "=" in line:
+                k, val = line.split("=", 1)
+                try:
+                    out[ns][k] = GLib.Variant.parse(None, val, None, None)
+                except GLib.Error:
+                    pass
+        return out
+
+    def reload(self, initial=False):
+        self.timer = 0
+        new = self.dump()
+        old = self.values
+        self.values = new
+        if initial:
+            return False
+        for ns in set(old) | set(new):
+            for k in set(old.get(ns, {})) | set(new.get(ns, {})):
+                a, b = old.get(ns, {}).get(k), new.get(ns, {}).get(k)
+                if b is not None and (a is None or not a.equal(b)):
+                    self.on_change(ns, k, b)
+        return False
+
+    def watch(self):
+        try:
+            proc = Gio.Subprocess.new(["dconf", "watch", "/org/gnome/"],
+                                      Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE)
+        except GLib.Error as e:
+            log("no dconf watch:", e.message)
+            return
+        stream = Gio.DataInputStream.new(proc.get_stdout_pipe())
+
+        def got(src, res):
+            try:
+                line, _ = src.read_line_finish_utf8(res)
+            except GLib.Error:
+                line = None
+            if line is None:
+                GLib.timeout_add_seconds(5, lambda: (self.watch(), False)[1])
+                return
+            if not self.timer:
+                self.timer = GLib.timeout_add(200, self.reload)
+            src.read_line_async(GLib.PRIORITY_DEFAULT, None, got)
+
+        stream.read_line_async(GLib.PRIORITY_DEFAULT, None, got)
+
+    def get(self, path, key, default=None):
+        v = self.values.get(path, {}).get(key)
+        return v.unpack() if v is not None else default
+
+
+# --- hearth's appearance ------------------------------------------------------------
+
+def hex_to_rgb(text):
+    t = (text or "").lstrip("#")
+    if len(t) == 8:  # #AARRGGBB (Qt)
+        t = t[2:]
+    if len(t) != 6:
+        return None
+    try:
+        return tuple(int(t[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
+    except ValueError:
+        return None
+
+
+class Appearance:
+    """hearth's light/dark and accent, from the state file hearth-color-scheme
+    writes on every change; dconf's color-scheme before hearth ever ran."""
+
+    def __init__(self, dconf, on_change):
+        self.dconf = dconf
+        self.on_change = on_change
+        self.state = {}
+        self.read()
+        d = Gio.File.new_for_path(os.path.dirname(STATE_FILE))
+        try:
+            d.make_directory_with_parents(None)
+        except GLib.Error:
+            pass
+        self.monitor = d.monitor_directory(Gio.FileMonitorFlags.WATCH_MOVES, None)
+        self.monitor.connect("changed", self.changed)
+
+    def read(self):
+        try:
+            with open(STATE_FILE) as f:
+                s = json.load(f)
+            self.state = s if isinstance(s, dict) else {}
+        except (OSError, ValueError):
+            self.state = {}
+
+    def changed(self, _m, f, other, _event):
+        names = {x.get_basename() for x in (f, other) if x}
+        if os.path.basename(STATE_FILE) not in names:
+            return
+        before = self.values()
+        self.read()
+        after = self.values()
+        for k, v in after.items():
+            if k not in before or before[k] != v:
+                self.on_change(APPEARANCE, k, v)
+
+    def values(self):
+        mode = self.state.get("mode")
+        if mode not in ("dark", "light"):
+            cs = self.dconf.get("org.gnome.desktop.interface", "color-scheme", "default")
+            mode = {"prefer-dark": "dark", "prefer-light": "light"}.get(cs, "")
+        out = {"color-scheme": dbus.UInt32({"dark": 1, "light": 2}.get(mode, 0))}
+        rgb = hex_to_rgb(self.state.get("accent", ""))
+        if rgb:
+            out["accent-color"] = dbus.Struct([dbus.Double(c) for c in rgb], signature="ddd")
+        out["contrast"] = dbus.UInt32(1 if self.state.get("contrast") else 0)
+        anim = self.dconf.get("org.gnome.desktop.interface", "enable-animations", True)
+        out["reduced-motion"] = dbus.UInt32(1 if (self.state.get("reducedMotion") or not anim) else 0)
+        return out
+
+
+# --- requests ---------------------------------------------------------------------
+
+class Request(dbus.service.Object):
+    """The Request object xdg-desktop-portal closes when the app gives up."""
+
+    def __init__(self, handle, on_close):
+        super().__init__(bus, handle)
+        self.on_close = on_close
+        self.closed = False
+
+    @dbus.service.method(REQUEST, in_signature="", out_signature="")
+    def Close(self):
+        if not self.closed:
+            self.closed = True
+            self.on_close()
+        self.drop()
+
+    def drop(self):
+        try:
+            self.remove_from_connection()
+        except LookupError:
+            pass
+
+
+class UiLink:
+    """Talks to the dialog relay (`hearth-portal ui`) when hearth runs one."""
+
+    def __init__(self):
+        self.ids = itertools.count(1)
+        self.pending = {}  # id -> callback(answer dict or None)
+        self.owner = None
+        bus.watch_name_owner(UI_NAME, self.owner_changed)
+
+    def owner_changed(self, owner):
+        self.owner = owner or None
+        if not owner:
+            for cb in list(self.pending.values()):
+                cb(None)
+            self.pending.clear()
+
+    def ask(self, kind, payload, cb):
+        """Show a dialog; cb(answer) later (None: no answer). Returns the id,
+        or None when no hearth is there to ask."""
+        if not self.owner:
+            return None
+        rid = next(self.ids)
+        self.pending[rid] = cb
+        msg = dict(payload, id=rid, type=kind)
+        bus.get_object(self.owner, UI_PATH, introspect=False).Show(
+            json.dumps(msg), dbus_interface=UI_IFACE,
+            reply_handler=lambda: None,
+            error_handler=lambda e: self.answer(rid, None))
+        return rid
+
+    def update(self, rid, payload):
+        if self.owner and rid in self.pending:
+            msg = dict(payload, id=rid, type="update")
+            bus.get_object(self.owner, UI_PATH, introspect=False).Show(
+                json.dumps(msg), dbus_interface=UI_IFACE,
+                reply_handler=lambda: None, error_handler=lambda e: None)
+
+    def dismiss(self, rid):
+        cb = self.pending.pop(rid, None)
+        if self.owner:
+            bus.get_object(self.owner, UI_PATH, introspect=False).Dismiss(
+                dbus.Int32(rid), dbus_interface=UI_IFACE,
+                reply_handler=lambda: None, error_handler=lambda e: None)
+        return cb
+
+    def answer(self, rid, ans):
+        cb = self.pending.pop(rid, None)
+        if cb:
+            cb(ans)
+
+
+def dialog(handle, kind, payload, finish, reply, error, threaded=False):
+    """Run one portal request through a hearth dialog.
+
+    finish(answer) -> (response, results) for an answer from the sheet; with
+    threaded=True it runs on a worker thread (slow work: printing), so
+    other portal calls (Settings reads at every app start) never wait.
+    reply/error are the D-Bus method's async callbacks."""
+    state = {"done": False, "rid": None}
+
+    def send(resp, results):
+        if state["done"]:
+            return
+        state["done"] = True
+        req.drop()
+        try:
+            reply(dbus.UInt32(resp), dbus.Dictionary(results, signature="sv"))
+        except Exception as e:
+            log("reply:", e)
+
+    def answered(ans):
+        if ans is None or int(ans.get("response", ENDED)) != OK:
+            send(CANCELLED if ans is not None else ENDED, {})
+            return
+        def work():
+            try:
+                return finish(ans)
+            except Exception as e:
+                log(kind, "answer failed:", e)
+                return ENDED, {}
+
+        if threaded:
+            threading.Thread(target=lambda: GLib.idle_add(lambda r: (send(*r), False)[1], work()),
+                             daemon=True).start()
+        else:
+            send(*work())
+
+    def closed():
+        if state["rid"] is not None:
+            ui.dismiss(state["rid"])
+        send(ENDED, {})
+
+    req = Request(handle, closed)
+    state["rid"] = ui.ask(kind, payload, answered)
+    if state["rid"] is None:
+        log(kind, "asked with no hearth running: cancelled")
+        send(ENDED, {})
+    state["send"] = send
+    return state
+
+
+# --- the backend ---------------------------------------------------------------------
+
+def props(**kw):
+    return dbus.Dictionary(kw, signature="sv")
+
+
+class Backend(dbus.service.Object):
+    INTERFACES = {
+        IMPL + "Settings": {"version": dbus.UInt32(1)},
+        IMPL + "Notification": {"version": dbus.UInt32(1)},
+        IMPL + "Lockdown": None,  # computed
+        IMPL + "Account": {"version": dbus.UInt32(1)},
+        IMPL + "Access": {"version": dbus.UInt32(1)},
+        IMPL + "AppChooser": {"version": dbus.UInt32(2)},
+        IMPL + "Email": {"version": dbus.UInt32(3)},
+        IMPL + "DynamicLauncher": {"version": dbus.UInt32(1), "SupportedLauncherTypes": dbus.UInt32(3)},
+        IMPL + "Print": {"version": dbus.UInt32(1)},
+    }
+
+    def __init__(self):
+        super().__init__(bus, PATH)
+        self.dconf = Dconf(self.dconf_changed)
+        self.appearance = Appearance(self.dconf, self.setting_changed)
+        self.lockdown_last = self.lockdown()
+        self.notes = {}       # (app_id, id) -> fdo id
+        self.notes_back = {}  # fdo id -> (app_id, id, {action key: (action, target)})
+        self.print_tokens = {}
+        self.print_token_ids = itertools.count(1)
+        bus.add_signal_receiver(self.fdo_action, "ActionInvoked", "org.freedesktop.Notifications",
+                                path="/org/freedesktop/Notifications")
+        bus.add_signal_receiver(self.fdo_closed, "NotificationClosed", "org.freedesktop.Notifications",
+                                path="/org/freedesktop/Notifications")
+
+    # -- Properties --------------------------------------------------------------
+
+    def lockdown(self):
+        lk, pv = "org.gnome.desktop.lockdown", "org.gnome.desktop.privacy"
+        g = self.dconf.get
+        return {
+            "disable-printing": dbus.Boolean(g(lk, "disable-printing", False)),
+            "disable-save-to-disk": dbus.Boolean(g(lk, "disable-save-to-disk", False)),
+            "disable-application-handlers": dbus.Boolean(g(lk, "disable-application-handlers", False)),
+            "disable-location": dbus.Boolean(not g("org.gnome.system.location", "enabled", True)),
+            "disable-camera": dbus.Boolean(g(pv, "disable-camera", False)),
+            "disable-microphone": dbus.Boolean(g(pv, "disable-microphone", False)),
+            "disable-sound-output": dbus.Boolean(g(pv, "disable-sound-output", False)),
+            "version": dbus.UInt32(1),
+        }
+
+    def all_props(self, iface):
+        if iface == IMPL + "Lockdown":
+            return self.lockdown()
+        p = self.INTERFACES.get(iface)
+        if p is None:
+            raise dbus.DBusException("No such interface " + iface, name="org.freedesktop.DBus.Error.UnknownInterface")
+        return p
+
+    @dbus.service.method(PROPS, in_signature="ss", out_signature="v")
+    def Get(self, iface, prop):
+        p = self.all_props(str(iface))
+        if str(prop) not in p:
+            raise dbus.DBusException("No such property " + prop, name="org.freedesktop.DBus.Error.UnknownProperty")
+        return p[str(prop)]
+
+    @dbus.service.method(PROPS, in_signature="s", out_signature="a{sv}")
+    def GetAll(self, iface):
+        return dbus.Dictionary(self.all_props(str(iface)), signature="sv")
+
+    @dbus.service.method(PROPS, in_signature="ssv", out_signature="")
+    def Set(self, iface, prop, value):
+        raise dbus.DBusException("Read-only", name="org.freedesktop.DBus.Error.PropertyReadOnly")
+
+    @dbus.service.signal(PROPS, signature="sa{sv}as")
+    def PropertiesChanged(self, iface, changed, invalidated):
+        pass
+
+    # -- Settings ---------------------------------------------------------------
+
+    def namespaces(self):
+        out = {APPEARANCE: self.appearance.values()}
+        for ns, keys in self.dconf.values.items():
+            out[ns] = {k: gv_to_dbus(v) for k, v in keys.items()}
+        return out
+
+    @staticmethod
+    def wanted(ns, patterns):
+        if not patterns:
+            return True
+        for p in patterns:
+            p = str(p)
+            if p == "" or p == ns or (p.endswith("*") and ns.startswith(p[:-1])):
+                return True
+        return False
+
+    @dbus.service.method(IMPL + "Settings", in_signature="as", out_signature="a{sa{sv}}")
+    def ReadAll(self, patterns):
+        return dbus.Dictionary({ns: dbus.Dictionary(v, signature="sv")
+                                for ns, v in self.namespaces().items() if self.wanted(ns, patterns)},
+                               signature="sa{sv}")
+
+    @dbus.service.method(IMPL + "Settings", in_signature="ss", out_signature="v")
+    def Read(self, ns, key):
+        v = self.namespaces().get(str(ns), {}).get(str(key))
+        if v is None:
+            raise dbus.DBusException("Requested setting not found", name="org.freedesktop.portal.Error.NotFound")
+        return v
+
+    @dbus.service.signal(IMPL + "Settings", signature="ssv")
+    def SettingChanged(self, ns, key, value):
+        pass
+
+    def setting_changed(self, ns, key, value):
+        log("setting changed: %s %s" % (ns, key))
+        self.SettingChanged(ns, key, value)
+
+    def dconf_changed(self, ns, key, gv):
+        self.setting_changed(ns, key, gv_to_dbus(gv))
+        if ns == "org.gnome.desktop.interface" and key in ("color-scheme", "enable-animations"):
+            # appearance falls back to / derives from these
+            for k, v in self.appearance.values().items():
+                if k in ("color-scheme", "reduced-motion"):
+                    self.SettingChanged(APPEARANCE, k, v)
+        now = self.lockdown()
+        diff = {k: v for k, v in now.items() if self.lockdown_last.get(k) != v}
+        self.lockdown_last = now
+        if diff:
+            self.PropertiesChanged(IMPL + "Lockdown", dbus.Dictionary(diff, signature="sv"),
+                                   dbus.Array([], signature="s"))
+
+    # -- Notification --------------------------------------------------------------
+
+    def fdo(self):
+        return bus.get_object("org.freedesktop.Notifications", "/org/freedesktop/Notifications", introspect=False)
+
+    @dbus.service.method(IMPL + "Notification", in_signature="ssa{sv}", out_signature="",
+                         async_callbacks=("reply", "error"))
+    def AddNotification(self, app_id, nid, n, reply, error):
+        app_id, nid = str(app_id), str(nid)
+        n = {str(k): v for k, v in n.items()}
+        actions, keys = [], {}
+        if "default-action" in n:
+            keys["default"] = (str(n["default-action"]), n.get("default-action-target"))
+            actions += ["default", ""]
+        for i, b in enumerate(n.get("buttons", [])):
+            b = {str(k): v for k, v in b.items()}
+            if "action" not in b:
+                continue
+            k = "button-%d" % i
+            keys[k] = (str(b["action"]), b.get("target"))
+            actions += [k, str(b.get("label", b["action"]))]
+        icon = icon_from_serialized(n["icon"], runtime_dir("icons")) if "icon" in n else ""
+        info = app_info(app_id)
+        hints = {"desktop-entry": dbus.String(app_id)} if app_id else {}
+        urgency = {"low": 0, "normal": 1, "high": 1, "urgent": 2}.get(str(n.get("priority", "normal")), 1)
+        hints["urgency"] = dbus.Byte(urgency)
+        if icon.startswith("/"):
+            hints["image-path"] = dbus.String(icon)
+        if "category" in n:
+            hints["category"] = dbus.String(str(n["category"]))
+        body = str(n.get("markup-body", n.get("body", "")))
+        if "markup-body" not in n:
+            body = GLib.markup_escape_text(body)
+        replaces = self.notes.get((app_id, nid), 0)
+        app_icon = icon if icon and not icon.startswith("/") else app_icon_name(info)
+
+        def done(fid):
+            fid = int(fid)
+            self.notes[(app_id, nid)] = fid
+            self.notes_back[fid] = (app_id, nid, keys)
+            reply()
+
+        self.fdo().Notify(
+            dbus.String(app_label(app_id) if app_id else "An app"), dbus.UInt32(replaces),
+            dbus.String(app_icon), dbus.String(str(n.get("title", ""))), dbus.String(body),
+            dbus.Array(actions, signature="s"), dbus.Dictionary(hints, signature="sv"), dbus.Int32(-1),
+            dbus_interface="org.freedesktop.Notifications",
+            reply_handler=done,
+            error_handler=lambda e: (log("Notify failed:", e), error(e)))
+
+    @dbus.service.method(IMPL + "Notification", in_signature="ss", out_signature="")
+    def RemoveNotification(self, app_id, nid):
+        fid = self.notes.pop((str(app_id), str(nid)), None)
+        if fid is None:
+            return
+        self.notes_back.pop(fid, None)
+        self.fdo().CloseNotification(dbus.UInt32(fid), dbus_interface="org.freedesktop.Notifications",
+                                     reply_handler=lambda: None, error_handler=lambda e: None)
+
+    @dbus.service.signal(IMPL + "Notification", signature="sssav")
+    def ActionInvoked(self, app_id, nid, action, parameter):
+        pass
+
+    def fdo_action(self, fid, key):
+        entry = self.notes_back.get(int(fid))
+        if not entry:
+            return
+        app_id, nid, keys = entry
+        if str(key) not in keys:
+            return
+        action, target = keys[str(key)]
+        params = dbus.Array([target] if target is not None else [], signature="v")
+        info = app_info(app_id)
+        # A D-Bus activatable app gets "app.*" actions straight through
+        # org.freedesktop.Application (started if needed), as GNOME does.
+        if info and info.get_boolean("DBusActivatable") and action.startswith("app."):
+            path = "/" + app_id.replace(".", "/").replace("-", "_")
+            bus.get_object(app_id, path).ActivateAction(
+                dbus.String(action[4:]), params, dbus.Dictionary({}, signature="sv"),
+                dbus_interface="org.freedesktop.Application",
+                reply_handler=lambda: None,
+                error_handler=lambda e: (log("ActivateAction:", e), self.ActionInvoked(app_id, nid, action, params)))
+        else:
+            self.ActionInvoked(app_id, nid, action, params)
+
+    def fdo_closed(self, fid, reason):
+        entry = self.notes_back.pop(int(fid), None)
+        if entry:
+            self.notes.pop((entry[0], entry[1]), None)
+
+    # -- Account -------------------------------------------------------------------
+
+    @dbus.service.method(IMPL + "Account", in_signature="ossa{sv}", out_signature="ua{sv}",
+                         async_callbacks=("reply", "error"))
+    def GetUserInformation(self, handle, app_id, window, options, reply, error):
+        user = user_info()
+        options = plain(options)
+        info = app_info(str(app_id))
+        payload = {"app": app_label(str(app_id)), "appIcon": app_icon(info), "reason": options.get("reason", ""),
+                   "user": user["id"], "name": user["name"], "image": user["image"]}
+
+        def finish(ans):
+            image = user["image"] if ans.get("shareImage", True) else ""
+            return OK, {"id": dbus.String(user["id"]), "name": dbus.String(user["name"]),
+                        "image": dbus.String(GLib.filename_to_uri(image, None) if image else "")}
+
+        dialog(handle, "account", payload, finish, reply, error)
+
+    # -- Access --------------------------------------------------------------------
+
+    @dbus.service.method(IMPL + "Access", in_signature="osssssa{sv}", out_signature="ua{sv}",
+                         async_callbacks=("reply", "error"))
+    def AccessDialog(self, handle, app_id, window, title, subtitle, body, options, reply, error):
+        o = plain(options)
+        info = app_info(str(app_id))
+        choices = [{"id": c[0], "label": c[1], "options": [{"value": x[0], "label": x[1]} for x in c[2]],
+                    "initial": c[3]} for c in o.get("choices", [])]
+        payload = {"app": app_label(str(app_id)) if str(app_id) else "", "appIcon": app_icon(info),
+                   "title": str(title), "subtitle": str(subtitle), "body": str(body),
+                   "icon": o.get("icon", ""), "denyLabel": o.get("deny_label", ""),
+                   "grantLabel": o.get("grant_label", ""), "choices": choices}
+
+        def finish(ans):
+            picked = ans.get("choices") or {}
+            res = [dbus.Struct([dbus.String(c["id"]), dbus.String(str(picked.get(c["id"], c["initial"])))])
+                   for c in choices]
+            out = {}
+            if res:
+                out["choices"] = dbus.Array(res, signature="(ss)")
+            return OK, out
+
+        dialog(handle, "access", payload, finish, reply, error)
+
+    # -- AppChooser ----------------------------------------------------------------
+
+    @staticmethod
+    def choice_list(choices):
+        out = []
+        for c in choices:
+            info = app_info(str(c))
+            if info is None:
+                continue
+            out.append({"id": str(c), "name": info.get_display_name() or info.get_name(), "icon": app_icon(info),
+                        "comment": info.get_description() or ""})
+        return out
+
+    @dbus.service.method(IMPL + "AppChooser", in_signature="ossasa{sv}", out_signature="ua{sv}",
+                         async_callbacks=("reply", "error"))
+    def ChooseApplication(self, handle, app_id, window, choices, options, reply, error):
+        o = plain(options)
+        ctype = o.get("content_type", "")
+        target = o.get("filename") or o.get("uri", "")
+        payload = {"app": app_label(str(app_id)) if str(app_id) else "",
+                   "choices": self.choice_list(choices), "lastChoice": o.get("last_choice", ""),
+                   "contentType": ctype,
+                   "typeName": Gio.content_type_get_description(ctype) if ctype else "",
+                   "target": os.path.basename(target.rstrip("/")) if target else ""}
+
+        def finish(ans):
+            choice = str(ans.get("choice", ""))
+            if not choice:
+                return CANCELLED, {}
+            return OK, {"choice": dbus.String(choice)}
+
+        st = dialog(handle, "appchooser", payload, finish, reply, error)
+        self.choosers[str(handle)] = st
+
+    choosers = {}
+
+    @dbus.service.method(IMPL + "AppChooser", in_signature="oas", out_signature="")
+    def UpdateChoices(self, handle, choices):
+        st = self.choosers.get(str(handle))
+        if st and st["done"]:
+            self.choosers.pop(str(handle), None)
+        elif st and not st["done"] and st["rid"] is not None:
+            ui.update(st["rid"], {"choices": self.choice_list(choices)})
+
+    # -- DynamicLauncher -----------------------------------------------------------
+
+    @dbus.service.method(IMPL + "DynamicLauncher", in_signature="osssva{sv}", out_signature="ua{sv}",
+                         async_callbacks=("reply", "error"))
+    def PrepareInstall(self, handle, app_id, window, name, icon_v, options, reply, error):
+        o = plain(options)
+        icon = icon_from_serialized(icon_v, runtime_dir("launcher-icons"))
+        payload = {"app": app_label(str(app_id)) if str(app_id) else "", "name": str(name), "icon": icon,
+                   "webapp": int(o.get("launcher_type", 1)) == 2, "target": o.get("target", ""),
+                   "editableName": bool(o.get("editable_name", True))}
+
+        def finish(ans):
+            new = str(ans.get("name") or name).strip() or str(name)
+            if not o.get("editable_name", True):
+                new = str(name)
+            return OK, {"name": dbus.String(new), "icon": icon_v}
+
+        dialog(handle, "launcher", payload, finish, reply, error)
+
+    @dbus.service.method(IMPL + "DynamicLauncher", in_signature="sa{sv}", out_signature="u")
+    def RequestInstallToken(self, app_id, options):
+        # Installing without asking is for software stores; there are none
+        # here, so every app goes through PrepareInstall's sheet.
+        return dbus.UInt32(ENDED)
+
+    # -- Email ---------------------------------------------------------------------
+
+    @dbus.service.method(IMPL + "Email", in_signature="ossa{sv}", out_signature="ua{sv}")
+    def ComposeEmail(self, handle, app_id, window, options):
+        o = plain(options)
+        uri = mailto_uri(o)
+        ok = open_mailto(uri)
+        return dbus.UInt32(OK if ok else ENDED), dbus.Dictionary({}, signature="sv")
+
+    # -- Print -----------------------------------------------------------------------
+
+    @dbus.service.method(IMPL + "Print", in_signature="osssa{sv}a{sv}a{sv}", out_signature="ua{sv}",
+                         async_callbacks=("reply", "error"))
+    def PreparePrint(self, handle, app_id, window, title, settings, page_setup, options, reply, error):
+        self.print_dialog(handle, app_id, title, plain(settings), plain(options), None, reply, error)
+
+    @dbus.service.method(IMPL + "Print", in_signature="osssha{sv}", out_signature="ua{sv}",
+                         async_callbacks=("reply", "error"))
+    def Print(self, handle, app_id, window, title, fd, options, reply, error):
+        o = plain(options)
+        fd = fd.take()
+        prepared = self.print_tokens.pop(int(o.get("token", 0)), None)
+        if prepared:
+            def work():
+                ok = run_print(fd, str(title), prepared)
+                os.close(fd)
+                GLib.idle_add(lambda: (reply(dbus.UInt32(OK if ok else ENDED),
+                                             dbus.Dictionary({}, signature="sv")), False)[1])
+            threading.Thread(target=work, daemon=True).start()
+            return
+        self.print_dialog(handle, app_id, title, {}, o, fd, reply, error)
+
+    def print_dialog(self, handle, app_id, title, settings, options, fd, reply, error):
+        # Asking CUPS takes a second or two (network printers): off the loop.
+        def listed(printers):
+            self.print_dialog_ready(handle, app_id, title, settings, options, fd, reply, error, printers)
+            return False
+        threading.Thread(target=lambda: GLib.idle_add(listed, list_printers()), daemon=True).start()
+
+    def print_dialog_ready(self, handle, app_id, title, settings, options, fd, reply, error, printers):
+        media = {p["value"]: p["media"] for p in printers["printers"]}
+        payload = {"app": app_label(str(app_id)) if str(app_id) else "", "title": str(title),
+                   "printers": printers["printers"],
+                   "printer": settings.get("printer") or printers["default"],
+                   "copies": int(settings.get("n-copies", "1") or 1),
+                   "acceptLabel": options.get("accept_label", ""),
+                   "preparing": fd is None}
+
+        def finish(ans):
+            job = {"printer": str(ans.get("printer", "")), "copies": max(1, int(ans.get("copies", 1))),
+                   "pages": str(ans.get("pages", "")).replace(" ", ""),
+                   "duplex": str(ans.get("duplex", "")), "orientation": str(ans.get("orientation", "portrait")),
+                   "color": ans.get("color")}
+            job["media"] = media.get(job["printer"], "")
+            if not job["printer"]:
+                return ENDED, {}
+            if fd is not None:
+                return (OK if run_print(fd, str(title), job) else ENDED), {}
+            token = next(self.print_token_ids)
+            self.print_tokens[token] = job
+            return OK, {"settings": dbus.Dictionary(gtk_print_settings(job), signature="sv"),
+                        "page-setup": dbus.Dictionary(gtk_page_setup(job), signature="sv"),
+                        "token": dbus.UInt32(token)}
+
+        def reply_closing(*a):
+            # The document is printed (or not) by now; let it go.
+            if fd is not None:
+                os.close(fd)
+            reply(*a)
+
+        dialog(handle, "print", payload, finish, reply_closing, error, threaded=True)
+
+    # -- answers from the relay --------------------------------------------------
+
+    @dbus.service.method(BACKEND_IFACE, in_signature="is", out_signature="")
+    def Answer(self, rid, text):
+        try:
+            ans = json.loads(str(text))
+        except ValueError:
+            ans = None
+        ui.answer(int(rid), ans if isinstance(ans, dict) else None)
+
+
+def app_icon_name(info):
+    name = app_icon(info)
+    return name
+
+
+# --- helpers for the interfaces ------------------------------------------------------
+
+def user_info():
+    pw = pwd.getpwuid(os.getuid())
+    name = pw.pw_gecos.split(",")[0] if pw.pw_gecos else ""
+    image = ""
+    try:
+        sysbus = dbus.SystemBus()
+        acc = sysbus.get_object("org.freedesktop.Accounts", "/org/freedesktop/Accounts")
+        path = acc.FindUserByName(pw.pw_name, dbus_interface="org.freedesktop.Accounts", timeout=3)
+        u = sysbus.get_object("org.freedesktop.Accounts", path)
+        p = u.GetAll("org.freedesktop.Accounts.User", dbus_interface=PROPS, timeout=3)
+        name = str(p.get("RealName") or name)
+        icon = str(p.get("IconFile") or "")
+        if icon and os.path.isfile(icon):
+            image = icon
+    except Exception as e:
+        log("AccountsService:", e)
+    if not image:
+        for f in (os.path.expanduser("~/.face"), os.path.expanduser("~/.face.icon")):
+            if os.path.isfile(f):
+                image = f
+                break
+    return {"id": pw.pw_name, "name": name or pw.pw_name, "image": image}
+
+
+def mailto_uri(o):
+    q = urllib.parse.quote
+    to = list(o.get("addresses") or [])
+    if o.get("address"):
+        to.insert(0, o["address"])
+    params = []
+    for k in ("cc", "bcc"):
+        if o.get(k):
+            params.append((k, ",".join(o[k])))
+    for k in ("subject", "body"):
+        if o.get(k):
+            params.append((k, o[k]))
+    for a in o.get("attachments") or []:
+        params.append(("attach", a))
+    uri = "mailto:" + ",".join(q(a, safe="@") for a in to)
+    if params:
+        uri += "?" + "&".join("%s=%s" % (k, q(v, safe="")) for k, v in params)
+    return uri
+
+
+def mail_app():
+    """almanac when it handles mailto:, else the default mail app."""
+    apps = Gio.AppInfo.get_all_for_type("x-scheme-handler/mailto")
+    for a in apps:
+        if "almanac" in (a.get_id() or "").lower():
+            return a
+    return Gio.AppInfo.get_default_for_uri_scheme("mailto") or (apps[0] if apps else None)
+
+
+def spawn_detached(argv):
+    """Start a program in its own systemd scope, so it outlives this service."""
+    try:
+        subprocess.Popen(["systemd-run", "--user", "--scope", "--quiet", "--collect", "--"] + argv,
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, start_new_session=True)
+        return True
+    except OSError:
+        try:
+            subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, start_new_session=True)
+            return True
+        except OSError as e:
+            log("launch:", e)
+            return False
+
+
+def open_mailto(uri):
+    app = mail_app()
+    if app is None:
+        log("no mail app for", uri)
+        return False
+    path = app.get_filename() if isinstance(app, DesktopAppInfo) else None
+    if path:
+        return spawn_detached(["gio", "launch", path, uri])
+    return spawn_detached(["xdg-open", uri])
+
+
+def list_printers():
+    try:
+        out = subprocess.run(["hearth-printers", "list"], capture_output=True, text=True, timeout=10).stdout
+        data = json.loads(out.strip().splitlines()[-1])
+    except Exception as e:
+        log("printers:", e)
+        return {"default": "", "printers": []}
+    printers = []
+    for p in data.get("printers", []):
+        printers.append({"value": p.get("name", ""), "label": p.get("info") or p.get("name", ""),
+                         "state": p.get("state", ""), "media": printer_media(p.get("name", ""))})
+    return {"default": data.get("default") or (printers[0]["value"] if printers else ""), "printers": printers}
+
+
+def printer_media(name):
+    try:
+        out = subprocess.run(["lpoptions", "-p", name], capture_output=True, text=True, timeout=5).stdout
+        for tok in shlex.split(out):
+            if tok.startswith("media="):
+                return tok.split("=", 1)[1]
+    except Exception:
+        pass
+    return ""
+
+
+PAPER = {  # PWG self-describing name -> (GTK/PPD name, label, width mm, height mm)
+    "na_letter_8.5x11in": ("Letter", "US Letter", 215.9, 279.4),
+    "na_legal_8.5x14in": ("Legal", "US Legal", 215.9, 355.6),
+    "iso_a4_210x297mm": ("A4", "A4", 210.0, 297.0),
+    "iso_a5_148x210mm": ("A5", "A5", 148.0, 210.0),
+    "iso_a3_297x420mm": ("A3", "A3", 297.0, 420.0),
+}
+
+
+def paper_for(media):
+    if media in PAPER:
+        return PAPER[media]
+    # Any other PWG name: its last part is the size ("4x6in", "100x150mm").
+    size = media.rsplit("_", 1)[-1] if media else ""
+    for unit, mm in (("in", 25.4), ("mm", 1.0)):
+        if size.endswith(unit):
+            try:
+                w, h = (float(x) * mm for x in size[:-len(unit)].split("x"))
+                return (media, media, w, h)
+            except ValueError:
+                pass
+    return PAPER["na_letter_8.5x11in"]
+
+
+def gtk_print_settings(job):
+    s = {"printer": job["printer"], "n-copies": str(job["copies"]),
+         "orientation": job["orientation"], "output-file-format": "pdf"}
+    if job["pages"]:
+        s["print-pages"] = "ranges"
+        # GTK's page ranges count from 0.
+        s["page-ranges"] = ",".join(gtk_ranges(job["pages"]))
+    else:
+        s["print-pages"] = "all"
+    if job["duplex"]:
+        s["duplex"] = {"long": "vertical", "short": "horizontal"}.get(job["duplex"], "simplex")
+    return {k: dbus.String(v) for k, v in s.items()}
+
+
+def gtk_ranges(pages):
+    """ "1-3,5" (pages as people count them) -> ["0-2", "4"]."""
+    out = []
+    for part in pages.split(","):
+        a, dash, b = part.partition("-")
+        try:
+            lo = int(a)
+            hi = int(b) if dash and b else lo
+        except ValueError:
+            continue
+        out.append("%d-%d" % (lo - 1, hi - 1) if hi != lo else "%d" % (lo - 1))
+    return out
+
+
+def gtk_page_setup(job):
+    name, label, w, h = paper_for(job.get("media", ""))
+    m = 6.35
+    return {"PPDName": dbus.String(name), "Name": dbus.String(name), "DisplayName": dbus.String(label),
+            "Width": dbus.Double(w), "Height": dbus.Double(h),
+            "MarginTop": dbus.Double(m), "MarginBottom": dbus.Double(m),
+            "MarginLeft": dbus.Double(m), "MarginRight": dbus.Double(m),
+            "Orientation": dbus.String(job["orientation"])}
+
+
+def run_print(fd, title, job):
+    """Send the app's document (already laid out by it, only the chosen pages)
+    to CUPS with lp."""
+    argv = ["lp", "-d", job["printer"], "-n", str(job["copies"]), "-t", title or "Document"]
+    if job["duplex"] in ("long", "short"):
+        argv += ["-o", "sides=two-sided-%s-edge" % job["duplex"]]
+    elif job["duplex"] == "none":
+        argv += ["-o", "sides=one-sided"]
+    if job.get("color") is False:
+        argv += ["-o", "print-color-mode=monochrome"]
+    try:
+        os.lseek(fd, 0, os.SEEK_SET)
+    except OSError:
+        pass
+    try:
+        r = subprocess.run(argv, stdin=fd, capture_output=True, text=True, timeout=60)
+        log("print:", " ".join(argv), "->", (r.stdout or r.stderr).strip())
+        return r.returncode == 0
+    except Exception as e:
+        log("lp:", e)
+        return False
+
+
+# --- the relay hearth runs -------------------------------------------------------------
+
+class Relay(dbus.service.Object):
+    @dbus.service.method(UI_IFACE, in_signature="s", out_signature="")
+    def Show(self, text):
+        emit_line(str(text))
+
+    @dbus.service.method(UI_IFACE, in_signature="i", out_signature="")
+    def Dismiss(self, rid):
+        emit_line(json.dumps({"id": int(rid), "type": "close"}))
+
+
+def emit_line(text):
+    try:
+        print(text, flush=True)
+    except BrokenPipeError:
+        GLib.idle_add(loop.quit)
+
+
+def run_relay(backend_name):
+    relay = Relay(bus, UI_PATH)
+    name = dbus.service.BusName(UI_NAME, bus, do_not_queue=True)
+
+    def on_stdin(source, condition):
+        line = sys.stdin.readline()
+        if line.strip():
+            try:
+                msg = json.loads(line)
+                rid = int(msg.pop("id"))
+            except (ValueError, KeyError, TypeError):
+                log("bad answer line")
+                return True
+            bus.get_object(backend_name, PATH).Answer(
+                dbus.Int32(rid), json.dumps(msg), dbus_interface=BACKEND_IFACE,
+                reply_handler=lambda: None, error_handler=lambda e: log("Answer:", e))
+        if not line or condition & (GLib.IO_HUP | GLib.IO_ERR):
+            loop.quit()
+            return False
+        return True
+
+    GLib.io_add_watch(sys.stdin.fileno(), GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR, on_stdin)
+    log("dialog relay up as", bus.get_unique_name())
+    return relay, name
+
+
+ui = None
+
+
+def main():
+    global bus, loop, ui
+    mode = sys.argv[1] if len(sys.argv) > 1 else "serve"
+    name = BUS_NAME
+    if "--name" in sys.argv:
+        name = sys.argv[sys.argv.index("--name") + 1]
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    bus = dbus.SessionBus()
+    loop = GLib.MainLoop()
+    if mode == "ui":
+        keep = run_relay(name)
+    elif mode == "serve":
+        ui = UiLink()
+        keep = Backend()
+        bus_name = dbus.service.BusName(name, bus, do_not_queue=True)
+        log("serving", name)
+    else:
+        sys.exit(__doc__)
+    try:
+        loop.run()
+    except KeyboardInterrupt:
+        pass
+
+
+if __name__ == "__main__":
+    main()

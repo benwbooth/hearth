@@ -210,6 +210,34 @@ again when Almanac saves; it opens things with `almanac --open-event` /
 made-up sample calendar (tests, screenshots). `hearth-ipc call calendar
 newEvent [YYYY-MM-DD] | openNext | refresh`.
 
+## Desktop portal
+
+hearth is the arbor session's xdg-desktop-portal backend
+(`helpers/hearth-portal`, `org.freedesktop.impl.portal.desktop.hearth`,
+`share/xdg-desktop-portal/portals/hearth.portal`), replacing
+xdg-desktop-portal-gtk. xdg-desktop-portal starts it on demand; it runs
+without the shell too.
+
+- **Settings**: `org.freedesktop.appearance` color-scheme, accent-color,
+  contrast and reduced-motion from hearth's light/dark and accent
+  (`hearth-color-scheme` writes `~/.local/state/hearth/appearance.json`), plus
+  the `org.gnome.*` keys set in dconf. Qt (the xdgdesktopportal theme),
+  Chromium/Electron, GTK 4 and Flatpaks switch live.
+- **Notification**: handed to hearth's notification server (buttons and the
+  default action come back to the app).
+- **Access, Account, AppChooser, DynamicLauncher, Print**: sheets in the
+  shell (`popups/PortalDialog.qml` via `services/Portal.qml`, which runs
+  `hearth-portal ui`). Without the shell they answer "cancelled". Print goes
+  to CUPS with `lp`.
+- **Email**: opens a `mailto:` link (attachments as `attach=`) in Almanac when
+  it handles mailto, else the default mail app.
+- **Lockdown**: the GNOME lockdown/privacy keys in dconf (all off).
+
+Route it in NixOS with `xdg.portal.extraPortals = [ hearth ]` and
+`xdg.portal.config.arbor.default = [ "hearth" ]`. Preview the sheets with
+`hearth-ipc call portal preview access|account|appchooser|launcher|print`.
+Test shells sharing the real bus set `HEARTH_PORTAL=0`.
+
 ## Global menu
 
 The focused app's menus sit in the menu bar after its name (arbor with the

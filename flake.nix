@@ -59,6 +59,9 @@
       swayidle
       python
       xprop   # hearth-appmenu: X11 windows' menu properties (xwayland-satellite)
+      # Portal backend (helpers/hearth-portal): org.gnome.* settings from
+      # dconf, `gio launch` for the mail app.
+      dconf glib
       # Wallpaper engine (helpers/hearth-wallpaper, desktop/Background.qml):
       # Wallpaper Engine projects, macOS .heic dynamic desktops, video
       # posters, Shadertoy compiles (qsb), API keys in the Secret Service.
@@ -238,7 +241,7 @@
           --set-default HEARTH_XKB_RULES ${pkgs.xkeyboard_config}/share/X11/xkb/rules/evdev.lst
         # Spotlight's indexer and the AI hub's llama.cpp server, for the
         # systemd user units in nixosModules.ai.
-        for t in hearth-indexer hearth-llama-server hearth-accounts; do
+        for t in hearth-indexer hearth-llama-server hearth-accounts hearth-portal; do
           makeWrapper $out/share/hearth/helpers/$t $out/bin/$t \
             --prefix PATH : ${lib.makeBinPath runtimeDeps}:$out/share/hearth/helpers
         done
@@ -249,6 +252,22 @@
         [D-BUS Service]
         Name=io.github.benwbooth.Accounts
         Exec=$out/bin/hearth-accounts serve
+        EOF
+        # hearth's desktop portal backend (helpers/hearth-portal): colour
+        # scheme, notifications, permissions, Open With, print, web apps,
+        # email. xdg-desktop-portal starts it on demand; route interfaces to
+        # it with xdg.portal.config.<desktop> = { default = [ "hearth" ]; }
+        # and add hearth to xdg.portal.extraPortals.
+        cat > $out/share/dbus-1/services/org.freedesktop.impl.portal.desktop.hearth.service <<EOF
+        [D-BUS Service]
+        Name=org.freedesktop.impl.portal.desktop.hearth
+        Exec=$out/bin/hearth-portal serve
+        EOF
+        mkdir -p $out/share/xdg-desktop-portal/portals
+        cat > $out/share/xdg-desktop-portal/portals/hearth.portal <<EOF
+        [portal]
+        DBusName=org.freedesktop.impl.portal.desktop.hearth
+        Interfaces=org.freedesktop.impl.portal.Settings;org.freedesktop.impl.portal.Notification;org.freedesktop.impl.portal.Lockdown;org.freedesktop.impl.portal.Account;org.freedesktop.impl.portal.Access;org.freedesktop.impl.portal.AppChooser;org.freedesktop.impl.portal.DynamicLauncher;org.freedesktop.impl.portal.Email;org.freedesktop.impl.portal.Print;
         EOF
         # From a text console when the lock screen is stuck (README: Lock screen).
         ln -s $out/share/hearth/helpers/hearth-recover-lock $out/bin/hearth-recover-lock

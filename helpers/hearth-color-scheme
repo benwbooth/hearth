@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Switch apps between light and dark: hearth-color-scheme light|dark
+"""Switch apps between light and dark: hearth-color-scheme light|dark [--accent #RRGGBB]
 
 hearth runs this when its own light/dark changes (Settings > Appearance,
 including Auto's 7:00/19:00 switch), so the whole desktop follows:
 
 - Qt/KDE apps: Breeze Light/Dark colours and icon theme in kdeglobals, then
   the signals running KDE apps listen for (they recolour live).
-- Browsers, Electron and GTK 4 apps: the settings portal's color-scheme,
-  which the KDE portal backend derives from kdeglobals (the same signal makes
-  it announce the change).
+- Browsers, Electron, Qt (xdgdesktopportal theme), GTK 4 and Flatpak apps:
+  the settings portal's color-scheme and accent-color, which hearth's own
+  portal backend (helpers/hearth-portal) serves from
+  $XDG_STATE_HOME/hearth/appearance.json, written here; it announces the
+  change itself when the file changes.
 - GTK 3/4: gtk-theme / color-scheme / icon-theme in dconf (GSettings) and
   ~/.config/gtk-{3,4}.0/settings.ini.
 
@@ -22,7 +24,8 @@ import tempfile
 
 MODE = sys.argv[1] if len(sys.argv) > 1 else ""
 if MODE not in ("light", "dark"):
-    sys.exit("usage: hearth-color-scheme light|dark")
+    sys.exit("usage: hearth-color-scheme light|dark [--accent #RRGGBB]")
+ACCENT = sys.argv[sys.argv.index("--accent") + 1] if "--accent" in sys.argv[:-1] else ""
 DARK = MODE == "dark"
 
 CONFIG = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
@@ -204,6 +207,26 @@ def apply_gsettings():
             print(f"hearth-color-scheme: dconf {k}: {e}", file=sys.stderr)
 
 
+def apply_portal_state():
+    """What hearth-portal's Settings serve (org.freedesktop.appearance)."""
+    state = os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state")
+    path = os.path.join(state, "hearth", "appearance.json")
+    want = {"mode": MODE}
+    if ACCENT:
+        want["accent"] = ACCENT
+    try:
+        with open(path) as f:
+            have = json.load(f)
+    except (OSError, ValueError):
+        have = {}
+    if {k: have.get(k) for k in want} == want:
+        return
+    have.update(want)
+    write_atomic(path, json.dumps(have) + "\n")
+    changed.append("portal")
+
+
+apply_portal_state()
 if apply_kdeglobals():
     notify_kde()
 apply_settings_ini()

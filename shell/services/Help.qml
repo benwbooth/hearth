@@ -189,6 +189,7 @@ Singleton {
         { title: "How windows work", guide: "windows" },
         { title: "Settings: passwords & keys: see, copy, change or delete saved passwords, add one, lock the keyring, SSH key passphrases", pane: "passwords" },
         { title: "Saved passwords: unlock the keyring, change its password", guide: "passwords" },
+        { title: "App requests: camera/location permission, Open With, print, share your name, add web app, dark mode in apps", guide: "requests" },
         { title: "Getting started", guide: "welcome" }
     ]
 

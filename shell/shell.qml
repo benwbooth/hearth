@@ -61,6 +61,9 @@ ShellRoot {
     PolkitDialog {}
     // The keyring's password prompt (services/KeyringPrompter).
     KeyringDialog {}
+    // What apps ask through the desktop portal (services/Portal.qml):
+    // permissions, Open With, printing, adding web apps.
+    PortalDialog {}
     NotificationBanners {}
     NotificationCenter {}
 }

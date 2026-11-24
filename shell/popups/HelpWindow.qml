@@ -72,7 +72,8 @@ Scope {
                                 { id: "shortcuts", label: "Keyboard Shortcuts", icon: "preferences-desktop-keyboard-shortcut" },
                                 { id: "gestures", label: "Trackpad Gestures", icon: "input-touchpad" },
                                 { id: "windows", label: "How windows work", icon: "preferences-system-windows" },
-                                { id: "passwords", label: "Saved passwords", icon: "dialog-password" }
+                                { id: "passwords", label: "Saved passwords", icon: "dialog-password" },
+                                { id: "requests", label: "App requests", icon: "dialog-question" }
                             ]
                             MouseArea {
                                 id: nav
@@ -108,7 +109,7 @@ Scope {
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
                     anchors.margins: 24
-                    sourceComponent: ({ shortcuts: shortcutsPage, gestures: gesturesPage, windows: windowsPage, passwords: passwordsPage, welcome: welcomePage })[root.page]
+                    sourceComponent: ({ shortcuts: shortcutsPage, gestures: gesturesPage, windows: windowsPage, passwords: passwordsPage, requests: requestsPage, welcome: welcomePage })[root.page]
                 }
             }
         }
@@ -302,6 +303,19 @@ Scope {
             Para { text: "If the keyring ever stays locked (its password no longer matches your login password, say after you changed one of them), the first app that needs a saved password brings up an \"Unlock Your Saved Passwords\" box. Type the keyring's password there: usually your login password, or your old one if you changed it recently. Cancel leaves it locked, and that app goes without its saved passwords for now." }
             Para { text: "Changing your password with passwd in a Terminal changes the keyring's password too, so the next login still unlocks it. Other ways of setting a password (an administrator's sudo passwd, for example) don't know the old one: then the box above asks once for the old password. To make the keyring follow your new login password after that, run oo7-cli change-secret in a Terminal and give it the new one. (The keyring is the oo7 Secret Service; its file is ~/.local/share/keyrings/v1/login.keyring.)" }
             Para { text: "To see what's saved, open Settings › Passwords & Keys: search, show or copy a password, change, rename or delete it, add one of your own, lock the keyring, and see your SSH keys (forget a saved passphrase, or lock a key until it's next used). From a Terminal: oo7-cli list." }
+            Item { Layout.fillHeight: true }
+        }
+    }
+
+    Component {
+        id: requestsPage
+        ColumnLayout {
+            spacing: 14
+            Title { text: "App requests" }
+            Para { text: "Some apps (Flatpak apps above all, but also browsers and many others) don't reach into the desktop themselves: they ask it, and hearth answers. Most answers need nothing from you: whether you use light or dark mode and your accent colour (so apps match Settings › Appearance and switch with it), and notifications, which show up like any other." }
+            Para { text: "Some need a yes from you, so hearth shows a sheet in the middle of the screen. Nothing reaches the app until you press the blue button; Esc or Cancel always says no." }
+            Para { text: "• \"Allow … ?\": an app wants the camera, the microphone, your location, to keep running in the background, or similar. \"Remember\" keeps your answer for that app.\n• \"Share your name with … ?\": an app wants your account's name and picture (Settings › Users & Accounts), for example to fill in a profile. Untick the picture to send only the name.\n• \"Open … With…\": pick which app opens a file or link. Double-click an app to open it straight away.\n• \"Add Web App?\": a browser or app wants to add a website or shortcut as an app. It shows up in Launchpad and Spotlight; you can rename it here first.\n• \"Print\": pick the printer, copies, pages and two-sided printing. Printers are set up in Settings › Printers." }
+            Para { text: "When an app wants to write an email for you (\"Send by email\"), it opens in Almanac, or in your default mail app if Almanac can't take it. Open and save dialogs are Grove's; screen sharing and screenshots are arbor's." }
             Item { Layout.fillHeight: true }
         }
     }
