@@ -116,7 +116,7 @@ def gap_of(measured, toolkit, p):
         tk = toolkit or "unknown"
         if tk in ("electron", "chromium", "cef"):
             return "electron-no-a11y"
-        if ins.get("flatpak"):
+        if ins.get("flatpak") and tk != "sdl-glfw":  # a Flatpak game is still a game
             return "flatpak-no-a11y"
         return f"no-a11y:{tk}"
     if a.get("menubars") and a.get("menu_items"):
