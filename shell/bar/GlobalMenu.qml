@@ -446,10 +446,31 @@ Row {
             text: t.tip
             hovered: t.containsMouse && !(t.popup && t.popup.open) && !ShellState.activePopup
         }
+        // Each title on whole device pixels (as BarButton.snapIcon does for
+        // icons): centred at a fraction of a pixel, the bold app name was
+        // smoothed over two pixel columns and looked grey next to "Window".
+        readonly property real dpr: {
+            const sc = t.bar && t.bar.screen ? t.bar.screen : null;
+            const o = sc ? Displays.live[sc.name] : null;
+            if (o && o.logical && o.logical.scale > 0) return o.logical.scale;
+            return sc && sc.devicePixelRatio > 0 ? sc.devicePixelRatio : 1;
+        }
+        function snapTitle() {
+            const p = titleRow.mapToItem(null, 0, 0);
+            const rx = p.x - titleSnap.x, ry = p.y - titleSnap.y;
+            titleSnap.x = Math.round(rx * dpr) / dpr - rx;
+            titleSnap.y = Math.round(ry * dpr) / dpr - ry;
+        }
+        onXChanged: Qt.callLater(snapTitle)
+        onYChanged: Qt.callLater(snapTitle)
+        onWidthChanged: Qt.callLater(snapTitle)
+        onDprChanged: Qt.callLater(snapTitle)
         Row {
             id: titleRow
             anchors.centerIn: parent
             spacing: Math.round(5 * Theme.pt)
+            transform: Translate { id: titleSnap }
+            onWidthChanged: Qt.callLater(t.snapTitle)
             Icon {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: t.icon !== ""
