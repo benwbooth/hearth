@@ -487,8 +487,51 @@ def count_items(node):
     return sum(1 + count_items(c) for c in node.get("children") or [] if c.get("type") != "separator")
 
 
+# Never started on the rig's bus, whichever app ships them: the keyring,
+# the a11y bus (the rig runs its own), systemd, accounts.
+SERVICE_DENY = re.compile(r"^(org\.a11y\.|org\.freedesktop\.(secrets|systemd1|machine1|import1|portable1|login1)|"
+                          r"org\.kde\.kwalletd|org\.freedesktop\.impl\.portal\.(desktop\.(oo7|kde)|Secret)|"
+                          r"org\.gnome\.keyring|org\.gnome\.OnlineAccounts|io\.github\.benwbooth\.)")
+APP_SERVICES = []
+
+
+def app_services(argv):
+    """Link the D-Bus services of the app's closure into the rig's service
+    folder (evolution-data-server for GNOME Contacts, gnome-terminal-server
+    for GNOME Terminal), so its bus starts them as a session would; the
+    previous app's are removed."""
+    sdir = os.path.join(RIGDIR, "services")
+    while APP_SERVICES:
+        try:
+            os.unlink(APP_SERVICES.pop())
+        except OSError:
+            pass
+    prog = next((a for a in argv if a.startswith("/nix/store/")), "")
+    if not prog or not os.path.isdir(sdir):
+        return
+    root = "/".join(os.path.realpath(prog).split("/")[:4])
+    try:
+        closure = subprocess.run(["nix-store", "-qR", root], capture_output=True, text=True, timeout=60).stdout.split()
+    except Exception:
+        return
+    for p in closure:
+        for f in glob.glob(os.path.join(p, "share/dbus-1/services/*.service")):
+            name = os.path.basename(f)[:-len(".service")]
+            dst = os.path.join(sdir, os.path.basename(f))
+            if SERVICE_DENY.search(name) or os.path.exists(dst):
+                continue
+            try:
+                os.symlink(f, dst)
+                APP_SERVICES.append(dst)
+            except OSError:
+                pass
+    if APP_SERVICES:
+        rig("busctl", "call", "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "ReloadConfig")
+
+
 def attempt(attr, argv, variant, extra_env, extra_args, wait_win=50, wait_menu=16):
     cleanup()
+    app_services(argv)
     before = {w["id"] for w in windows()}
     # The arbor session has X11 too (xwayland-satellite): VLC 3 and other
     # X11-only apps need DISPLAY even when they run "natively".

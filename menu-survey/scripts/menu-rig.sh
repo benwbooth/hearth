@@ -51,13 +51,34 @@ case $cmd in
 start)
   source "$(dirname "$(readlink -f "$0")")/../../scripts/headless-arbor.sh"
   arbor_bin=$(headless_arbor_bin "${ARBOR_BIN:-}")
-  mkdir -p "$R" "$D/home/.config" "$D/home/.cache" "$D/home/.local/share" "$D/home/.local/state"
+  mkdir -p "$R" "$D/tmp" "$D/home/.config" "$D/home/.cache" "$D/home/.local/share" "$D/home/.local/state"
   cat > "$R/bus.conf" <<EOF
 <!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
 <busconfig><type>session</type><listen>unix:path=$R/bus.sock</listen><auth>EXTERNAL</auth>
+<servicedir>$R/services</servicedir>
 <policy context="default"><allow send_destination="*" eavesdrop="true"/><allow eavesdrop="true"/><allow own="*"/></policy></busconfig>
 EOF
-  daemon "$R/dbus.pid" "$R/dbus.log" dbus-daemon --nofork --config-file="$R/bus.conf"
+  # Services the bus may start (the probe adds each app's own, from its
+  # closure: evolution-data-server, gnome-terminal-server...). From the
+  # system only an allow-list: never the keyring, the a11y bus (started
+  # separately), systemd, your accounts or file manager.
+  mkdir -p "$R/services" "$R/run"
+  chmod 700 "$R/run"
+  for f in /run/current-system/sw/share/dbus-1/services/*.service /etc/profiles/per-user/$USER/share/dbus-1/services/*.service; do
+    case $(basename "$f" .service) in
+      ca.desrt.dconf|org.freedesktop.portal.Desktop|org.freedesktop.portal.Documents|org.freedesktop.portal.Flatpak|\
+      org.freedesktop.impl.portal.desktop.gtk|org.freedesktop.impl.portal.PermissionStore|org.freedesktop.Flatpak|\
+      org.gtk.vfs.*|org.gtk.GLib.PACRunner|org.mpris.MediaPlayer2.playerctld) ln -sf "$f" "$R/services/" ;;
+    esac
+  done
+  # The bus and everything it starts live in the rig: its home and runtime
+  # dir. (A service started with the real ones once rewrote the real dconf
+  # and the live a11y bus socket.)
+  daemon "$R/dbus.pid" "$R/dbus.log" env -u DISPLAY -u WAYLAND_DISPLAY -u DBUS_SESSION_BUS_ADDRESS \
+    HOME="$D/home" XDG_CONFIG_HOME="$D/home/.config" \
+    XDG_CACHE_HOME="$D/home/.cache" XDG_DATA_HOME="$D/home/.local/share" XDG_STATE_HOME="$D/home/.local/state" \
+    XDG_RUNTIME_DIR="$R/run" TMPDIR="$D/tmp" \
+    dbus-daemon --nofork --config-file="$R/bus.conf"
   for _ in $(seq 50); do [[ -S $R/bus.sock ]] && break; sleep 0.1; done
   echo "unix:path=$R/bus.sock" > "$R/bus"
   priv_env
@@ -73,6 +94,12 @@ EOF
   for _ in $(seq 100); do [[ -s $R/arbor.env ]] && break; sleep 0.1; done
   [[ -s $R/arbor.env ]] || { echo "arbor did not start; see $R/arbor.log" >&2; exit 1; }
   priv_env
+  # What the bus starts opens its windows in the rig (gnome-terminal-server,
+  # portal dialogs): the rig's displays, by absolute socket path (the
+  # services' runtime dir is the rig's).
+  dbus-update-activation-environment WAYLAND_DISPLAY="$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" \
+    DISPLAY="$(grep ^DISPLAY= "$R/arbor.env" | cut -d= -f2-)" XDG_CURRENT_DESKTOP="$XDG_CURRENT_DESKTOP" \
+    >/dev/null 2>&1 || true
   # hearth reads X11 windows' menus with xprop: it needs the satellite's
   # DISPLAY, as arbor gives it in a real session (priv_env unsets it for
   # apps, which get it explicitly when they should be X11).
