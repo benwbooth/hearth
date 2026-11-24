@@ -7,6 +7,12 @@
 // white tile) are cut out, so the bar shows through, as in a macOS template
 // image. A one-tone icon (white or black) turns wholly into the text colour;
 // ChatGPT's white tile with a black logo used to turn into a white square.
+//
+// A logo on a filled tile (most of the icon opaque in one tone, with
+// contrasting marks on it: ChatGPT's knot on a white square) goes the other
+// way round: the logo is the ink and the tile drops away, like the app's own
+// macOS menu bar icon. Cutting thin strokes out of the tile instead left a
+// light square with speckles at menu bar size.
 // Compile: scripts/build-shaders.sh (qsb).
 layout(location = 0) in vec2 qt_TexCoord0;
 layout(location = 0) out vec4 fragColor;
@@ -30,24 +36,50 @@ void main() {
     if (c.a <= 0.0) { fragColor = vec4(0.0); return; }
     vec3 rgb = c.rgb / c.a;                       // straight colour
 
-    // The main tone: mean luminance of the opaque, colourless pixels.
-    float sumL = 0.0;
-    float n = 0.0;
-    for (int i = 0; i < 8; i++) {
-        for (int j = 0; j < 8; j++) {
-            vec4 s = texture(source, (vec2(float(i), float(j)) + 0.5) / 8.0);
+    // The main tone: the most common luminance (8 bins) of the opaque,
+    // colourless pixels, so a logo's strokes don't drag a tile's tone down.
+    float cnt[8];
+    float sum[8];
+    for (int k = 0; k < 8; k++) { cnt[k] = 0.0; sum[k] = 0.0; }
+    float opaque = 0.0;
+    for (int i = 0; i < 16; i++) {
+        for (int j = 0; j < 16; j++) {
+            vec4 s = texture(source, (vec2(float(i), float(j)) + 0.5) / 16.0);
             if (s.a > 0.5) {
+                opaque += 1.0;
                 vec3 sr = s.rgb / s.a;
-                if (saturation(sr) < 0.2) { sumL += lum(sr); n += 1.0; }
+                if (saturation(sr) < 0.2) {
+                    float l = lum(sr);
+                    int k = min(7, int(l * 8.0));
+                    cnt[k] += 1.0;
+                    sum[k] += l;
+                }
             }
         }
     }
-    float mainTone = n > 0.0 ? sumL / n : lum(rgb);
+    int best = 0;
+    for (int k = 1; k < 8; k++) if (cnt[k] > cnt[best]) best = k;
+    float mainTone = cnt[best] > 0.0 ? sum[best] / cnt[best] : lum(rgb);
+
+    // A tile: over half the icon opaque, with marks that contrast with it.
+    float marks = 0.0;
+    for (int i = 0; i < 16; i++) {
+        for (int j = 0; j < 16; j++) {
+            vec4 s = texture(source, (vec2(float(i), float(j)) + 0.5) / 16.0);
+            if (s.a > 0.5) {
+                vec3 sr = s.rgb / s.a;
+                if (saturation(sr) < 0.2 && abs(lum(sr) - mainTone) > 0.2) marks += 1.0;
+            }
+        }
+    }
+    float tile = smoothstep(0.45, 0.6, opaque / 256.0) * step(2.0, marks);
 
     // 0 = keep (coloured), 1 = monochrome (grey).
     float w = 1.0 - smoothstep(0.12, 0.3, saturation(rgb));
-    // Ink near the main tone, cut out where it contrasts.
-    float ink = 1.0 - smoothstep(0.3, 0.55, abs(lum(rgb) - mainTone));
+    float d = abs(lum(rgb) - mainTone);
+    // Ink near the main tone, cut out where it contrasts; on a tile, the
+    // marks are the ink and the tile itself is cut away.
+    float ink = mix(1.0 - smoothstep(0.3, 0.55, d), smoothstep(0.08, 0.3, d), tile);
     vec4 keep = vec4(rgb * c.a, c.a);
     vec4 mono = vec4(target.rgb, 1.0) * (c.a * ink);
     fragColor = mix(keep, mono, w) * qt_Opacity;
