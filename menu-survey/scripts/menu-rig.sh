@@ -15,6 +15,9 @@
 #   menu-rig.sh stop
 set -euo pipefail
 R=${MENU_RIG_DIR:-$XDG_RUNTIME_DIR/menu-rig}
+# Homes, caches, Flatpak data and temp files on disk: /run/user is a small
+# tmpfs (RAM) the live session needs; only sockets and pids stay there.
+D=${MENU_RIG_DISK:-/var/tmp/menu-rig-$USER/$(basename "$R")}
 H=${HEARTH_PKG:-$(dirname "$(dirname "$(readlink -f "$(command -v hearth-ipc 2>/dev/null || echo /nix/store/lb9wb4nsv30p16d3prr882nqnncg1wcx-hearth-0.1.0/bin/hearth-ipc)")")")}
 [[ -x $H/libexec/hearth-shell ]] || H=/nix/store/lb9wb4nsv30p16d3prr882nqnncg1wcx-hearth-0.1.0
 QS=$(grep -oE '/nix/store/[^ ]*quickshell-[^/ ]*/bin/quickshell' "$H/bin/hearth-ipc" | head -1)
@@ -27,8 +30,8 @@ daemon() { local pidfile=$1 log=$2; shift 2
 priv_env() {
   export DBUS_SESSION_BUS_ADDRESS=$(cat "$R/bus")
   export GSETTINGS_BACKEND=memory
-  export HOME=$R/home XDG_CONFIG_HOME=$R/home/.config XDG_CACHE_HOME=$R/home/.cache
-  export XDG_DATA_HOME=$R/home/.local/share XDG_STATE_HOME=$R/home/.local/state
+  export HOME=$D/home XDG_CONFIG_HOME=$D/home/.config XDG_CACHE_HOME=$D/home/.cache
+  export XDG_DATA_HOME=$D/home/.local/share XDG_STATE_HOME=$D/home/.local/state
   export XDG_CURRENT_DESKTOP=arbor:KDE XDG_SESSION_DESKTOP=arbor
   # As the live session (arbor/config.kdl): Qt's xdgdesktopportal theme.
   # Plasma's kde theme picks the org.kde.desktop style, whose Kirigami
@@ -48,7 +51,7 @@ case $cmd in
 start)
   source "$(dirname "$(readlink -f "$0")")/../../scripts/headless-arbor.sh"
   arbor_bin=$(headless_arbor_bin "${ARBOR_BIN:-}")
-  mkdir -p "$R/home/.config" "$R/home/.cache" "$R/home/.local/share" "$R/home/.local/state"
+  mkdir -p "$R" "$D/home/.config" "$D/home/.cache" "$D/home/.local/share" "$D/home/.local/state"
   cat > "$R/bus.conf" <<EOF
 <!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
 <busconfig><type>session</type><listen>unix:path=$R/bus.sock</listen><auth>EXTERNAL</auth>
@@ -58,15 +61,15 @@ EOF
   for _ in $(seq 50); do [[ -S $R/bus.sock ]] && break; sleep 0.1; done
   echo "unix:path=$R/bus.sock" > "$R/bus"
   priv_env
-  mkdir -p "$R/home/.config/arbor"
-  printf 'prefer-no-csd\nhotkey-overlay { skip-at-startup; }\n' > "$R/home/.config/arbor/config.kdl"
+  mkdir -p "$D/home/.config/arbor"
+  printf 'prefer-no-csd\nhotkey-overlay { skip-at-startup; }\n' > "$D/home/.config/arbor/config.kdl"
   rm -f "$R/arbor.env"
   # 2560x1440: hearth's menu bar drops menus that don't fit beside its
   # status items at 1280 wide.
   ( headless_arbor_env headless-1=2560x1440
     unset WAYLAND_DISPLAY WAYLAND_SOCKET
     ARBOR_NO_SUPERVISOR=1 daemon "$R/arbor.pid" "$R/arbor.log" \
-    "$arbor_bin" -c "$R/home/.config/arbor/config.kdl" -- bash -c "env > '$R/arbor.env.tmp'; mv '$R/arbor.env.tmp' '$R/arbor.env'; exec sleep infinity" )
+    "$arbor_bin" -c "$D/home/.config/arbor/config.kdl" -- bash -c "env > '$R/arbor.env.tmp'; mv '$R/arbor.env.tmp' '$R/arbor.env'; exec sleep infinity" )
   for _ in $(seq 100); do [[ -s $R/arbor.env ]] && break; sleep 0.1; done
   [[ -s $R/arbor.env ]] || { echo "arbor did not start; see $R/arbor.log" >&2; exit 1; }
   priv_env
@@ -86,8 +89,8 @@ env) priv_env; env | grep -E '^(DBUS_SESSION_BUS_ADDRESS|GSETTINGS_BACKEND|HOME|
 run) priv_env
   # Apps get their own runtime and temp dirs, so single-instance sockets and
   # lock files never meet the live session's (or another session's) copy.
-  mkdir -p -m 700 "$R/run" "$R/tmp"
-  export WAYLAND_DISPLAY=$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY XDG_RUNTIME_DIR=$R/run TMPDIR=$R/tmp
+  mkdir -p -m 700 "$R/run" "$D/tmp"
+  export WAYLAND_DISPLAY=$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY XDG_RUNTIME_DIR=$R/run TMPDIR=$D/tmp
   exec "$@" ;;
 dump) priv_env; exec "$QS" ipc --pid "$(hearth_pid)" call appmenu dump ;;
 ipc) priv_env; exec "$QS" ipc --pid "$(hearth_pid)" "$@" ;;
@@ -100,6 +103,9 @@ stop)
   for p in hearth arbor dbus; do
     [[ -f $R/$p.pid ]] && kill -- -"$(cat "$R/$p.pid")" 2>/dev/null || true
   done
-  sleep 0.5; rm -rf "$R" ;;
+  sleep 0.5
+  # Apps leave read-only folders (Flatpak payloads): writable first.
+  chmod -R u+rwX "${R:?}" "${D:?}" 2>/dev/null
+  rm -rf "${R:?}" "${D:?}" ;;
 *) echo "unknown command $cmd" >&2; exit 2 ;;
 esac

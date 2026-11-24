@@ -39,6 +39,22 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 RIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "menu-rig.sh")  # hearth gets DISPLAY
 WORKER = os.environ.get("MENU_PROBE_WORKER", "")
 RIGDIR = os.path.join(os.environ["XDG_RUNTIME_DIR"], "menu-rig-survey" + WORKER)
+# The rig's homes, the apps' folders and temp files: on disk (menu-rig.sh's
+# MENU_RIG_DISK default). /run/user is a small RAM tmpfs the live session
+# needs; Flatpak apps' data filled it.
+DISKDIR = os.path.join("/var/tmp", "menu-rig-" + os.environ.get("USER", "ben"), "menu-rig-survey" + WORKER)
+
+
+def rmtree(path):
+    """Delete, read-only folders too (Flatpak payloads): rmtree's
+    ignore_errors otherwise leaves them, gigabytes at a time."""
+    for dp, dn, fn in os.walk(path):
+        for d in dn:
+            try:
+                os.chmod(os.path.join(dp, d), 0o700)
+            except OSError:
+                pass
+    shutil.rmtree(path, ignore_errors=True)
 ENV = dict(os.environ, MENU_RIG_DIR=RIGDIR)
 # MENU_PROBE_DEVLOOP=1: the rig runs devloop's latest arbor and hearth (the
 # engine as it is now) instead of the installed ones.
@@ -340,14 +356,14 @@ def kill_procs(pids):
 
 
 def own_app_procs():
-    mine = os.path.join(RIGDIR, "apps") + "/"
+    mine = os.path.join(DISKDIR, "apps") + "/"
     return app_procs(lambda x: x.startswith(mine))
 
 
 def orphan_sweep():
     """Leftovers of any worker: processes still living in a deleted
     menu-rig-*/apps/N folder (a crashed or killed worker's apps)."""
-    pat = re.compile(r"/menu-rig-[^/]*/apps/\d+")
+    pat = re.compile(r"/menu-rig-[^/]*(/menu-rig-[^/]*)?/apps/\d+")
 
     def dead(x):
         m = pat.search(x)
@@ -385,10 +401,10 @@ def cleanup():
             break
         time.sleep(0.25)
     while APPDIRS:
-        shutil.rmtree(APPDIRS.pop(), ignore_errors=True)
+        rmtree(APPDIRS.pop())
     # Single-instance locks of killed apps (Chromium/Electron, Firefox).
     for pat in ("**/Singleton*", "**/lock", "**/.parentlock"):
-        for fn in glob.glob(os.path.join(RIGDIR, "home", pat), recursive=True):
+        for fn in glob.glob(os.path.join(DISKDIR, "home", pat), recursive=True):
             try:
                 os.unlink(fn)
             except OSError:
@@ -488,8 +504,8 @@ def attempt(attr, argv, variant, extra_env, extra_args, wait_win=50, wait_menu=1
     # Every attempt gets fresh home, runtime and temp dirs: a killed app's
     # single-instance lock or socket ("Strawberry is already running") must
     # not stop the next app, and no first-run state carries over.
-    base = os.path.join(RIGDIR, "apps", str(SCOPE["n"] + 1))
-    shutil.rmtree(base, ignore_errors=True)
+    base = os.path.join(DISKDIR, "apps", str(SCOPE["n"] + 1))
+    rmtree(base)
     dirs = {"HOME": "home", "XDG_CONFIG_HOME": "home/.config", "XDG_CACHE_HOME": "home/.cache",
             "XDG_DATA_HOME": "home/.local/share", "XDG_STATE_HOME": "home/.local/state",
             "XDG_RUNTIME_DIR": "run", "TMPDIR": "tmp"}
