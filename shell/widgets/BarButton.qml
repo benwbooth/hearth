@@ -131,9 +131,11 @@ MouseArea {
             // sourceSize as device pixels here (a 1 px stripe test at 4/3:
             // only this size came out sharp; the logical size or twice it
             // were scaled again and smeared).
-            rasterSize: root.menuBarItem ? Math.round(implicitSize * root.dpr) : 0
+            // Apps' tray pictures (`adaptive`) at twice that: the shader
+            // zooms their padding away and samples between pixels.
+            rasterSize: root.menuBarItem ? Math.round(implicitSize * root.dpr) * (root.adaptive ? 2 : 1) : 0
             layer.textureSize: root.menuBarItem ? Qt.size(rasterSize, rasterSize) : Qt.size(0, 0)
-            layer.smooth: false
+            layer.smooth: root.adaptive
             transform: Translate { id: iconSnap }
             onXChanged: Qt.callLater(root.snapIcon)
             onYChanged: Qt.callLater(root.snapIcon)
