@@ -69,7 +69,7 @@ Scope {
         case "access": return [req.subtitle, req.body].filter(s => !!s).join("\n\n");
         case "account": return (req.reason ? req.reason + "\n\n" : "")
             + appName + " is asking for the name and picture of your account on this computer. Nothing else is shared.";
-        case "appchooser": return (req.typeName ? "Pick the app for this " + req.typeName.toLowerCase() + "." : "Pick the app to open it with.")
+        case "appchooser": return (req.typeName ? "Pick the app for this " + req.typeName + "." : "Pick the app to open it with.")
             + (req.app ? " " + req.app + " asked." : "");
         case "launcher": return appName + " wants to add " + (req.webapp ? "this website as an app" : "a shortcut")
             + ". It shows up in Launchpad and Spotlight, and you can pin it to the Dock.";
@@ -122,7 +122,8 @@ Scope {
 
     PanelWindow {
         id: win
-        visible: root.req !== null
+        // Made again if a monitor dropout takes its surface (widgets/KeepShown).
+        KeepShown { window: win; want: root.req !== null }
         screen: Compositor.focusedScreen
         anchors { top: true; bottom: true; left: true; right: true }
         exclusionMode: ExclusionMode.Ignore
@@ -131,12 +132,13 @@ Scope {
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
         color: Qt.rgba(0, 0, 0, 0.25)
 
-        onVisibleChanged: if (visible) { root.reset(); card.forceActiveFocus(); }
+        // Remade (KeepShown) or not: the answers so far stay; a new
+        // request starts fresh. An AppChooser update keeps the pick.
+        onVisibleChanged: if (visible) card.forceActiveFocus()
         Connections {
             target: Portal
             function onRequestChanged() {
-                // An AppChooser update keeps the sheet (and the pick).
-                if (win.visible && root.req && root.req.id !== shownId.value) { root.reset(); card.forceActiveFocus(); }
+                if (root.req && (root.req.id !== shownId.value || root.req.preview)) { root.reset(); card.forceActiveFocus(); }
                 shownId.value = root.req ? root.req.id : 0;
             }
         }

@@ -734,6 +734,11 @@ class Backend(dbus.service.Object):
                 continue
             out.append({"id": str(c), "name": info.get_display_name() or info.get_name(), "icon": app_icon(info),
                         "comment": info.get_description() or ""})
+        # Two apps with one name (a Flatpak and a system copy): say which.
+        names = [a["name"] for a in out]
+        for a in out:
+            if names.count(a["name"]) > 1:
+                a["comment"] = (a["comment"] + " · " if a["comment"] else "") + a["id"]
         return out
 
     @dbus.service.method(IMPL + "AppChooser", in_signature="ossasa{sv}", out_signature="ua{sv}",
@@ -745,8 +750,8 @@ class Backend(dbus.service.Object):
         payload = {"app": app_label(str(app_id)) if str(app_id) else "",
                    "choices": self.choice_list(choices), "lastChoice": o.get("last_choice", ""),
                    "contentType": ctype,
-                   "typeName": Gio.content_type_get_description(ctype) if ctype else "",
-                   "target": os.path.basename(target.rstrip("/")) if target else ""}
+                   "typeName": type_name(ctype),
+                   "target": target_name(target)}
 
         def finish(ans):
             choice = str(ans.get("choice", ""))
@@ -881,6 +886,24 @@ def app_icon_name(info):
 
 
 # --- helpers for the interfaces ------------------------------------------------------
+
+def type_name(ctype):
+    if not ctype:
+        return ""
+    if ctype.startswith("x-scheme-handler/"):
+        return ctype.split("/", 1)[1] + " link"
+    return Gio.content_type_get_description(ctype)
+
+
+def target_name(target):
+    """What the sheet calls the thing being opened: a file's name, a link's host."""
+    if not target:
+        return ""
+    u = urllib.parse.urlparse(target)
+    if u.scheme and u.scheme != "file" and u.netloc:
+        return u.netloc
+    return os.path.basename(urllib.parse.unquote(u.path if u.scheme == "file" else target).rstrip("/"))
+
 
 def user_info():
     pw = pwd.getpwuid(os.getuid())
