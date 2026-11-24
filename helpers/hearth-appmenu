@@ -1449,6 +1449,15 @@ class X11Window:
                         break
         except dbus.DBusException as e:
             err(e)
+        if new is None and xid:
+            # Nothing exported: the window's own menu bar over AT-SPI, as for
+            # Wayland windows (Java Swing through the ATK bridge, X11 Qt and
+            # GTK apps without the appmenu module). The X client's pid when
+            # it sets _NET_WM_PID; AWT doesn't, and then the reader matches
+            # the app by this window's title.
+            if isinstance(self.inner, AtspiMenu):
+                return False
+            new = AtspiMenu(self.key, self.title, x11_pid(xid) or self.pid, self.window)
         if self.inner and new and self.inner.same(new):
             new.stop()
             return False
@@ -1457,7 +1466,7 @@ class X11Window:
         self.inner = new
         if new is None:
             out({"type": "none", "key": self.key})
-        else:
+        elif not isinstance(new, AtspiMenu):
             out({"type": "resolved", "key": self.key, "request": new.request()})
         return False
 
