@@ -156,7 +156,13 @@ def rebuild():
     for r in rows:
         if r["status"] != "done":
             r["gap"] = gap_of(r["measured"], r["toolkit"], probes.get(r["attr"]))
-            if r["gap"] == "no-menus-visible":
+            if r["gap"] == "no-a11y:sdl-glfw":
+                # Games (SDL/GLFW/own engine, no GUI toolkit): their menus are
+                # in the game. Ben, 2026-11-23: no global menu needed; the
+                # emulators with Qt/GTK front ends are classified by those.
+                r["status"], r["solution"], r["gap"] = "none-needed", "none-needed:game", ""
+                r["notes"] = r["notes"] or "game: menus are in-game"
+            elif r["gap"] == "no-menus-visible":
                 # On AT-SPI, but no menu bar, no menu button, no shortcuts
                 # window, no commands exported: nothing a menu could show.
                 r["status"], r["solution"], r["gap"] = "none-needed", "none-needed", ""
