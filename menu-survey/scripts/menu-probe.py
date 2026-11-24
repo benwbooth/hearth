@@ -219,17 +219,24 @@ def rig_up():
             sys.exit("rig's hearth failed to load: see " + os.path.join(RIGDIR, "hearth.log"))
     except OSError:
         pass
-    subprocess.Popen(["setsid", RIG, "run", "/run/current-system/sw/libexec/at-spi-bus-launcher",
+    # at-spi2-core from hearth's own build (its typelib path), not the
+    # system's: the system may not have it (Plasma's removal took it out of
+    # /run/current-system, and every rig ran without an a11y bus).
+    asp = next((p.rsplit("/lib/", 1)[0] for p in hearth_typelibs().split(":") if "-at-spi2-core-" in p), "")
+    if not asp or not os.path.exists(f"{asp}/libexec/at-spi-bus-launcher"):
+        sys.exit("no at-spi2-core found (hearth's HEARTH_ATSPI_TYPELIB)")
+    subprocess.Popen(["setsid", RIG, "run", f"{asp}/libexec/at-spi-bus-launcher",
                       "--launch-immediately"], env=ENV, stdout=subprocess.DEVNULL,
                      stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
     time.sleep(2)
     # The a11y bus launcher's dbus-broker would activate the registry through
     # systemd, which a private bus can't do: start it ourselves.
-    asp = os.path.dirname(os.path.dirname(os.path.realpath("/run/current-system/sw/libexec/at-spi-bus-launcher")))
     subprocess.Popen(["setsid", RIG, "run", f"{asp}/libexec/at-spi2-registryd"], env=ENV,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
     time.sleep(1)
-    rig("busctl", "set-property", "org.a11y.Bus", "/org/a11y/bus", "org.a11y.Status", "IsEnabled", "b", "true")
+    r = rig("busctl", "set-property", "org.a11y.Bus", "/org/a11y/bus", "org.a11y.Status", "IsEnabled", "b", "true")
+    if r.returncode:
+        sys.exit("rig has no a11y bus: " + (r.stderr or r.stdout))
     with open(os.path.join(RIGDIR, "core.pids"), "w") as f:
         f.write(" ".join(core_pids()))
 
@@ -612,6 +619,23 @@ def attempt_windows(attr, before, win, wait_menu, escaped=False):
         # What the app exposes, while it's surely still up (Escape and the
         # first-run close below can end it).
         best["inspect"] = inspect(dict(best.get("window") or {}, pid=(best.get("window") or {}).get("pid")))
+    if not full_menus(best) and not escaped and (best.get("inspect") or {}).get("atspi", {}).get("found"):
+        # A first-run wizard in front (PCSX2's Setup Wizard): press its
+        # Finish/Skip/Next buttons over AT-SPI, as a user would once.
+        pid = x11_app_pid((best.get("window") or {}).get("pid") or 0)
+        if pid:
+            r = rig("run", "env", f"GI_TYPELIB_PATH={hearth_typelibs()}", hearth_python(),
+                    os.path.join(ROOT, "scripts", "atspi-firstrun.py"), str(pid), timeout=60)
+            try:
+                pressed = json.loads(r.stdout.strip().splitlines()[-1]).get("pressed") or []
+            except Exception:
+                pressed = []
+            if pressed:
+                time.sleep(3)
+                again = attempt_windows(attr, before, win, wait_menu, escaped="wizard")
+                if again and again["n_items"] > best["n_items"]:
+                    again["first_run_pressed"] = pressed
+                    best = again
     if best["result"] != "menus" and not escaped:
         # A start screen / welcome dialog in front: Escape once, look again.
         wt = tool("wtype")
