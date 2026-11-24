@@ -386,6 +386,21 @@ class AtspiMenu:
                 apps.insert(0, a)
             elif p in chain:
                 apps.append(a)
+        if not apps and self.title:
+            # An X11 window whose client sets no _NET_WM_PID (Java's AWT):
+            # the pid we were given is xwayland-satellite's. The one app
+            # with a frame of exactly this window's title is it.
+            byname = []
+            for i in range(desk.get_child_count()):
+                a = desk.get_child_at_index(i)
+                try:
+                    if a and any((a.get_child_at_index(k).get_name() or "") == self.title
+                                 for k in range(min(a.get_child_count(), 20))):
+                        byname.append(a)
+                except Exception:
+                    continue
+            if len(byname) == 1:
+                apps = byname
         return apps
 
     def frames(self, A, app):

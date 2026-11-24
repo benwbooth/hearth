@@ -95,6 +95,9 @@
 
     # Global menus for plain GtkMenuBars (README "Global menu").
     appmenu-gtk-module = pkgs.callPackage ./nix/appmenu-gtk-module.nix { };
+    # Global menus for Java Swing apps (README "Global menu"): the AT-SPI
+    # bridge JAVA_TOOL_OPTIONS (arbor/config.kdl) loads into every JVM.
+    java-atk-wrapper = pkgs.callPackage ./nix/java-atk-wrapper.nix { };
 
     # Shown in About This Computer: the commit this build came from.
     hearthVersion = "0.1.0 (${self.shortRev or self.dirtyShortRev or "dev"})";
@@ -252,6 +255,9 @@
         # GTK_PATH's /run/current-system/sw/lib/gtk-3.0 with hearth installed.
         mkdir -p $out/lib/gtk-3.0/modules
         ln -s ${appmenu-gtk-module}/lib/gtk-3.0/modules/libappmenu-gtk-module.so $out/lib/gtk-3.0/modules/
+        # JAVA_TOOL_OPTIONS (arbor/config.kdl) loads the Java accessibility
+        # bridge from /run/current-system/sw/lib/java-atk-wrapper.
+        ln -s ${java-atk-wrapper}/lib/java-atk-wrapper $out/lib/java-atk-wrapper
         runHook postInstall
       '';
       meta.mainProgram = "hearth";
@@ -263,7 +269,7 @@
   in {
     packages.${system} = {
       default = hearth;
-      inherit hearth quickshell appmenu-gtk-module recoll;
+      inherit hearth quickshell appmenu-gtk-module java-atk-wrapper recoll;
       inherit (boot) plymouth-theme-hearth grub-theme-hearth;
       boot-screenshots = import ./boot/vm-test.nix { inherit pkgs; module = self.nixosModules.boot; };
     };

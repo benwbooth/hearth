@@ -333,6 +333,16 @@ mac layout). Pieces:
   DT_NEEDED on GTK/GLib, so it can't drag a second GTK into apps built
   against another nixpkgs. It hides menu bars only while the registrar
   name is owned.
+- `nix/java-atk-wrapper.nix` (`.#java-atk-wrapper`, linked into hearth's
+  `lib/java-atk-wrapper`): GNOME's Java ATK bridge, loaded into every JVM by
+  `JAVA_TOOL_OPTIONS` in `arbor/config.kdl`, so Java Swing windows get an
+  AT-SPI tree and their menu bars are read like any other. Built for Java 8
+  and later; its start-up never ends an app (it catches every error). Java
+  prints `Picked up JAVA_TOOL_OPTIONS: ...` on stderr at each start.
+  Flatpaks get an empty value (global Flatpak override
+  `flatpak override --user --env=JAVA_TOOL_OPTIONS=`): they can't see the
+  jar. AWT sets no `_NET_WM_PID`, so its X11 windows are matched to their
+  app by title.
 - Every app also gets the bold app-name menu (About, the GTK app menu, New
   Window, Close Window, Hide, Hide Others, Show All, Quit) and, unless its
   own menus have one, a Window menu (Minimize, Zoom, Enter Full Screen,
@@ -369,6 +379,10 @@ Coverage on arbor (tested in a nested arbor on a private session bus,
 | GTK 3 menu button (Remmina's Actions) | fallback | yes (2026-11-22) | AT-SPI: the button's own menu items, read without opening |
 | Qt on X11 with a dialog in front (VLC's first-run dialog) | main window only | yes (2026-11-22) | the registration of another window of the same X11 client (_NET_WM_PID) |
 | Inkscape 1.4 (GTK 3) | | yes (2026-11-22) | GMenuModel via gtk_shell1 |
+| Java Swing (jadx-gui; JDK 8 to 21) | no | yes (2026-11-23) | AT-SPI through the Java ATK bridge (`JAVA_TOOL_OPTIONS`), window matched by title |
+| Qt Widgets ☰ (a QToolButton's menu: PDF Mix Tool) | fallback | yes (2026-11-23) | AT-SPI; the popup is found by its "showing" event (Qt leaves popups out of the app's children) |
+| GTK 4 ☰ with submenus (2048's Appearance) | fallback | yes (2026-11-23) | AT-SPI; a submenu slides into the same popover and is read there |
+| Kirigami drawer (Discover, KClock) | fallback | yes (2026-11-23) | AT-SPI; an open drawer is read as it is (the frame's dialog) |
 | Freelens, Mailspring, Anki | fallback | fallback | no menu reachable (Mailspring/Anki untested past their first-run windows) |
 | Firefox, Thunderbird | fallback | yes (2026-11-22) | AT-SPI: the (hidden) XUL menu bar, also under appmenu-gtk-module (empty export → AT-SPI); Firefox 160, Thunderbird tested |
 | JetBrains IDEs (X11 by default) | no | expected yes, untested | IntelliJ's own dbusmenu + RegisterWindow on X11 |

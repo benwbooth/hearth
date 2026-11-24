@@ -58,6 +58,11 @@ environment {
     // in-window menu bar while hearth's menu bar runs (it watches the
     // com.canonical.AppMenu.Registrar name).
     GTK_MODULES "appmenu-gtk-module"
+    // Global menu for Java Swing apps (README "Global menu"): every JVM
+    // loads the Java ATK bridge hearth ships (nix/java-atk-wrapper.nix),
+    // which gives Swing windows an AT-SPI tree hearth reads. Flatpaks get
+    // an empty value (global Flatpak override): they can't see the jar.
+    JAVA_TOOL_OPTIONS "-Xbootclasspath/a:/run/current-system/sw/lib/java-atk-wrapper/java-atk-wrapper.jar -Djavax.accessibility.assistive_technologies=org.GNOME.Accessibility.AtkWrapper"
 }
 
 // The shell's own windows (Help, Settings) come back with the shell, never

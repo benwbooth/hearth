@@ -470,6 +470,14 @@ def attempt(attr, argv, variant, extra_env, extra_args, wait_win=50, wait_menu=1
     # The arbor session has X11 too (xwayland-satellite): VLC 3 and other
     # X11-only apps need DISPLAY even when they run "natively".
     env = dict(SESSION_ENV, DISPLAY=arbor_display())
+    # Java's accessibility bridge, as arbor/config.kdl loads it into every
+    # JVM (from the hearth under test). Not for Flatpaks: the session blanks
+    # it there (they can't see the jar), and the survey's own Flatpak
+    # installation has no such override.
+    jaw = os.path.join(HEARTH_PKG or "/run/current-system/sw", "lib/java-atk-wrapper/java-atk-wrapper.jar")
+    if os.path.exists(jaw) and "flatpak" not in " ".join(argv[:4]):
+        env["JAVA_TOOL_OPTIONS"] = ("-Xbootclasspath/a:" + jaw
+                                    + " -Djavax.accessibility.assistive_technologies=org.GNOME.Accessibility.AtkWrapper")
     # Every attempt gets fresh home, runtime and temp dirs: a killed app's
     # single-instance lock or socket ("Strawberry is already running") must
     # not stop the next app, and no first-run state carries over.
