@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import "../../widgets"
+import "../../services"
 import "../.."
 
 // Print queue, like Plasma's printer tray icon: shown while jobs are queued
@@ -219,7 +220,7 @@ Indicator {
             Layout.fillWidth: true
             text: "Printer settings…"
             icon: "configure"
-            onTriggered: { Quickshell.execDetached(["xdg-open", "http://localhost:631/printers/"]); root.popup.close(); }
+            onTriggered: { Settings.openRequested("printers"); root.popup.close(); }
         }
     }
 }

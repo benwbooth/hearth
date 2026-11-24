@@ -24,7 +24,8 @@ Scope {
         users: "settings/UsersPane.qml", spotlight: "settings/SpotlightPane.qml",
         ai: "settings/AiPane.qml", voice: "settings/VoicePane.qml",
         bluetooth: "settings/BluetoothPane.qml", menubar: "settings/MenuBarPane.qml",
-        accounts: "settings/AccountsPane.qml", passwords: "settings/PasswordsPane.qml"
+        accounts: "settings/AccountsPane.qml", passwords: "settings/PasswordsPane.qml",
+        printers: "settings/PrintersPane.qml"
     })
     // What follows ":" in an opened pane name ("accounts:<id>").
     property string paneArg: ""
@@ -93,6 +94,7 @@ Scope {
                                 { id: "hotcorners", label: "Hot Corners", icon: "preferences-desktop-screensaver" },
                                 { id: "bluetooth", label: "Bluetooth", icon: "preferences-system-bluetooth" },
                                 { id: "displays", label: "Displays", icon: "preferences-desktop-display" },
+                                { id: "printers", label: "Printers", icon: "printer" },
                                 { id: "keyboard", label: "Keyboard", icon: "preferences-desktop-keyboard" },
                                 { id: "shortcuts", label: "Keyboard Shortcuts", icon: "preferences-desktop-keyboard-shortcut" },
                                 { id: "mouse", label: "Mouse & Touchpad", icon: "preferences-desktop-mouse" },
@@ -159,7 +161,7 @@ Scope {
                                      wallpaper: "Wallpaper", mouse: "Mouse & Touchpad", night: "Night Light", notifications: "Notifications",
                                      hotcorners: "Hot Corners", displays: "Displays", keyboard: "Keyboard", shortcuts: "Keyboard Shortcuts",
                                      windowrules: "Window Rules", power: "Sleep & Power", lockscreen: "Lock Screen", clipboard: "Clipboard", screenshots: "Screenshots",
-                                     users: "Users & Accounts", accounts: "Internet Accounts", passwords: "Passwords & Keys", spotlight: "Search", bluetooth: "Bluetooth", ai: "AI", voice: "Voice Assistant" })[root.pane] || ""
+                                     users: "Users & Accounts", accounts: "Internet Accounts", passwords: "Passwords & Keys", spotlight: "Search", bluetooth: "Bluetooth", printers: "Printers", ai: "AI", voice: "Voice Assistant" })[root.pane] || ""
                             font.pointSize: Theme.fontSize + 6
                             font.weight: Font.Bold
                         }

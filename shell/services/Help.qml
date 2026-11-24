@@ -172,6 +172,8 @@ Singleton {
         { title: "Clipboard: in the history, ↑ ↓ choose, Return copies, Delete removes, Ctrl+P pins, Ctrl+E edits, Ctrl+O opens a link", keys: "Super+V", run: () => Clipboard.toggleRequested() },
         { title: "Settings: clipboard history size, pictures, passwords, apps to ignore, clear on logout", pane: "clipboard" },
         { title: "Settings: Bluetooth: turn it on or off, connect, disconnect or forget your devices, pair new headphones, keyboards and mice", pane: "bluetooth" },
+        { title: "Settings: Printers: add a printer (found on the network, USB or by IP address; no driver needed for AirPrint / IPP Everywhere), make it the default, pause, remove, print queue, test page, paper size, two-sided, colour", pane: "printers" },
+        { title: "Settings: Printers: add a printer by its IP address or host name, or pick a driver for an old printer", pane: "printers:add" },
         { title: "Settings: displays: resolution, refresh rate, scale, arrangement, rotation, HDR, adaptive sync", pane: "displays" },
         { title: "Settings: keyboard layouts, key repeat, Num Lock", pane: "keyboard" },
         { title: "Settings: change keyboard shortcuts, add your own, app shortcuts", pane: "shortcuts" },

@@ -1,0 +1,400 @@
+#!/usr/bin/env python3
+"""hearth-printers: Settings > Printers (shell/popups/settings/PrintersPane.qml).
+
+Everything goes through the CUPS command line tools (lpstat, lpoptions,
+lpinfo, lpadmin, cupsenable/cupsdisable, cancel, lp, ipptool), so it talks
+to whichever cupsd CUPS_SERVER names (the system one by default; tests use
+a scratch one). Admin actions need CUPS rights: members of CUPS's
+SystemGroup (root, wheel, lpadmin on NixOS) get them over the local socket
+without a password.
+
+  hearth-printers list                 {"default", "printers": [...]}
+  hearth-printers discover [SECONDS]   one JSON line per printer found
+                                       (network: IPP Everywhere / AirPrint
+                                       through DNS-SD; USB), then {"done": true}
+  hearth-printers probe ADDRESS        {"uri", "make", "driverless"} for an IP
+                                       or host name, or {"error"}
+  hearth-printers drivers              [{"model", "name"}] (lpinfo -m)
+  hearth-printers options NAME         [{"key", "label", "choices", "default"}]
+  hearth-printers add URI [MODEL [INFO [LOCATION]]]
+                                       add a queue (MODEL defaults to
+                                       "everywhere": driverless); {"ok", "name"}
+  hearth-printers default|pause|resume|remove|testpage NAME
+  hearth-printers cancel JOB           JOB is printer-id, or "all:NAME"
+  hearth-printers setopt NAME KEY VALUE   a printer default (lpadmin -o)
+
+Actions print {"ok": true, ...} or {"ok": false, "error": "..."}.
+"""
+
+import json
+import os
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+
+
+def out(obj):
+    print(json.dumps(obj), flush=True)
+
+
+def run(cmd, timeout=20):
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return r.returncode, r.stdout, r.stderr
+    except FileNotFoundError:
+        return 127, "", cmd[0] + " is not installed"
+    except subprocess.TimeoutExpired:
+        return 124, "", cmd[0] + " took too long"
+
+
+def action(cmd, timeout=60, **extra):
+    code, so, se = run(cmd, timeout)
+    if code == 0:
+        out(dict(ok=True, **extra))
+        return 0
+    msg = (se.strip() or so.strip() or "failed (exit %d)" % code).splitlines()[-1]
+    # "lpadmin: Forbidden" and friends: say what to do about it.
+    if re.search(r"Forbidden|not authorized|Unauthorized", msg, re.I):
+        msg += " — your account needs printer admin rights (the wheel or lpadmin group)."
+    out(dict(ok=False, error=msg))
+    return 1
+
+
+# --- list ---
+
+def attrs(name):
+    """The queue's attributes as lpoptions -p shows them (shell-quoted)."""
+    code, so, _ = run(["lpoptions", "-p", name], 10)
+    res = {}
+    if code != 0:
+        return res
+    try:
+        words = shlex.split(so)
+    except ValueError:
+        words = so.split()
+    for w in words:
+        k, _, v = w.partition("=")
+        res[k] = v
+    return res
+
+
+def jobs(name):
+    """lpq has the file names lpstat leaves out."""
+    code, so, _ = run(["lpq", "-P", name], 10)
+    res = []
+    if code != 0:
+        return res
+    for line in so.splitlines()[2:]:
+        f = line.split()
+        if len(f) < 5 or not f[2].isdigit():
+            continue
+        res.append(dict(rank=f[0], active=f[0] == "active", owner=f[1], id=f[2],
+                        file=" ".join(f[3:-2]) or "(untitled)", size=" ".join(f[-2:])))
+    return res
+
+
+def state_of(a, message):
+    st = a.get("printer-state", "3")
+    reasons = [r for r in a.get("printer-state-reasons", "none").split(",") if r and r != "none"]
+    # Reasons that only mean "fine": ignore them.
+    reasons = [r for r in reasons if not r.startswith(("cups-ipp-", "cups-missing-filter-warning"))]
+    errors = [r for r in reasons if r.endswith("-error") or r in ("offline-report", "cups-insecure-filter")]
+    warnings = [r for r in reasons if r.endswith(("-warning", "-report")) and r not in errors]
+    if st == "5":
+        state = "error" if errors and "paused" not in reasons else "paused"
+    elif errors:
+        state = "error"
+    elif st == "4":
+        state = "printing"
+    else:
+        state = "idle"
+    return state, [re.sub(r"-(error|warning|report)$", "", r).replace("-", " ") for r in errors + warnings]
+
+
+def queues():
+    """{queue: status message}. Only real queues: lpstat -e also names
+    printers DNS-SD finds on the network that were never added."""
+    # "printer NAME is idle.  enabled since ..." then an indented message
+    # line (the printer's own words, e.g. "Out of paper").
+    code, ps, se = run(["lpstat", "-p"], 10)
+    if code != 0 and "No destinations" not in se:
+        return {}, (se.strip() or "CUPS isn't running").splitlines()[-1]
+    messages = {}
+    cur = None
+    for line in ps.splitlines():
+        m = re.match(r"printer (\S+) ", line)
+        if m:
+            cur = m.group(1)
+            messages[cur] = ""
+        elif cur and line.startswith(("\t", " ")) and not messages[cur]:
+            messages[cur] = line.strip()
+    return messages, ""
+
+
+def cmd_list():
+    _, so, _ = run(["lpstat", "-d"], 10)
+    m = re.search(r"system default destination: (\S+)", so)
+    default = m.group(1) if m else ""
+    messages, err = queues()
+    if err:
+        out(dict(default="", printers=[], error=err))
+        return 0
+    printers = []
+    # Each lpoptions / lpq run asks cupsd on its own: all at once.
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        got = {n: (pool.submit(attrs, n), pool.submit(jobs, n)) for n in messages}
+    for name in messages:
+        a = got[name][0].result()
+        state, reasons = state_of(a, messages.get(name, ""))
+        printers.append(dict(
+            name=name,
+            info=a.get("printer-info") or name.replace("_", " "),
+            location=a.get("printer-location", ""),
+            make=a.get("printer-make-and-model", ""),
+            uri=a.get("device-uri", ""),
+            state=state,
+            reasons=reasons,
+            message=messages.get(name, ""),
+            accepting=a.get("printer-is-accepting-jobs", "true") == "true",
+            shared=a.get("printer-is-shared", "false") == "true",
+            driverless=bool(re.search(r"IPP Everywhere|driverless", a.get("printer-make-and-model", ""), re.I)),
+            isDefault=name == default,
+            jobs=got[name][1].result(),
+        ))
+    out(dict(default=default, printers=printers))
+    return 0
+
+
+# --- discover ---
+
+def cmd_discover(seconds):
+    """lpinfo asks every backend: dnssd (IPP Everywhere / AirPrint through
+    Avahi), usb, snmp (older network printers on port 9100)."""
+    # First what libcups already sees through DNS-SD (lpstat -e lists
+    # network printers that aren't queues yet): instant.
+    mine, _ = queues()
+    _, so, _ = run(["lpstat", "-e"], 10)
+    for name in so.split():
+        if name in mine:
+            continue
+        a = attrs(name)
+        uri = a.get("device-uri", "")
+        if "://" in uri:
+            out(dict(uri=uri, kind="network", info=a.get("printer-info") or name.replace("_", " "),
+                     make=a.get("printer-make-and-model", ""), location=a.get("printer-location", ""),
+                     deviceId="", driverless=True))
+    try:
+        p = subprocess.Popen(["lpinfo", "--timeout", str(seconds), "-l",
+                              "--include-schemes", "dnssd,usb,snmp,ipp,ipps,socket,lpd", "-v"],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    except FileNotFoundError:
+        out(dict(done=True, error="lpinfo is not installed"))
+        return 1
+    dev = {}
+
+    def flush():
+        uri = dev.get("uri", "")
+        # Bare scheme names ("ipp", "socket") are just "this backend exists".
+        if "://" in uri:
+            out(dict(uri=uri, kind=dev.get("class", ""),
+                     info=dev.get("info", ""), make=dev.get("make-and-model", ""),
+                     location=dev.get("location", ""), deviceId=dev.get("device-id", ""),
+                     driverless=uri.startswith(("dnssd://", "ipp://", "ipps://")) or "IPP Everywhere" in dev.get("make-and-model", "")))
+        dev.clear()
+
+    for line in p.stdout:
+        m = re.match(r"Device: uri = (.*)", line.strip())
+        if m:
+            flush()
+            dev["uri"] = m.group(1).strip()
+            continue
+        k, sep, v = line.strip().partition(" = ")
+        if sep:
+            dev[k] = v.strip()
+    flush()
+    err = p.stderr.read().strip()
+    p.wait()
+    out(dict(done=True, error=err.splitlines()[-1] if p.returncode not in (0, None) and err else ""))
+    return 0
+
+
+# --- probe (add by address) ---
+
+def ipp_attrs(uri):
+    test = None
+    for d in filter(None, [os.environ.get("CUPS_DATADIR"), datadir()]):
+        t = os.path.join(d, "ipptool", "get-printer-attributes.test")
+        if os.path.exists(t):
+            test = t
+            break
+    if not test:
+        return None
+    code, so, _ = run(["ipptool", "-T", "5", "-tv", uri, test], 12)
+    if code != 0:
+        return None
+    res = {}
+    for line in so.splitlines():
+        m = re.match(r"\s*([\w-]+) \([^)]*\) = (.*)", line)
+        if m:
+            res[m.group(1)] = m.group(2)
+    return res if res else None
+
+
+def port_open(host, port):
+    import socket
+    try:
+        with socket.create_connection((host, port), timeout=3):
+            return True
+    except OSError:
+        return False
+
+
+def cmd_probe(addr):
+    addr = addr.strip()
+    addr = re.sub(r"^[a-z]+://", "", addr).split("/")[0]
+    if not addr or not re.match(r"^[\w.:\[\]-]+$", addr):
+        out(dict(error="That doesn't look like an IP address or host name."))
+        return 1
+    host = addr.rsplit(":", 1)[0] if addr.count(":") == 1 else addr
+    for scheme in ("ipp", "ipps"):
+        for path in ("ipp/print", "ipp", ""):
+            uri = "%s://%s/%s" % (scheme, addr, path)
+            a = ipp_attrs(uri)
+            if a:
+                fmts = a.get("document-format-supported", "")
+                driverless = any(f in fmts for f in ("image/pwg-raster", "image/urf", "application/pdf"))
+                out(dict(uri=uri, make=a.get("printer-make-and-model", ""),
+                         info=a.get("printer-info", "") or a.get("printer-name", ""),
+                         location=a.get("printer-location", ""), driverless=driverless))
+                return 0
+    # No IPP: an older printer. Raw port 9100 or LPD need a driver.
+    if port_open(host, 9100):
+        out(dict(uri="socket://%s:9100" % host, make="", info="", location="", driverless=False))
+        return 0
+    if port_open(host, 515):
+        out(dict(uri="lpd://%s/queue" % host, make="", info="", location="", driverless=False))
+        return 0
+    out(dict(error="No printer answered at %s. Check the address, and that the printer is on and on this network." % addr))
+    return 1
+
+
+# --- drivers / options ---
+
+def cmd_drivers():
+    code, so, se = run(["lpinfo", "-m"], 60)
+    res = []
+    for line in so.splitlines():
+        model, _, name = line.partition(" ")
+        if model in ("raw", "everywhere") or not name:
+            continue
+        res.append(dict(model=model, name=name.strip()))
+    res.sort(key=lambda d: d["name"].lower())
+    out(res)
+    return 0
+
+
+def cmd_options(name):
+    code, so, se = run(["lpoptions", "-p", name, "-l"], 15)
+    res = []
+    for line in so.splitlines():
+        m = re.match(r"([^/:]+)/([^:]*):\s*(.*)", line)
+        if not m:
+            continue
+        choices, default = [], ""
+        for c in m.group(3).split():
+            if c.startswith("*"):
+                c = c[1:]
+                default = c
+            choices.append(c)
+        res.append(dict(key=m.group(1), label=m.group(2), choices=choices, default=default))
+    out(res)
+    return 0
+
+
+# --- actions ---
+
+def datadir():
+    """CUPS's DataDir (the test page lives there)."""
+    try:
+        with open("/etc/cups/cups-files.conf") as f:
+            for line in f:
+                if line.startswith("DataDir "):
+                    return line.split(None, 1)[1].strip()
+    except OSError:
+        pass
+    lp = shutil.which("lp")
+    if lp:
+        return os.path.join(os.path.dirname(os.path.realpath(lp)), "..", "share", "cups")
+    return ""
+
+
+def queue_name(text, taken):
+    base = re.sub(r"[^A-Za-z0-9_-]+", "_", text).strip("_")[:100] or "Printer"
+    name, i = base, 2
+    while name.lower() in taken:
+        name = "%s_%d" % (base, i)
+        i += 1
+    return name
+
+
+def cmd_add(uri, model, info, location):
+    taken = {n.lower() for n in queues()[0]}
+    # Named after the printer, else its address ("192_168_1_50").
+    label = info or re.sub(r"^\w+://", "", uri).split("/")[0].split(":")[0]
+    name = queue_name(label, taken)
+    cmd = ["lpadmin", "-p", name, "-E", "-v", uri, "-m", model or "everywhere"]
+    if info:
+        cmd += ["-D", info]
+    if location:
+        cmd += ["-L", location]
+    # IPP Everywhere asks the printer for its capabilities: allow it time.
+    return action(cmd, timeout=90, name=name)
+
+
+def main(argv):
+    if not argv:
+        print(__doc__)
+        return 2
+    c, a = argv[0], argv[1:]
+    if c == "list":
+        return cmd_list()
+    if c == "discover":
+        return cmd_discover(int(a[0]) if a else 8)
+    if c == "probe" and a:
+        return cmd_probe(a[0])
+    if c == "drivers":
+        return cmd_drivers()
+    if c == "options" and a:
+        return cmd_options(a[0])
+    if c == "add" and a:
+        return cmd_add(a[0], a[1] if len(a) > 1 else "everywhere",
+                       a[2] if len(a) > 2 else "", a[3] if len(a) > 3 else "")
+    if c == "default" and a:
+        return action(["lpadmin", "-d", a[0]])
+    if c == "pause" and a:
+        return action(["cupsdisable", a[0]])
+    if c == "resume" and a:
+        return action(["cupsenable", a[0]]) or action(["cupsaccept", a[0]])
+    if c == "remove" and a:
+        return action(["lpadmin", "-x", a[0]])
+    if c == "cancel" and a:
+        if a[0].startswith("all:"):
+            return action(["cancel", "-a", a[0][4:]])
+        return action(["cancel", a[0]])
+    if c == "testpage" and a:
+        page = os.path.join(datadir(), "data", "testprint")
+        if not os.path.exists(page):
+            out(dict(ok=False, error="CUPS's test page isn't installed."))
+            return 1
+        return action(["lp", "-d", a[0], "-t", "Test Page", page])
+    if c == "setopt" and len(a) == 3:
+        return action(["lpadmin", "-p", a[0], "-o", "%s=%s" % (a[1], a[2])])
+    print(__doc__)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
