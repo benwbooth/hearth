@@ -56,7 +56,8 @@ Scope {
 
     PanelWindow {
         id: win
-        visible: root.req !== null
+        // Made again if a monitor dropout takes its surface (widgets/KeepShown).
+        KeepShown { window: win; want: root.req !== null }
         screen: Compositor.focusedScreen
         anchors { top: true; bottom: true; left: true; right: true }
         exclusionMode: ExclusionMode.Ignore

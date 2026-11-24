@@ -58,7 +58,8 @@ Scope {
 
     PanelWindow {
         id: win
-        visible: root.req !== null
+        // Made again if a monitor dropout takes its surface (widgets/KeepShown).
+        KeepShown { window: win; want: root.req !== null }
         screen: Compositor.focusedScreen
         // No anchors: the layer surface is centred on the screen.
         implicitWidth: dialog.width
