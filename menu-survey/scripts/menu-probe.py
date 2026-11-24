@@ -257,6 +257,17 @@ def rig_up():
         f.write(" ".join(core_pids()))
 
 
+def sync_modules():
+    """The menu modules in the hearth checkout (menus/*.yaml), into the rig's
+    ~/.config/hearth/menus, which hearth reads besides its own: modules
+    written since devloop's last build are measured too (no build)."""
+    src = os.path.join(ROOT, "..", "menus")
+    dst = os.path.join(DISKDIR, "home", ".config", "hearth", "menus")
+    os.makedirs(dst, exist_ok=True)
+    for fn in glob.glob(os.path.join(src, "*.yaml")) + glob.glob(os.path.join(src, "*.json")):
+        shutil.copy(fn, dst)
+
+
 def arbor_display():
     try:
         for l in open(os.path.join(RIGDIR, "arbor.env")):
@@ -531,6 +542,7 @@ def app_services(argv):
 
 def attempt(attr, argv, variant, extra_env, extra_args, wait_win=50, wait_menu=16):
     cleanup()
+    sync_modules()
     app_services(argv)
     before = {w["id"] for w in windows()}
     # The arbor session has X11 too (xwayland-satellite): VLC 3 and other
