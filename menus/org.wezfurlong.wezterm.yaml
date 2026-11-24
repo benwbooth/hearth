@@ -1,0 +1,61 @@
+# WezTerm draws its own window and exports no menus; these are its
+# documented default key assignments (wezterm.org "Default Key
+# Assignments"), as macOS-style menus. Remapped keys in your wezterm.lua
+# won't match.
+schema: hearth-menu-module/1
+id: wezterm
+version: 1
+app:
+  match:
+    app_id: [org.wezfurlong.wezterm]
+    desktop: [org.wezfurlong.wezterm.desktop]
+    flatpak: [org.wezfurlong.wezterm]
+    nixpkgs: [wezterm]
+  versions: ">=20240203"
+  locales: [en]
+provenance:
+  generator: hand-written from wezterm's default key assignments
+  inputs: [docs:default-keys]
+menus:
+  - title: Shell
+    items:
+      - { label: New Window, shortcut: Ctrl+Shift+N, do: { keys: Ctrl+Shift+N } }
+      - { label: New Tab, shortcut: Ctrl+Shift+T, do: { keys: Ctrl+Shift+T } }
+      - separator
+      - { label: Split Left and Right, shortcut: Ctrl+Shift+Alt+%, do: { keys: Ctrl+Shift+Alt+5 } }
+      - { label: Split Top and Bottom, shortcut: "Ctrl+Shift+Alt+\"", do: { keys: "Ctrl+Shift+Alt+'" } }
+      - separator
+      - { label: Close Tab, shortcut: Ctrl+Shift+W, do: { keys: Ctrl+Shift+W } }
+  - title: Edit
+    items:
+      - { label: Copy, shortcut: Ctrl+Shift+C, do: { keys: Ctrl+Shift+C } }
+      - { label: Paste, shortcut: Ctrl+Shift+V, do: { keys: Ctrl+Shift+V } }
+      - separator
+      - { label: Find…, shortcut: Ctrl+Shift+F, do: { keys: Ctrl+Shift+F } }
+      - { label: Copy Mode, shortcut: Ctrl+Shift+X, do: { keys: Ctrl+Shift+X } }
+      - { label: Quick Select, shortcut: Ctrl+Shift+Space, do: { keys: Ctrl+Shift+Space } }
+      - { label: Characters…, shortcut: Ctrl+Shift+U, do: { keys: Ctrl+Shift+U } }
+      - separator
+      - { label: Clear Scrollback, shortcut: Ctrl+Shift+K, do: { keys: Ctrl+Shift+K } }
+  - title: View
+    items:
+      - { label: Bigger, shortcut: Ctrl+=, do: { keys: Ctrl+= } }
+      - { label: Smaller, shortcut: Ctrl+-, do: { keys: Ctrl+- } }
+      - { label: Actual Size, shortcut: Ctrl+0, do: { keys: Ctrl+0 } }
+      - separator
+      - { label: Scroll Page Up, shortcut: Shift+Page Up, do: { keys: Shift+PageUp } }
+      - { label: Scroll Page Down, shortcut: Shift+Page Down, do: { keys: Shift+PageDown } }
+      - separator
+      - { label: Command Palette…, shortcut: Ctrl+Shift+P, do: { keys: Ctrl+Shift+P } }
+      - { label: Debug Overlay, shortcut: Ctrl+Shift+L, do: { keys: Ctrl+Shift+L } }
+      - { label: Toggle Full Screen, shortcut: Alt+Enter, do: { keys: Alt+Enter } }
+  - title: Window
+    items:
+      - { label: Next Tab, shortcut: Ctrl+Tab, do: { keys: Ctrl+Tab } }
+      - { label: Previous Tab, shortcut: Ctrl+Shift+Tab, do: { keys: Ctrl+Shift+Tab } }
+  - title: Settings
+    items:
+      - { label: Reload Configuration, shortcut: Ctrl+Shift+R, do: { keys: Ctrl+Shift+R } }
+  - title: Help
+    items:
+      - { label: WezTerm Documentation, do: { open_help: "https://wezterm.org/" } }

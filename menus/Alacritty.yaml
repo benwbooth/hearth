@@ -1,0 +1,40 @@
+# Alacritty draws its own window and exports no menus; these are its
+# documented default key bindings on Linux (alacritty-bindings(5)), as
+# macOS-style menus. Remapped bindings in your alacritty.toml won't match.
+schema: hearth-menu-module/1
+id: alacritty
+version: 1
+app:
+  match:
+    app_id: [Alacritty, alacritty]
+    desktop: [Alacritty.desktop, alacritty.desktop]
+    nixpkgs: [alacritty]
+  versions: ">=0.13"
+  locales: [en]
+provenance:
+  generator: hand-written from alacritty-bindings(5) defaults (0.13+)
+  inputs: [docs:alacritty-bindings]
+menus:
+  - title: Edit
+    items:
+      - { label: Copy, shortcut: Ctrl+Shift+C, do: { keys: Ctrl+Shift+C } }
+      - { label: Paste, shortcut: Ctrl+Shift+V, do: { keys: Ctrl+Shift+V } }
+      - { label: Paste Selection, shortcut: Shift+Insert, do: { keys: Shift+Insert } }
+      - separator
+      - { label: Find…, shortcut: Ctrl+Shift+F, do: { keys: Ctrl+Shift+F } }
+      - { label: Find Backward…, shortcut: Ctrl+Shift+B, do: { keys: Ctrl+Shift+B } }
+      - separator
+      - { label: Vi Mode, shortcut: Ctrl+Shift+Space, do: { keys: Ctrl+Shift+Space } }
+  - title: View
+    items:
+      - { label: Bigger, shortcut: Ctrl+=, do: { keys: Ctrl+= } }
+      - { label: Smaller, shortcut: Ctrl+-, do: { keys: Ctrl+- } }
+      - { label: Actual Size, shortcut: Ctrl+0, do: { keys: Ctrl+0 } }
+      - separator
+      - { label: Scroll Page Up, shortcut: Shift+Page Up, do: { keys: Shift+PageUp } }
+      - { label: Scroll Page Down, shortcut: Shift+Page Down, do: { keys: Shift+PageDown } }
+      - { label: Scroll to Top, shortcut: Shift+Home, do: { keys: Shift+Home } }
+      - { label: Scroll to Bottom, shortcut: Shift+End, do: { keys: Shift+End } }
+  - title: Help
+    items:
+      - { label: Alacritty Documentation, do: { open_help: "https://alacritty.org/config-alacritty.html" } }

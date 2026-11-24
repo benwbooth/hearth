@@ -1,0 +1,43 @@
+# foot draws its own window and exports no menus; these are its documented
+# default key bindings (foot.ini(5), [key-bindings]), as macOS-style menus.
+# Remapped bindings in your foot.ini won't match.
+schema: hearth-menu-module/1
+id: foot
+version: 1
+app:
+  match:
+    app_id: [foot, footclient]
+    desktop: [foot.desktop, footclient.desktop, foot-server.desktop]
+    nixpkgs: [foot]
+  versions: ">=1.16"
+  locales: [en]
+provenance:
+  generator: hand-written from foot.ini(5) default key bindings (1.2x)
+  inputs: [docs:foot.ini]
+menus:
+  - title: Shell
+    items:
+      - { label: New Window, shortcut: Ctrl+Shift+N, do: { keys: Ctrl+Shift+N } }
+  - title: Edit
+    items:
+      - { label: Copy, shortcut: Ctrl+Shift+C, do: { keys: Ctrl+Shift+C } }
+      - { label: Paste, shortcut: Ctrl+Shift+V, do: { keys: Ctrl+Shift+V } }
+      - { label: Paste Selection, shortcut: Shift+Insert, do: { keys: Shift+Insert } }
+      - separator
+      - { label: Find…, shortcut: Ctrl+Shift+R, do: { keys: Ctrl+Shift+R } }
+      - { label: Open URL…, shortcut: Ctrl+Shift+O, do: { keys: Ctrl+Shift+O } }
+      - { label: Unicode Input…, shortcut: Ctrl+Shift+U, do: { keys: Ctrl+Shift+U } }
+  - title: View
+    items:
+      - { label: Bigger, shortcut: Ctrl+=, do: { keys: Ctrl+= } }
+      - { label: Smaller, shortcut: Ctrl+-, do: { keys: Ctrl+- } }
+      - { label: Actual Size, shortcut: Ctrl+0, do: { keys: Ctrl+0 } }
+      - separator
+      - { label: Scroll Page Up, shortcut: Shift+Page Up, do: { keys: Shift+PageUp } }
+      - { label: Scroll Page Down, shortcut: Shift+Page Down, do: { keys: Shift+PageDown } }
+      - separator
+      - { label: Previous Prompt, shortcut: Ctrl+Shift+Z, do: { keys: Ctrl+Shift+Z } }
+      - { label: Next Prompt, shortcut: Ctrl+Shift+X, do: { keys: Ctrl+Shift+X } }
+  - title: Help
+    items:
+      - { label: foot Documentation, do: { open_help: "https://codeberg.org/dnkl/foot" } }

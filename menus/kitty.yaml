@@ -1,0 +1,65 @@
+# kitty draws its own window and exports no menus; these are its documented
+# default shortcuts (kitty.conf "Keyboard shortcuts", kitty_mod = ctrl+shift),
+# as macOS-style menus. Remapped shortcuts in your kitty.conf won't match.
+schema: hearth-menu-module/1
+id: kitty
+version: 1
+app:
+  match:
+    app_id: [kitty]
+    desktop: [kitty.desktop]
+    nixpkgs: [kitty]
+  versions: ">=0.30"
+  locales: [en]
+provenance:
+  generator: hand-written from kitty's default shortcuts (sw.kovidgoyal.net/kitty/conf, 0.4x)
+  inputs: [docs:kitty.conf]
+menus:
+  - title: Shell
+    items:
+      - { label: New OS Window, shortcut: Ctrl+Shift+N, do: { keys: Ctrl+Shift+N } }
+      - { label: New Tab, shortcut: Ctrl+Shift+T, do: { keys: Ctrl+Shift+T } }
+      - { label: New Split Window, shortcut: Ctrl+Shift+Enter, do: { keys: Ctrl+Shift+Enter } }
+      - separator
+      - { label: Close Split Window, shortcut: Ctrl+Shift+W, do: { keys: Ctrl+Shift+W } }
+      - { label: Close Tab, shortcut: Ctrl+Shift+Q, do: { keys: Ctrl+Shift+Q } }
+      - separator
+      - { label: Rename Tab…, shortcut: Ctrl+Shift+Alt+T, do: { keys: Ctrl+Shift+Alt+T } }
+      - { label: kitty Shell, shortcut: Ctrl+Shift+Escape, do: { keys: Ctrl+Shift+Escape } }
+  - title: Edit
+    items:
+      - { label: Copy, shortcut: Ctrl+Shift+C, do: { keys: Ctrl+Shift+C } }
+      - { label: Paste, shortcut: Ctrl+Shift+V, do: { keys: Ctrl+Shift+V } }
+      - { label: Paste Selection, shortcut: Ctrl+Shift+S, do: { keys: Ctrl+Shift+S } }
+      - separator
+      - { label: Open URL…, shortcut: Ctrl+Shift+E, do: { keys: Ctrl+Shift+E } }
+      - { label: Unicode Input…, shortcut: Ctrl+Shift+U, do: { keys: Ctrl+Shift+U } }
+      - separator
+      - { label: Reset Terminal, shortcut: Ctrl+Shift+Delete, do: { keys: Ctrl+Shift+Delete } }
+  - title: View
+    items:
+      - { label: Bigger, shortcut: Ctrl+Shift+=, do: { keys: Ctrl+Shift+= } }
+      - { label: Smaller, shortcut: Ctrl+Shift+-, do: { keys: Ctrl+Shift+- } }
+      - { label: Actual Size, shortcut: Ctrl+Shift+Backspace, do: { keys: Ctrl+Shift+Backspace } }
+      - separator
+      - { label: Show Scrollback, shortcut: Ctrl+Shift+H, do: { keys: Ctrl+Shift+H } }
+      - { label: Scroll Page Up, shortcut: Ctrl+Shift+Page Up, do: { keys: Ctrl+Shift+PageUp } }
+      - { label: Scroll Page Down, shortcut: Ctrl+Shift+Page Down, do: { keys: Ctrl+Shift+PageDown } }
+      - { label: Scroll to Top, shortcut: Ctrl+Shift+Home, do: { keys: Ctrl+Shift+Home } }
+      - { label: Scroll to Bottom, shortcut: Ctrl+Shift+End, do: { keys: Ctrl+Shift+End } }
+      - separator
+      - { label: Next Layout, shortcut: Ctrl+Shift+L, do: { keys: Ctrl+Shift+L } }
+      - { label: Toggle Full Screen, shortcut: Ctrl+Shift+F11, do: { keys: Ctrl+Shift+F11 } }
+  - title: Window
+    items:
+      - { label: Next Tab, shortcut: Ctrl+Shift+Right, do: { keys: Ctrl+Shift+Right } }
+      - { label: Previous Tab, shortcut: Ctrl+Shift+Left, do: { keys: Ctrl+Shift+Left } }
+      - { label: Next Split Window, shortcut: "Ctrl+Shift+]", do: { keys: "Ctrl+Shift+]" } }
+      - { label: Previous Split Window, shortcut: "Ctrl+Shift+[", do: { keys: "Ctrl+Shift+[" } }
+  - title: Settings
+    items:
+      - { label: Edit kitty.conf, shortcut: Ctrl+Shift+F2, do: { keys: Ctrl+Shift+F2 } }
+      - { label: Reload kitty.conf, shortcut: Ctrl+Shift+F5, do: { keys: Ctrl+Shift+F5 } }
+  - title: Help
+    items:
+      - { label: kitty Documentation, do: { open_help: "https://sw.kovidgoyal.net/kitty/" } }
