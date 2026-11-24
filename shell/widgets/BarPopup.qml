@@ -139,7 +139,12 @@ PanelWindow {
     implicitHeight: Math.max(8, Math.ceil(frame.implicitHeight + padT + padB))
     // Only the pane takes the pointer; clicks on its shadow fall through
     // (and close it, like any click outside).
-    mask: Region { item: frame }
+    // The pane's full-size rectangle, not `item: frame`: Quickshell maps an
+    // item region through its transform but only rebuilds it when the item's
+    // geometry changes, so it froze partway through the grow-in (scale 0.94→1)
+    // and the bottom rows of a tall popup (Dev apps' last row) let clicks
+    // through to the outside-click catcher, closing the popup.
+    mask: Region { x: frame.x; y: frame.y; width: frame.width; height: frame.height }
 
     // Switched to from another open menu bar menu (dragging along the menu
     // bar): the old one fades out quickly, then this one fades in quickly,
