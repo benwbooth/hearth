@@ -105,7 +105,7 @@ stop)
   done
   sleep 0.5
   # Apps leave read-only folders (Flatpak payloads): writable first.
-  chmod -R u+rwX "${R:?}" "${D:?}" 2>/dev/null
+  chmod -R u+rwX "${R:?}" "${D:?}" 2>/dev/null || true
   rm -rf "${R:?}" "${D:?}" ;;
 *) echo "unknown command $cmd" >&2; exit 2 ;;
 esac
