@@ -51,7 +51,6 @@ environment {
     // Fusion style. Replaced Plasma's "kde" theme (2026-11-23).
     QT_QPA_PLATFORMTHEME "xdgdesktopportal"
     QT_QPA_PLATFORM "wayland;xcb"
-    XDG_MENU_PREFIX "plasma-"
     ELECTRON_OZONE_PLATFORM_HINT "auto"
     // Global menu for GTK 3 apps with plain GtkMenuBars (README "Global
     // menu"): hearth ships the module in lib/gtk-3.0/modules, found through
