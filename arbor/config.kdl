@@ -108,6 +108,11 @@ window-rule {
     match app-id=r#"^gamescope$"#
     variable-refresh-rate true
 }
+// Grove Player keeps the movie's shape while resized (no black bars).
+window-rule {
+    match app-id=r#"^grove-player$"#
+    keep-aspect-ratio true
+}
 window-rule {
     match app-id=r#"^org\.kde\.polkit-kde-authentication-agent-1$"#
     match app-id=r#"^org\.kde\.kdialog$"#
