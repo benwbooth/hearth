@@ -532,6 +532,11 @@ def attempt(attr, argv, variant, extra_env, extra_args, wait_win=50, wait_menu=1
     res = dict(attr=attr, variant=variant, argv=argv[:1] + extra_args, t_window=round(time.time() - t0, 1))
     if not win:
         res.update(result="no-window", log_tail=tail(os.path.join(RIGDIR, "app.log")))
+        # A tray-only app (Flameshot, EasyEffects, KTeaTime): no window, its
+        # menu is its tray icon's. Nothing for the menu bar to show.
+        tray = tray_items(proc.pid)
+        if tray:
+            res.update(result="tray-only", tray=tray)
         return res
     res.update(attempt_windows(attr, before, win, wait_menu))
     return res
@@ -648,6 +653,32 @@ def attempt_windows(attr, before, win, wait_menu, escaped=False):
                     again["after_escape"] = True
                     best = again
     return best
+
+
+def tray_items(root_pid):
+    """StatusNotifierItem names on the rig's bus owned by the app's processes
+    (Flatpaks: their D-Bus proxy)."""
+    b = rig("busctl", "--json=short", "list")
+    try:
+        names = json.loads(b.stdout)
+    except Exception:
+        return []
+    tree = tree_pids(root_pid)
+    pid_of_name = {n.get("name", ""): str(n.get("pid") or "") for n in names}
+    # Items register with the watcher by service name, often their unique
+    # one (Qt: ":1.32/StatusNotifierItem").
+    r = rig("busctl", "--json=short", "get-property", "org.kde.StatusNotifierWatcher", "/StatusNotifierWatcher",
+            "org.kde.StatusNotifierWatcher", "RegisteredStatusNotifierItems")
+    try:
+        items = json.loads(r.stdout).get("data") or []
+    except Exception:
+        items = []
+    found = []
+    for it in items:
+        svc = it.split("/", 1)[0]
+        if pid_of_name.get(svc, "") in tree:
+            found.append(it)
+    return found
 
 
 def full_menus(r):

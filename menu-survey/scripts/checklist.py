@@ -140,6 +140,9 @@ def machine_row(r):
         status, solution = "partial", f"general:{r['route_today']}-burger"
     elif today == "none":
         status, solution = "todo", "todo"
+    elif today == "tray-only":
+        # No window, a tray icon: its menu is the tray icon's.
+        status, solution = "none-needed", "none-needed:tray"
     else:
         status, solution = "retest", "todo"
     return {"rank": r["rank"], "attr": r["attr"], "source": r["source"], "toolkit": r["toolkit"] or "",
