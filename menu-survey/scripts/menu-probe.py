@@ -400,6 +400,37 @@ def cleanup():
     except OSError:
         return
     victims = [p for p in bus_pids() if p not in core]
+    # What the rig's bus started for this app (Akonadi and its MariaDB,
+    # Evolution's data server, portals): not always on the bus, never in a
+    # scope of ours. Everything with this rig's bus in its environment.
+    want = f"DBUS_SESSION_BUS_ADDRESS=unix:path={RIGDIR}/bus.sock".encode()
+    me = os.getuid()
+    # The rig itself stays: its core processes and all they started (arbor's
+    # xwayland-satellite, the a11y bus), except what the session bus started.
+    try:
+        dbus_pid = open(os.path.join(RIGDIR, "dbus.pid")).read().strip()
+    except OSError:
+        dbus_pid = ""
+    protected = set(core)
+    for c in core:
+        if c != dbus_pid:
+            protected |= tree_pids(c)
+    for name in ("arbor.pid", "hearth.pid"):
+        try:
+            protected |= tree_pids(open(os.path.join(RIGDIR, name)).read().strip())
+        except OSError:
+            pass
+    for p in os.listdir("/proc"):
+        if not p.isdigit() or p in protected or int(p) == os.getpid():
+            continue
+        try:
+            if os.stat(f"/proc/{p}").st_uid != me:
+                continue
+            env = open(f"/proc/{p}/environ", "rb").read().split(b"\0")
+        except OSError:
+            continue
+        if any(e == want or e.startswith(want + b",") for e in env):
+            victims.append(p)
     # Clients of the nested arbor are ours (its own windows aside).
     victims += [str(w["pid"]) for w in windows() if w.get("app_id") != "org.quickshell" and w.get("pid")]
     for p in set(victims):

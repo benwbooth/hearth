@@ -38,6 +38,9 @@ priv_env() {
   # hearth no longer has: hearth failed to load, every app looked menu-less.
   export QT_QPA_PLATFORM=wayland QT_QPA_PLATFORMTHEME=xdgdesktopportal
   unset DISPLAY
+  # Never the real session's arbor: a rig process that inherited its socket
+  # once powered off the real monitors (2026-11-24).
+  unset ARBOR_SOCKET NIRI_SOCKET
   [[ -s $R/arbor.env ]] && { export WAYLAND_DISPLAY=$(grep ^WAYLAND_DISPLAY= "$R/arbor.env" | cut -d= -f2-)
     export ARBOR_SOCKET=$(grep -E '^(ARBOR|NIRI)_SOCKET=' "$R/arbor.env" | head -1 | cut -d= -f2-)
     export NIRI_SOCKET=$ARBOR_SOCKET; }
@@ -75,6 +78,7 @@ EOF
   # dir. (A service started with the real ones once rewrote the real dconf
   # and the live a11y bus socket.)
   daemon "$R/dbus.pid" "$R/dbus.log" env -u DISPLAY -u WAYLAND_DISPLAY -u DBUS_SESSION_BUS_ADDRESS \
+    -u ARBOR_SOCKET -u NIRI_SOCKET \
     HOME="$D/home" XDG_CONFIG_HOME="$D/home/.config" \
     XDG_CACHE_HOME="$D/home/.cache" XDG_DATA_HOME="$D/home/.local/share" XDG_STATE_HOME="$D/home/.local/state" \
     XDG_RUNTIME_DIR="$R/run" TMPDIR="$D/tmp" \
@@ -127,6 +131,12 @@ kill) # kill NAME: only processes on this rig's private bus
     { tr '\0' '\n' < /proc/$pid/environ; } 2>/dev/null | grep -qx "DBUS_SESSION_BUS_ADDRESS=unix:path=$R/bus.sock" && kill "$pid" && echo "killed $pid"
   done; true ;;
 stop)
+  # Everything on this rig's bus, the services it started too (Akonadi,
+  # Evolution's data server, portals detach from the bus's process group).
+  for pid in $(pgrep -u "$(id -u)"); do
+    { tr '\0' '\n' < /proc/$pid/environ; } 2>/dev/null | grep -q "^DBUS_SESSION_BUS_ADDRESS=unix:path=$R/bus.sock\(,\|$\)" \
+      && kill "$pid" 2>/dev/null
+  done
   for p in hearth arbor dbus; do
     [[ -f $R/$p.pid ]] && kill -- -"$(cat "$R/$p.pid")" 2>/dev/null || true
   done
