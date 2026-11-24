@@ -29,7 +29,7 @@ function steps(provider, project) {
         api("gmail.googleapis.com", "Gmail API", "View and manage Gmail mailbox data.", "Turn on Gmail, so your mail app can read and send your mail.", project),
         api("calendar-json.googleapis.com", "Google Calendar API", "Integrate with Google Calendar.", "Turn on Google Calendar, so your calendars show up.", project),
         api("people.googleapis.com", "People API", "Read and manage the user's contacts.", "Turn on Contacts (Google calls it the People API).", project),
-        api("drive.googleapis.com", "Google Drive API", "Create and manage resources in Google Drive.", "Turn on Google Drive: the file manager shows what's in your Google Docs, Sheets and Slides, and mail can send big attachments as links.", project),
+        api("drive.googleapis.com", "Google Drive API", "Create and manage resources in Google Drive.", "Turn on Google Drive: canopy keeps your Drive in sync with a folder, the file manager shows what's in your Google Docs, Sheets and Slides, and mail can send big attachments as links.", project),
         { url: u("auth/overview/create", project),
           say: "Set up the sign-in screen. It has four parts, each ending with Next: fill in what's ringed. Your email comes twice (support email, then contact email). At the end tick the agreement, then Continue and Create. (Shows an Overview instead? It's done already: press Next.)",
           address: "console.cloud.google.com/auth/overview/create", heading: "Project configuration",

@@ -28,7 +28,8 @@ interface io.github.benwbooth.Accounts1 (JSON strings in and out):
   Password(s id) -> s
   AccessToken(s id, s purpose) -> s   {"token", "expires_in", "email"}; purpose is
                                  mail | calendar | contacts | drive (files the app
-                                 made) | files (read all files)
+                                 made) | files (read all files) | sync (read and
+                                 change every file: canopy's Google Drive sync)
       errors io.github.benwbooth.Accounts1.SignedOut (the provider ended the
       sign-in, e.g. Google's 7 days in Testing: sign in again), .NotAllowed (the
       account wasn't allowed that: sign in again and tick it), .Failed
@@ -88,10 +89,13 @@ PROVIDERS = {
         "auth": "https://accounts.google.com/o/oauth2/v2/auth",
         "token": "https://oauth2.googleapis.com/token",
         "userinfo": "https://openidconnect.googleapis.com/v1/userinfo",
-        "scope": "openid email https://mail.google.com/ " + G + "calendar " + G + "contacts " + G + "drive.file " + G + "drive.readonly",
+        # drive: every file, read and write (canopy syncs the whole Drive);
+        # drive.file / drive.readonly stay so older grants keep their meaning.
+        "scope": "openid email https://mail.google.com/ " + G + "calendar " + G + "contacts " + G + "drive " + G + "drive.file " + G + "drive.readonly",
         "mail": ["imap.gmail.com", 993, "smtp.gmail.com", 465],
         "purposes": {"mail": ["https://mail.google.com/"], "calendar": [G + "calendar"], "contacts": [G + "contacts"],
-                     "drive": [G + "drive.file", G + "drive"], "files": [G + "drive.readonly", G + "drive"]},
+                     "drive": [G + "drive.file", G + "drive"], "files": [G + "drive.readonly", G + "drive"],
+                     "sync": [G + "drive"]},
         "secret": True,
     },
     "microsoft": {
