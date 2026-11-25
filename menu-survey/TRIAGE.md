@@ -85,6 +85,19 @@ keyboard menu commands); the module covers the FLTK/NTK builds
 Still impossible: GNOME Settings (refuses to start outside GNOME), KDE System Settings and Info Center (Qt Quick in a
 QQuickWidget: wrong positions, no press action; both removed).
 
+## Proposed impossible (for Ben's triage, 2026-11-25)
+
+Groups no general fix reaches, with why. Not decided: each needs your call.
+
+| Group | Apps | Why |
+|---|---|---|
+| Other desktops' own parts | Spectacle (needs KWin), GNOME Settings (GNOME only), Cinnamon, Budgie Desktop, Budgie Control Center, Pantheon Gala | Shells and settings of another desktop: they refuse to run, or are a session, not an app. Proposal: not apps for this session (none needed) |
+| Installers run as root | Calamares | Runs through pkexec, outside your session's buses; a one-shot installer. Proposal: none needed |
+| Needs a real account | Nextcloud client, Jami, qTox, Syncthing GTK, Rare, Password Safe, ownCloud-style clients, Element-like Matrix clients (Schildi), Jellyflix, aMule, Ricochet Refresh, Nextcloud Passwords, Mukwa, Vite | Stop at a login screen; the main window comes after signing in. Mostly Qt/GTK, so the general route should apply after login, but the survey can't verify it. Proposal: "works after login, unverified" |
+| Proprietary downloads that fail | VueScan, Todoist, QQ, MAX (Flathub) | Their Flatpak install downloads from the vendor and fails in the throwaway installation. Proposal: untestable |
+| Needs PulseAudio's equalizer | qpaeq | Needs PulseAudio's module-equalizer-sink, which PipeWire doesn't provide. Proposal: impossible on PipeWire |
+| Crash at start in the rig | GNOME Robots, asusctl's GUI, Nostalgia, pw3270, Myxer, xr-chaperone, windsend-rs, Loxodo, Freenukum | Crash before a window (hardware they look for, missing data). To be retested after the harness fixes; whatever still crashes would be proposed impossible |
+
 ## General fixes the survey produced (hearth/arbor)
 
 Flatpak apps matched through their D-Bus proxy; GTK app actions and
