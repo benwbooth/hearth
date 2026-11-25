@@ -8,6 +8,11 @@
 # - The JNI library is loaded by its store path (System.load), not by
 #   name from java.library.path, which an app may set itself; xprop and
 #   dbus-send (its "is accessibility on?" checks) by store path too.
+# - AT_SPI_BUS_ADDRESS set means accessibility is on: that's how a Flatpak
+#   finds its bus (/run/flatpak/at-spi-bus); it can't see the X root
+#   property or ask org.a11y.Bus, so the bridge never started there.
+# - Inside a Flatpak it loads a copy of its library without RUNPATH, which
+#   uses the runtime's GLib/ATK (see postFixup).
 # - Its start-up catches every Throwable, not just Exceptions: a native
 #   library that can't load (UnsatisfiedLinkError) must leave the app
 #   without accessibility, not end it (Java ends a Swing app whose
@@ -19,7 +24,7 @@
 # Installed as lib/java-atk-wrapper/java-atk-wrapper.jar and
 # lib/java-atk-wrapper/libatk-wrapper.so (lib is linked into
 # /run/current-system/sw, where config.kdl points).
-{ lib, stdenv, fetchurl, pkg-config, jdk, glib, atk, at-spi2-atk, at-spi2-core, dbus, xprop, libX11 }:
+{ lib, stdenv, fetchurl, pkg-config, jdk, glib, atk, at-spi2-atk, at-spi2-core, dbus, xprop, libX11, patchelf }:
 
 stdenv.mkDerivation rec {
   pname = "java-atk-wrapper";
@@ -29,14 +34,17 @@ stdenv.mkDerivation rec {
     sha256 = "93d304831660972d5f5b8081c361be80283defe248924ef6c90db90e972ebb44";
   };
 
-  nativeBuildInputs = [ pkg-config jdk ];
+  nativeBuildInputs = [ pkg-config jdk patchelf ];
   buildInputs = [ glib atk at-spi2-atk at-spi2-core dbus libX11 ];
 
   postPatch = ''
     substituteInPlace wrapper/org/GNOME/Accessibility/AtkWrapper.java.in \
       --replace-fail 'System.loadLibrary("atk-wrapper");' \
-                     "System.load(\"$out/lib/java-atk-wrapper/libatk-wrapper.so\");" \
-      --replace-fail '"dbus-send --session' '"${dbus}/bin/dbus-send --session'
+                     "System.load(new java.io.File(\"/.flatpak-info\").exists() ? \"$out/lib/java-atk-wrapper/flatpak/libatk-wrapper.so\" : \"$out/lib/java-atk-wrapper/libatk-wrapper.so\");" \
+      --replace-fail '"dbus-send --session' '"${dbus}/bin/dbus-send --session' \
+      --replace-fail 'Process p = Runtime.getRuntime().exec("@XPROP@ -root");' \
+                     'if (System.getenv("AT_SPI_BUS_ADDRESS") != null) initAtk();
+      Process p = Runtime.getRuntime().exec(accessibilityEnabled ? "true" : "@XPROP@ -root");'
     # The first catch is the static start-up block's (see above).
     sed -i '0,/catch (Exception e)/s//catch (Throwable e)/' wrapper/org/GNOME/Accessibility/AtkWrapper.java.in
     grep -q 'catch (Throwable e)' wrapper/org/GNOME/Accessibility/AtkWrapper.java.in
@@ -55,6 +63,16 @@ stdenv.mkDerivation rec {
     rm -f $out/lib/java-atk-wrapper/*.la
     test -f $out/lib/java-atk-wrapper/java-atk-wrapper.jar
     test -f $out/lib/java-atk-wrapper/libatk-wrapper.so
+  '';
+
+  # Inside a Flatpak the library above can't load: its RUNPATH pulls this
+  # system's GLib/ATK into the runtime's process. A copy without RUNPATH
+  # finds the runtime's own (org.freedesktop.Platform has them, same ABI),
+  # chosen by the bridge when /.flatpak-info exists.
+  postFixup = ''
+    mkdir -p $out/lib/java-atk-wrapper/flatpak
+    cp $out/lib/java-atk-wrapper/libatk-wrapper.so $out/lib/java-atk-wrapper/flatpak/
+    patchelf --remove-rpath $out/lib/java-atk-wrapper/flatpak/libatk-wrapper.so
   '';
 
   meta = {
