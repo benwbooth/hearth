@@ -259,9 +259,11 @@ def rebuild():
             for k in ("solution", "status", "gap", "checked", "notes"):
                 r[k] = o.get(k, r[k])
         elif o:
-            for k in ("notes", "gap"):
-                if o.get(k):
-                    r[k] = o[k]
+            if o.get("notes"):
+                r["notes"] = o["notes"]
+            # A hand-written gap stays while the app is still unsolved.
+            if o.get("gap") and not r["gap"] and r["status"] not in ("done", "none-needed"):
+                r["gap"] = o["gap"]
             if o.get("solution", "todo") not in ("todo", "") and not o["solution"].startswith("general:"):
                 r["solution"] = o["solution"]
         out.append(r)
@@ -274,6 +276,9 @@ def rebuild():
         m = mods.get(r["attr"])
         if m and r["status"] in AUTO | {"done"}:
             r["status"], r["solution"], r["gap"] = "done", f"module:{m}", ""
+    for r in out:
+        if r["status"] in ("done", "none-needed"):
+            r["gap"] = ""  # solved: whatever gap it had is history
     with open(TSV, "w") as f:
         f.write("\t".join(COLS) + "\n")
         for r in out:
