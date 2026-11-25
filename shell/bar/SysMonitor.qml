@@ -609,9 +609,14 @@ MouseArea {
         // Built while the delay runs, so it shows at its final size: built
         // only once visible, it showed empty and grew, a flicker.
         readonly property var model: !want && !visible ? ({ head: "", rows: [], foot: "" })
-            : root.hoverKind ? root.tipModel(root.hoverKind)
+            : kind ? root.tipModel(kind)
             : ({ head: root.summaryText, rows: [], foot: "" })
         readonly property bool want: root.containsMouse && !root.pressed
+        // The item it's about, held while it fades out: leaving the monitor
+        // clears hoverKind at once, and the fading tooltip flashed the
+        // summary ("System monitor") for a frame or two.
+        property string kind: ""
+        Binding on kind { when: tip.want; value: root.hoverKind; restoreMode: Binding.RestoreNone }
         // Fades in and out, as hearth's other tooltips (widgets/Tooltip):
         // shown at once, the glass's blur reached the compositor a frame
         // after the pane, a flicker.
@@ -647,10 +652,10 @@ MouseArea {
                 y: 8
                 spacing: 4
                 Label {
-                    text: !root.hoverKind ? "System monitor (treetop)"
-                        : root.hoverKind === "temp" ? root.kindTitle.temp
-                        : root.hoverKind === "disk" ? root.kindTitle.disk
-                        : root.kindTitle[root.hoverKind] + " — top programs"
+                    text: !tip.kind ? "System monitor (treetop)"
+                        : tip.kind === "temp" ? root.kindTitle.temp
+                        : tip.kind === "disk" ? root.kindTitle.disk
+                        : root.kindTitle[tip.kind] + " — top programs"
                     font.weight: Font.DemiBold
                     font.pointSize: Theme.fontSize + 1
                 }

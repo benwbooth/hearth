@@ -52,17 +52,18 @@ PopupWindow {
     }
     onHoveredChanged: {
         if (hovered && text) {
-            if (Date.now() < ShellState.tooltipWarmUntil || (ShellState.tooltip && ShellState.tooltip.shown)) {
-                showTimer.stop();
-                tip.shown = true;
-            } else showTimer.restart();
+            // Warm (moving along the bar): after 60 ms, not at once, so a
+            // hover that flickers off and on while leaving an item (the
+            // treetop graphs) never flashes a tooltip for a frame.
+            const warm = Date.now() < ShellState.tooltipWarmUntil || (ShellState.tooltip && ShellState.tooltip.shown);
+            showTimer.interval = warm ? 60 : Theme.tooltipDelayMs;
+            showTimer.restart();
         } else { showTimer.stop(); shown = false; }
     }
     onTextChanged: if (!text) shown = false
 
     Timer {
         id: showTimer
-        interval: Theme.tooltipDelayMs
         onTriggered: tip.shown = tip.hovered && tip.text !== ""
     }
 
