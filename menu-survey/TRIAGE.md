@@ -54,8 +54,11 @@ tree, buttons, check boxes, settings panel). ScreenReaderEnabled is
 session-wide: it would also make Chromium, Electron and Firefox keep full
 accessibility trees (CPU and memory in every such app). Waiting on Ben.
 
-AppImages: Tauri apps refuse appimage-run (APPIMAGE set but not run from a
-/tmp/.mount_ FUSE mount; NixOS's appimage-run too). AppImages needing
+AppImages: Tauri apps check that their executable is under
+"$TMPDIR/.mount_" (where the FUSE runtime mounts) whenever APPIMAGE/APPDIR
+is set, and panic under appimage-run. Running appimage-run with
+XDG_CACHE_HOME=$TMPDIR/.mount_cache extracts them there, which passes the
+check: the ChatGPT desktop AppImage then shows its whole menu bar. AppImages needing
 glibc 2.43 or host libraries run on menu-survey/appimage-run.nix
 (unstable's appimage-run plus the missing libraries), which would fix them
 for programs.appimage on the desktop as well.

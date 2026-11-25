@@ -93,9 +93,9 @@ def gap_of(measured, toolkit, p):
                          ("pulseaudio", "blocked:needs-sound-server"),
                          ("namespace xdp not available", "blocked:app-packaging"),
                          ("flatpak-spawn", "blocked:app-packaging"),
-                         # Tauri AppImages refuse appimage-run (APPIMAGE set, not
-                         # run from a /tmp/.mount_ FUSE mount): NixOS's too.
-                         ("not detected as an appimage", "blocked:appimage-tauri"),
+                         # Tauri's AppImage check, from runs before the probe
+                         # extracted under $TMPDIR/.mount_cache.
+                         ("not detected as an appimage", "harness-appimage-tauri"),
                          ("cannot open shared object", "harness-missing-library"),
                          ("version `glibc_", "harness-missing-library"),
                          ("no constructor defined", "blocked:app-crash"),

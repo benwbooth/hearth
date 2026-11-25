@@ -622,6 +622,13 @@ def attempt(attr, argv, variant, extra_env, extra_args, wait_win=50, wait_menu=1
     for k, d in dirs.items():
         os.makedirs(os.path.join(base, d), mode=0o700, exist_ok=True)
         env[k] = os.path.join(base, d)
+    if any("appimage-run" in a for a in argv):
+        # appimage-run extracts to $XDG_CACHE_HOME/appimage-run/<hash>; under
+        # $TMPDIR/.mount_* it passes Tauri's AppImage check (its executable
+        # must start with "$TMPDIR/.mount_", where the FUSE runtime mounts),
+        # which otherwise panics on APPIMAGE/APPDIR. Harmless for the rest.
+        env["XDG_CACHE_HOME"] = os.path.join(env["TMPDIR"], ".mount_cache")
+        os.makedirs(env["XDG_CACHE_HOME"], exist_ok=True)
     if "flatpak" in " ".join(argv[:4]):
         # The Flatpak portal (bus-activated, the rig's runtime dir) reads each
         # instance's bwrapinfo.json from its own XDG_RUNTIME_DIR/.flatpak:
