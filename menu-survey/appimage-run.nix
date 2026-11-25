@@ -18,7 +18,8 @@ pkgs.appimage-run.override {
   extraPkgs = p: pick p [
     "libepoxy" "libxshmfence" "zstd" "libxcrypt-legacy" "libva" "elfutils" "lz4"
     "webkitgtk_4_1" "webkitgtk_6_0" "nghttp2" "keybinder3" "gtk2" "glibmm_2_4" "libpng"
-    "libcdio" "avahi" "mpv-unwrapped"
+    "libcdio" "avahi" "mpv-unwrapped" "libgcrypt" "libgpg-error" "libsecret" "libnotify"
+    "libayatana-appindicator" "libappindicator-gtk3" "libdbusmenu-gtk3"
     # Qt's xcb platform plugin (Qt 5 and 6 AppImages that bundle only xcb)
     "xcb-util-cursor" "xcbutilwm" "xcbutilimage" "xcbutilkeysyms" "xcbutilrenderutil" "libxkbcommon"
   ];
