@@ -60,6 +60,17 @@ def strip_mnemonic(s):
     return "".join(res)
 
 
+def named_item(nid, name):
+    """An entry pressed by its accessible name later: shown without the
+    shortcut GTK 4 appends after a newline ("Zoom out\nCtrl + Minus"),
+    the name kept for the lookup."""
+    label, _, sc = name.partition("\n")
+    if not sc:
+        label, sc = split_shortcut(name)
+    sc = re.sub(r"\s*\+\s*", "+", sc.split(",")[0].strip())
+    return item(nid, label.strip(), shortcut=sc, name=name)
+
+
 def item(nid, label="", **kw):
     d = {"id": nid, "label": label, "enabled": True, "visible": True, "type": "standard",
          "toggleType": "", "toggleState": -1, "icon": "", "shortcut": "",
@@ -525,8 +536,9 @@ class AtspiMenu:
             try:
                 if r not in btn and r != A.Role.MENU_ITEM:
                     return False
-                name = split_shortcut((o.get_name() or "").strip().split("\n")[0])[0].strip()
-                if not name or name.lower() in self.NOT_ACTIONS or name in found:
+                name = (o.get_name() or "").strip()  # raw: clicks look it up
+                short = split_shortcut(name.split("\n")[0])[0].strip().lower()
+                if not name or short in self.NOT_ACTIONS or name in found or name.count("\n") > 1:
                     return False
                 if not o.get_state_set().contains(A.StateType.SHOWING):
                     return False
@@ -558,7 +570,7 @@ class AtspiMenu:
                 c = tb.get_child_at_index(i)
                 if c is None or c.get_role() not in roles:
                     continue
-                name = split_shortcut((c.get_name() or "").strip())[0]
+                name = (c.get_name() or "").strip()  # raw: clicks look it up
                 if name and name not in found and c.get_state_set().contains(A.StateType.SHOWING):
                     found[name] = c
         except Exception:
@@ -571,7 +583,7 @@ class AtspiMenu:
         self.cache = {}
         items = []
         for i, label in enumerate(list(self.toolbar_buttons(self.trigger))[:40]):
-            items.append(item(self.nid((-1, i)), label))
+            items.append(named_item(self.nid((-1, i)), label))
         self.cache[(-1,)] = items
         self.tree_read = True
         self.burger = {"flat": True, "drawer": True, "toolbar": True, "labels": ["Actions"]}
@@ -1335,12 +1347,19 @@ class AtspiMenu:
                  A.Role.PAGE_TAB, A.Role.LINK, A.Role.CHECK_BOX, A.Role.RADIO_BUTTON}
         if hasattr(A.Role, "PUSH_BUTTON_MENU"):
             roles.add(A.Role.PUSH_BUTTON_MENU)
+        if hasattr(A.Role, "SWITCH"):
+            roles.add(A.Role.SWITCH)  # GTK 4's switches (settings popovers)
         found = {}
 
         def test(o, r):
             if r in roles and o is not self.trigger:
                 try:
                     name = (o.get_name() or "").strip()
+                    # A GTK 4 menu button is named after everything in its
+                    # popover ("Zoom out\nCtrl + Minus 100% Zoom in..."):
+                    # its entries are below it, not it.
+                    if name.count("\n") > 1 or len(name) > 80:
+                        return False
                     if name and name not in found and o.get_state_set().contains(A.StateType.SHOWING):
                         found[name] = o
                 except Exception:
@@ -1350,7 +1369,8 @@ class AtspiMenu:
             self.app.clear_cache()
         except Exception:
             pass
-        self.search(A, self.frame, test, web=False)
+        # Deep: a GTK 4 popover's entries sit under its menu button, past 14.
+        self.search(A, self.frame, test, web=True)
         return found
 
     def learn_drawer(self, before):
@@ -1388,7 +1408,7 @@ class AtspiMenu:
         items = []
         for i, label in enumerate(list(new)[:40]):
             path = (-1, i)
-            items.append(item(self.nid(path), label))
+            items.append(named_item(self.nid(path), label))
         self.cache[(-1,)] = items
         self.tree_read = True
         self.burger = {"flat": True, "drawer": True,
@@ -1456,6 +1476,15 @@ class AtspiMenu:
             self._learn_burger()
         finally:
             self.listen_popups(False)
+        if not self.burger and self.trigger is not self.frame:
+            # The ☰ showed nothing readable (elementary Terminal's Settings
+            # popover: unnamed zoom and theme buttons). The page's own
+            # commands then (its header's New Tab, Find…), as Actions.
+            acts = self.page_actions(Atspi, self.frame)
+            acts.pop((self.trigger.get_name() or "").strip(), None)
+            if len(acts) >= 2:
+                self.trigger = self.frame
+                self.read_toolbar()
 
     DRAWER = re.compile(r"\b(open|show) drawer\b", re.I)
 
@@ -1637,7 +1666,8 @@ class AtspiMenu:
         if self.busy:
             return
         if self.kind == "burger" and (self.burger or {}).get("drawer"):
-            want = next((k["label"] for k in self.cache.get(tuple(path[:-1]), []) if k["id"] == nid), None)
+            want = next((k.get("name") or k["label"] for k in self.cache.get(tuple(path[:-1]), [])
+                         if k["id"] == nid), None)
             if want:
                 self.busy = True
                 try:
