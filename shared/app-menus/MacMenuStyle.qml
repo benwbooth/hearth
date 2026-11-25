@@ -21,15 +21,16 @@ QtObject {
     readonly property color accent: dark ? "#0a84ff" : "#007aff"
 
     readonly property real pt: 1.125
-    // SF Pro (macOS's menu font) when it is installed, else Noto Sans (the
-    // desktop's sans): the same in every app, never the app's own font.
+    // SF Pro (macOS's menu font) when it is installed, else Inter (its
+    // closest open relative, installed system-wide, as hearth uses), else
+    // Noto Sans: the same in every app, never the app's own font.
     readonly property string family: {
         const f = Qt.fontFamilies()
-        for (const n of ["SF Pro", "SF Pro Text"]) if (f.indexOf(n) >= 0) return n
+        for (const n of ["SF Pro", "SF Pro Text", "Inter", "Inter Variable"]) if (f.indexOf(n) >= 0) return n
         return "Noto Sans"
     }
-    // 13 pt.
-    readonly property real fontSize: Math.round(13 * pt * 10) / 10
+    // 13 pt (Inter runs ~4% larger than SF Pro at the same size).
+    readonly property real fontSize: Math.round(13 * pt * (family.indexOf("Inter") === 0 ? 0.962 : 1) * 10) / 10
     readonly property real letterSpacing: -0.09
     // (Shortcuts: a little looser, as macOS spaces its key glyphs.)
     readonly property real keySpacing: 0.6
