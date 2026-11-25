@@ -621,6 +621,12 @@ def attempt(attr, argv, variant, extra_env, extra_args, wait_win=50, wait_menu=1
     for k, d in dirs.items():
         os.makedirs(os.path.join(base, d), mode=0o700, exist_ok=True)
         env[k] = os.path.join(base, d)
+    if "flatpak" in " ".join(argv[:4]):
+        # The Flatpak portal (bus-activated, the rig's runtime dir) reads each
+        # instance's bwrapinfo.json from its own XDG_RUNTIME_DIR/.flatpak:
+        # an app in another runtime dir can't Spawn (every Chromium and
+        # Electron Flatpak's sandbox). Cleanup still finds it by HOME/TMPDIR.
+        env["XDG_RUNTIME_DIR"] = os.path.join(RIGDIR, "run")
     # A lived-in home: the XDG user folders (gdm-settings and Varia crash on
     # a None Downloads folder) and a login shell (scrcpy runs $SHELL).
     home = env["HOME"]
