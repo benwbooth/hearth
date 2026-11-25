@@ -91,9 +91,9 @@ arbor's synthetic click leave the button pressed but no popup maps. arbor's
 click-window pressed, released and moved the pointer focus away in one
 dispatch; GTK 3 opens a GtkMenu on press and maps it only while the pointer
 is over its window. arbor 815bd1cf holds the button 100 ms and restores the
-pointer after 400 ms, like a real click; to verify once a built arbor has it
-(devloop builds arbor only when Ben swaps). These show as "partial" (the ☰
-found, unread).
+pointer after 400 ms, like a real click (verified: Catfish's ☰ opens), and
+the reader clicks for real when GTK 3's accessible press opens nothing, then
+reads the popover's list-box rows (hearth b54f20d: Catfish's six entries).
 
 ## Proposed impossible (for Ben's triage, 2026-11-25)
 
