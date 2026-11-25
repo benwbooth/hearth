@@ -12,7 +12,10 @@ including Auto's 7:00/19:00 switch), so the whole desktop follows:
   $XDG_STATE_HOME/hearth/appearance.json, written here; it announces the
   change itself when the file changes.
 - GTK 3/4: gtk-theme / color-scheme / icon-theme in dconf (GSettings) and
-  ~/.config/gtk-{3,4}.0/settings.ini.
+  ~/.config/gtk-{3,4}.0/settings.ini; and in ~/.config/gtk-{3,4}.0/gtk.css a
+  block (between hearth's markers) that draws menus as hearth's apps do
+  (shared/app-menus/MacMenuStyle.qml): Chromium and Electron take their menu
+  colours from it too.
 
 Only what differs is written; with nothing to change it does nothing.
 Prints one JSON line: {"changed": [...]}.
@@ -31,7 +34,6 @@ DARK = MODE == "dark"
 CONFIG = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
 SCHEME = "BreezeDark" if DARK else "BreezeLight"
 ICONS = "breeze-dark" if DARK else "breeze"
-GTK_THEME = "Breeze-Dark" if DARK else "Breeze"
 LOOK = "org.kde.breezedark.desktop" if DARK else "org.kde.breeze.desktop"
 changed = []
 
@@ -40,6 +42,20 @@ def data_dirs():
     home = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
     rest = os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share"
     return [home] + [d for d in rest.split(":") if d] + ["/run/current-system/sw/share"]
+
+
+def gtk_theme():
+    """Breeze when its GTK theme is installed, else GTK's own Adwaita (built
+    into GTK, always there). A theme that isn't installed left GTK on light
+    Adwaita whatever the mode (2026-11-25: Breeze went with Plasma)."""
+    name = "Breeze-Dark" if DARK else "Breeze"
+    dirs = data_dirs() + [os.path.expanduser("~/.themes")]
+    if any(os.path.isdir(os.path.join(d, "themes", name, "gtk-3.0")) or os.path.isdir(os.path.join(d, name, "gtk-3.0")) for d in dirs):
+        return name
+    return "Adwaita-dark" if DARK else "Adwaita"
+
+
+GTK_THEME = gtk_theme()
 
 
 def write_atomic(path, text):
@@ -181,6 +197,93 @@ def apply_settings_ini():
             changed.append(ver + "/settings.ini")
 
 
+MENU_BEGIN = "/* hearth menus: begin (written by hearth-color-scheme; edits here are replaced) */"
+MENU_END = "/* hearth menus: end */"
+
+
+def menu_css(gtk4):
+    """Menus as hearth's apps draw theirs (MacMenuStyle.qml), in GTK CSS. GTK
+    can't blur what's behind a menu, so the glass is its solid colour."""
+    if DARK:
+        c = dict(bg="#2b2d30", fg="#f5f5f7", accent="#0a84ff", dim="rgba(255, 255, 255, 0.55)",
+                 dimHover="rgba(255, 255, 255, 0.85)", disabled="rgba(255, 255, 255, 0.28)",
+                 sep="rgba(255, 255, 255, 0.13)", edge="rgba(0, 0, 0, 0.28)",
+                 rim="rgba(255, 255, 255, 0.05)", shadow="rgba(0, 0, 0, 0.32)")
+    else:
+        c = dict(bg="#f9f9fa", fg="#1d1d1f", accent="#007aff", dim="rgba(0, 0, 0, 0.5)",
+                 dimHover="rgba(255, 255, 255, 0.85)", disabled="rgba(0, 0, 0, 0.26)",
+                 sep="rgba(0, 0, 0, 0.11)", edge="rgba(0, 0, 0, 0.09)",
+                 rim="rgba(255, 255, 255, 0.40)", shadow="rgba(0, 0, 0, 0.2)")
+    font = 'font-family: Inter, "Inter Variable", "SF Pro", "Noto Sans", sans-serif; font-size: 14.1px; letter-spacing: -0.09px;'
+    if gtk4:
+        return f"""popover.menu > contents {{
+  background-color: {c['bg']}; color: {c['fg']}; border-radius: 14px; padding: 5px;
+  box-shadow: 0 9px 26px {c['shadow']}, 0 0 0 1px {c['edge']}, inset 0 0 0 1px {c['rim']};
+  {font}
+}}
+popover.menu > arrow {{ background-color: {c['bg']}; border-color: {c['edge']}; }}
+popover.menu modelbutton {{ min-height: 27px; padding: 0 11px; border-radius: 9px; color: {c['fg']}; }}
+popover.menu modelbutton:hover, popover.menu modelbutton:selected {{ background-color: {c['accent']}; color: #ffffff; }}
+popover.menu modelbutton:disabled {{ color: {c['disabled']}; }}
+popover.menu modelbutton accelerator {{ color: {c['dim']}; letter-spacing: 0.6px; }}
+popover.menu modelbutton:hover accelerator {{ color: {c['dimHover']}; }}
+popover.menu modelbutton arrow {{ color: {c['dim']}; }}
+popover.menu modelbutton:hover arrow {{ color: #ffffff; }}
+popover.menu separator {{ min-height: 1px; margin: 4px 11px; background-color: {c['sep']}; }}
+"""
+    return f"""window.popup decoration, .csd.popup decoration {{
+  border-radius: 14px;
+  box-shadow: 0 9px 26px {c['shadow']}, 0 0 0 1px {c['edge']};
+}}
+menu, .menu, .context-menu {{
+  background-color: {c['bg']}; color: {c['fg']}; border-radius: 14px; border: none; padding: 5px;
+  box-shadow: inset 0 0 0 1px {c['rim']};
+  {font}
+}}
+menu menuitem, .menu menuitem, .context-menu menuitem {{
+  min-height: 27px; min-width: 193px; padding: 0 11px; border-radius: 9px; color: {c['fg']}; text-shadow: none;
+}}
+menu menuitem:hover, .menu menuitem:hover, .context-menu menuitem:hover {{ background-color: {c['accent']}; color: #ffffff; }}
+menu menuitem:disabled, .menu menuitem:disabled {{ color: {c['disabled']}; }}
+menu menuitem accelerator {{ color: {c['dim']}; letter-spacing: 0.6px; }}
+menu menuitem:hover accelerator {{ color: {c['dimHover']}; }}
+menu menuitem arrow {{ min-width: 12px; min-height: 12px; color: {c['dim']}; }}
+menu menuitem:hover arrow {{ color: #ffffff; }}
+menu menuitem check, menu menuitem radio {{
+  min-width: 14px; min-height: 14px; margin-right: 6px; background: none; border: none; box-shadow: none; color: inherit;
+}}
+menu separator, .menu separator {{ min-height: 1px; margin: 4px 11px; background-color: {c['sep']}; }}
+menu > arrow {{ background-color: {c['bg']}; border: none; color: {c['dim']}; }}
+popover.menu, popover.background.menu {{
+  background-color: {c['bg']}; border-radius: 14px; border: 1px solid {c['edge']}; padding: 5px;
+}}
+popover.menu modelbutton {{ min-height: 27px; padding: 0 11px; border-radius: 9px; color: {c['fg']}; }}
+popover.menu modelbutton:hover {{ background-color: {c['accent']}; color: #ffffff; }}
+popover.menu separator {{ margin: 4px 11px; background-color: {c['sep']}; }}
+"""
+
+
+def apply_menu_css():
+    """hearth's block in gtk.css: replaced in place, everything else kept."""
+    for ver in ("gtk-3.0", "gtk-4.0"):
+        path = os.path.join(CONFIG, ver, "gtk.css")
+        try:
+            with open(path) as f:
+                before = f.read()
+        except FileNotFoundError:
+            before = ""
+        block = MENU_BEGIN + "\n" + menu_css(ver == "gtk-4.0") + MENU_END + "\n"
+        if MENU_BEGIN in before and MENU_END in before:
+            head, rest = before.split(MENU_BEGIN, 1)
+            tail = rest.split(MENU_END, 1)[1].lstrip("\n")
+            after = head + block + tail
+        else:
+            after = before + ("" if before.endswith("\n") or not before else "\n") + block
+        if after != before:
+            write_atomic(path, after)
+            changed.append(ver + "/gtk.css")
+
+
 def apply_gsettings():
     """GSettings keys GTK and the GTK portal read, written straight to dconf
     (as services/Mouse.qml does): no schemas needed, which hearth's
@@ -230,5 +333,6 @@ apply_portal_state()
 if apply_kdeglobals():
     notify_kde()
 apply_settings_ini()
+apply_menu_css()
 apply_gsettings()
 print(json.dumps({"mode": MODE, "changed": changed}))
