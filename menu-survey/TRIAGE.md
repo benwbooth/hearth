@@ -72,3 +72,9 @@ an X11 window's pid from the X server when it sets none (XRes: FLTK, AWT);
 GTK 2 apps on AT-SPI (gail + atk-bridge); games recognized by their own
 desktop Categories (Game with a genre), any toolkit. Survey harness:
 Flatpaks share the portal's runtime dir (Chromium/Electron Flatpaks start).
+Reader: named app-menu buttons ("Main menu (F10)", KDE dialogs' Help),
+GTK 4 popovers' entries (deep, switches), a page's sidebar and header
+actions (Kirigami: Arianna, KRecorder), page actions when a ☰ shows
+nothing. Survey: login screens and other-desktop refusals classified from
+the window's text. Generators: gen-module.py builds modules from Tk and
+FLTK menu tables in source; Tk entries without keys through mnemonics.
