@@ -1127,7 +1127,10 @@ def probe_appimage(attr):
         if r.returncode or not os.path.exists(fn):
             return [dict(attr=attr, variant="build", result="install-failed", error=f"download: {url} {r.stderr[-200:]}")]
         os.chmod(fn, 0o755)
-        argv = sandboxed(["/run/current-system/sw/bin/appimage-run", fn])
+        # The survey's appimage-run (appimage-run.nix: unstable's glibc and
+        # the libraries AppImages expect from the host), else the system's.
+        ar = os.path.expanduser("~/.cache/hearth-menu-survey/roots/appimage-run/bin/appimage-run")
+        argv = sandboxed([ar if os.path.exists(ar) else "/run/current-system/sw/bin/appimage-run", fn])
         rows = [attempt(attr, argv, "session", {}, [])]
         r0 = rows[0]
         r0.update(hearth=HEARTH_PKG or "installed", appimage=url, sandboxed=True)
