@@ -366,6 +366,24 @@ def kill_procs(pids):
     return scopes
 
 
+THROTTLED = set()
+
+
+def throttle_flatpak_scopes():
+    """The tested Flatpak's own app-flatpak-*.scope (Flatpak moves the app
+    there, out of our scope) gets the same idle limits as our scopes; only
+    scopes holding this worker's test app, never your real Flatpaks."""
+    for p in own_app_procs():
+        try:
+            cg = open(f"/proc/{p}/cgroup").read().strip().rsplit("/", 1)[-1]
+        except OSError:
+            continue
+        if cg.startswith("app-flatpak-") and cg.endswith(".scope") and cg not in THROTTLED:
+            THROTTLED.add(cg)
+            sh(["systemctl", "--user", "set-property", "--runtime", cg,
+                "CPUWeight=idle", "IOWeight=1", "AllowedCPUs=0-7,12-19"], timeout=20)
+
+
 def own_app_procs():
     mine = os.path.join(DISKDIR, "apps") + "/"
     return app_procs(lambda x: x.startswith(mine))
@@ -627,6 +645,8 @@ def attempt(attr, argv, variant, extra_env, extra_args, wait_win=50, wait_menu=1
     t0 = time.time()
     win = None
     while time.time() - t0 < wait_win:
+        if "flatpak" in " ".join(argv[:6]):
+            throttle_flatpak_scopes()
         ws = [w for w in windows() if w["id"] not in before and w.get("app_id") != "org.quickshell"]
         if ws:
             time.sleep(1.5)  # splash screens / the real main window
@@ -646,6 +666,8 @@ def attempt(attr, argv, variant, extra_env, extra_args, wait_win=50, wait_menu=1
         if tray:
             res.update(result="tray-only", tray=tray)
         return res
+    if "flatpak" in " ".join(argv[:6]):
+        throttle_flatpak_scopes()  # once more: it may have moved after the window showed
     res.update(attempt_windows(attr, before, win, wait_menu))
     return res
 
