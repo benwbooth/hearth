@@ -4,6 +4,9 @@ What the survey couldn't make work, why, and what was decided. From
 `checklist.tsv` (statuses `todo` and `blocked`), 2026-11-24, after the
 general fixes listed at the end. App lists are examples, not exhaustive.
 
+Every app still without a menu, by gap, with its route:
+[TRIAGE-remaining.md](TRIAGE-remaining.md) (`scripts/checklist.py --triage`).
+
 ## Decided
 
 | Group | Decision | Examples |
