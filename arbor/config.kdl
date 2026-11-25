@@ -130,13 +130,21 @@ include "hearth-layer-rules.kdl"
 // drawn translucent for it (hearth-color-scheme's gtk.css block, 14 px
 // corners); arbor follows a popup's input region where it gives one (GTK 4's
 // rounded body and arrow), else its geometry, clipped to these corners.
-// Opaque menus (Chromium, Electron) look the same as without it.
 window-rule {
     popups {
         geometry-corner-radius 14
         background-effect {
             blur true
         }
+    }
+}
+// Chromium and Electron draw their menus opaque (they flatten GTK's
+// translucent menu colour onto the window's), so their popups are drawn
+// see-through instead, about as clear as the GTK glass tint.
+window-rule {
+    match app-id=r#"(?i)^(com\.anthropic\.claude|claude|brave-browser.*|chromium.*|google-chrome.*|code|code-url-handler|electron.*|bluebubbles|spotify|discord|slack|signal|obsidian|vesktop)$"#
+    popups {
+        opacity 0.84
     }
 }
 // Blur and shadows for menus and tooltips when real glass is off (written
