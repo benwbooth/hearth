@@ -18,7 +18,6 @@ rabbit	Animals	fluent	Rabbit face	bg=#ffe0ec,#f7b2cc	Rabbit
 koala	Animals	fluent	Koala	bg=#e3ecf5,#b2c4d8	Koala
 turtle	Animals	fluent	Turtle	bg=#d6f5ec,#8fd9c2	Turtle
 butterfly	Animals	fluent	Butterfly	bg=#e6e0ff,#b9a8f5	Butterfly
-owl	Animals	commons	136072677	x=0.47;y=0.42;zoom=1.5	Owl
 mouse	Animals	fluent	Mouse face	bg=#e9e4f7,#c3b8e8	Mouse
 hamster	Animals	fluent	Hamster	bg=#fff0d6,#f7cf8f	Hamster
 bear	Animals	fluent	Bear	bg=#f3e6d8,#d6b18c	Bear
@@ -72,7 +71,7 @@ turkey	Birds	fluent	Turkey	bg=#fdeedd,#efc193	Turkey
 dove	Birds	fluent	Dove	bg=#e6ecfa,#b4c3ec	Dove
 goose	Birds	fluent	Goose	bg=#e5f4dc,#b1d99a	Goose
 rooster	Birds	fluent	Rooster	bg=#fff2dd,#f3cb8f	Rooster
-little-owl	Birds	fluent	Owl	bg=#efe6f8,#c9b3e3	Little Owl
+owl	Birds	fluent	Owl	bg=#efe6f8,#c9b3e3	Owl
 lake	Nature	commons	61645387	x=0.5;y=0.52;zoom=1.25	Mountain lake
 boathouse	Nature	commons	61911519	x=0.62;y=0.55	Lake and boathouse
 dunes	Nature	commons	58805598	x=0.52;y=0.5	Sand dunes
