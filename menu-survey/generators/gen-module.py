@@ -12,6 +12,8 @@ Parsers (each returns [(title, [item | None])], item = (label, keys)):
   xaml   Avalonia/WPF: <Menu><MenuItem Header="_File" InputGesture="Ctrl+O"/>
          (Ryubing, PixiEditor, SourceGit)
   winforms  *.Designer.cs: .Text, .ShortcutKeys, DropDownItems.AddRange (KeePass, CKAN)
+  c-keytable  C default key tables with an action-description table
+         (Terminology's ADD_KB + keyin.c)
   fltk   FLUID .fl files (Submenu/MenuItem with `shortcut 0x...`) and C++
          Fl_Menu_Item tables ({"&Open", FL_CTRL+'o', ...}) (ZynAddSubFX)
 
@@ -499,6 +501,47 @@ def winforms_menus(files):
                 best_out = out
     return best_out
 
+# ---------------------------------------------------------------- C key tables
+
+C_BIND = re.compile(r"\(\s*(?:\w+\s*,\s*)?\"([^\"]+)\"\s*,\s*([01])\s*,\s*([01])\s*,\s*([01])\s*,\s*([01])\s*,\s*\"(\w+)\"\s*\)")
+C_DESC = re.compile(r"\{\s*\"(\w+)\"\s*,\s*(?:gettext_noop|N_|_)\s*\(\s*\"([^\"]+)\"\s*\)")
+C_KEYS = {"Prior": "Page_Up", "Next": "Page_Down"}
+C_GROUPS = [("Edit", ("copy", "paste", "select", "cut", "undo", "redo", "find", "search")),
+            ("Shell", ("tab", "term", "split", "session", "pane", "new", "close")),
+            ("View", ("win", "fullscreen", "font", "zoom", "scroll", "backlog", "size", "visible", "group"))]
+
+
+def ckeytable_menus(files):
+    """C default key tables: ("Key", ctrl, alt, shift, win, "action") calls
+    or macros (Terminology's ADD_KB) with the actions' descriptions from a
+    {"action", gettext_noop("Description"), cb} table. Menus by the action
+    name's words (copy/paste: Edit, tab/term: Shell, win/font: View)."""
+    binds, desc = {}, {}
+    for fn in files:
+        try:
+            text = open(fn, errors="replace").read()
+        except OSError:
+            continue
+        for m in C_BIND.finditer(text):
+            key, c, a, sh, w, act = m.groups()
+            mods = [n for n, v in (("Ctrl", c), ("Alt", a), ("Shift", sh), ("Super", w)) if v == "1"]
+            k = C_KEYS.get(key, key)
+            binds.setdefault(act, "+".join(mods + [k[:1].upper() + k[1:] if len(k) > 1 else k.upper()]))
+        for m in C_DESC.finditer(text):
+            desc.setdefault(m.group(1), m.group(2))
+    if len(binds) < 5 or sum(1 for a in binds if a in desc) < 3:
+        return []
+    menus = {}
+    for act, keys in binds.items():
+        if act not in desc:
+            continue
+        title = next((t for t, words in C_GROUPS if any(w in act.lower().split("_") or act.lower().startswith(w)
+                                                        for w in words)), "Actions")
+        menus.setdefault(title, []).append((desc[act], keys))
+    order = [t for t, _ in C_GROUPS] + ["Actions"]
+    return [(t, menus[t]) for t in order if t in menus]
+
+
 # ---------------------------------------------------------------- driver
 
 PARSERS = [
@@ -507,6 +550,7 @@ PARSERS = [
     ("fltk-fluid", (".fl",), fluid_menus),
     ("fltk-cxx", (".cxx", ".cpp", ".cc", ".h", ".H"), flcxx_menus),
     ("xaml", (".axaml", ".xaml"), xaml_menus),
+    ("c-keytable", (".c",), ckeytable_menus),
     ("winforms", (".cs",), winforms_menus),
 ]
 
