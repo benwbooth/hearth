@@ -302,6 +302,16 @@ POPUP_MENU_NAMES = {"menu", "main menu", "options", "settings", "help", "help & 
                     "more", "tools", "preferences", "app menu", "application menu"}
 
 
+def menu_title(button):
+    """A ☰ button's name as a menu title: without its shortcut ("Main Menu
+    (F10)" -> "Main Menu", "Settings\nCtrl + G" -> "Settings")."""
+    try:
+        n = button_menu_name(button.get_name() or "")
+    except Exception:
+        n = ""
+    return n.title() if n else "Menu"
+
+
 def button_menu_name(name):
     """A button's name without its shortcut ("Settings\nCtrl + G",
     "Main menu (F10)", "Menu Alt+M"), lowercased."""
@@ -925,11 +935,11 @@ class AtspiMenu:
         if self.kind == "burger":
             b = self.burger
             if not b:
-                return [((-2,), (self.trigger.get_name() or "Menu").strip().title(), None)]
+                return [((-2,), menu_title(self.trigger), None)]
             if b.get("toolbar"):
                 return [((-1,), "Actions", None)]
             if b.get("flat"):
-                return [((-1,), (self.trigger.get_name() or "Menu").strip().title(), None)]
+                return [((-1,), menu_title(self.trigger), None)]
             return [((i,), l, None) for i, l in enumerate(b.get("labels", [])) if l]
         res = []
         for i in range(self.mb.get_child_count()):
@@ -1280,7 +1290,7 @@ class AtspiMenu:
         if self.kind == "burger" and self.holds_items(self.trigger):
             # Its items are there while closed: read them, open nothing.
             self.burger = {"flat": True,
-                           "labels": [(self.trigger.get_name() or "Menu").strip().title()]}
+                           "labels": [menu_title(self.trigger)]}
             self.tree_read = True
             self.read(self.trigger, (-1,))
             self.emit()
@@ -1412,7 +1422,7 @@ class AtspiMenu:
         self.cache[(-1,)] = items
         self.tree_read = True
         self.burger = {"flat": True, "drawer": True,
-                       "labels": [(self.trigger.get_name() or "Menu").strip().title()], "exe": self.exe(),
+                       "labels": [menu_title(self.trigger)], "exe": self.exe(),
                        "tree": {"-1": [self.saved(it) for it in items]}}
         c = load_cache()
         c[self.burger_key()] = self.burger
