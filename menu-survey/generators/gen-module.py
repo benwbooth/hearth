@@ -9,6 +9,9 @@ Parsers (each returns [(title, [item | None])], item = (label, keys)):
          `$m add command -label L -accelerator A` (xmaxima, Scid)
   tkinter  Python Tkinter: add_cascade(label=, menu=), add_command(label=,
          accelerator=) (Thonny)
+  xaml   Avalonia/WPF: <Menu><MenuItem Header="_File" InputGesture="Ctrl+O"/>
+         (Ryubing, PixiEditor, SourceGit)
+  winforms  *.Designer.cs: .Text, .ShortcutKeys, DropDownItems.AddRange (KeePass, CKAN)
   fltk   FLUID .fl files (Submenu/MenuItem with `shortcut 0x...`) and C++
          Fl_Menu_Item tables ({"&Open", FL_CTRL+'o', ...}) (ZynAddSubFX)
 
@@ -372,6 +375,130 @@ def flcxx_menus(files):
     return out
 
 
+# ---------------------------------------------------------------- .NET
+
+def xaml_menus(files):
+    """Avalonia/WPF XAML: <Menu> trees of <MenuItem Header="_File"
+    InputGesture="Ctrl+O"/> (or HotKey=). Bound or resource headers
+    ({Binding ...}, {DynamicResource ...}) can't be read and are left out,
+    unless a resource file gives the text (resolve_keys)."""
+    import xml.etree.ElementTree as ET
+    out = []
+
+    def local(tag):
+        return tag.rsplit("}", 1)[-1]
+
+    def header(el):
+        h = el.get("Header") or ""
+        m = re.match(r"\{(?:x:Static\s+\S*?\.|DynamicResource\s+|StaticResource\s+|i18n:Translate\s+)(\w+)\}", h)
+        if m:
+            return m.group(1)  # a resource key: resolve_keys may find its text
+        if h.startswith("{"):
+            # <MenuItem.Header><TextBlock Text="..."/></MenuItem.Header>
+            return ""
+        if not h:
+            for c in el:
+                if local(c.tag) == "MenuItem.Header":
+                    t = next((x.get("Text") for x in c.iter() if x.get("Text")), "")
+                    return "" if t.startswith("{") else t
+        return h.strip()  # "_File": the access key stays until mnemonics()
+
+    def items_of(el, prefix=""):
+        res = []
+        for c in el:
+            t = local(c.tag)
+            if t == "Separator":
+                res.append(None)
+            elif t == "MenuItem":
+                h = header(c)
+                subs = [x for x in c if local(x.tag) in ("MenuItem", "Separator")]
+                if subs:
+                    res += items_of(c, f"{prefix}{h} › " if h else prefix)
+                elif h:
+                    g = c.get("InputGesture") or c.get("HotKey") or c.get("Gesture") or ""
+                    res.append((prefix + h, norm_keys(g) if not g.startswith("{") else ""))
+        return res
+
+    for fn in files:
+        try:
+            root = ET.parse(fn).getroot()
+        except (ET.ParseError, OSError):
+            continue
+        for menu in root.iter():
+            if local(menu.tag) != "Menu":
+                continue
+            for top in menu:
+                if local(top.tag) == "MenuItem" and header(top):
+                    out.append((header(top), items_of(top)))
+    return out
+
+
+WF_KEY = {"Control": "Ctrl", "Alt": "Alt", "Shift": "Shift"}
+
+
+def winforms_menus(files):
+    """WinForms: the designer's `x.Text = "&File";` and
+    `x.DropDownItems.AddRange(new ...[] {a, b})` (menu trees, per file),
+    shortcuts from `x.ShortcutKeys = Keys.Control | Keys.O` or any call
+    passing the item and its keys (KeePass's UIUtil.AssignShortcut(item,
+    Keys.Control | Keys.N)). The largest menu strip wins."""
+    text_of, keys_of, trees = {}, {}, []
+
+    def keys(expr):
+        parts = re.findall(r"Keys\.(\w+)", expr)
+        mods = [WF_KEY[p] for p in parts if p in WF_KEY]
+        ks = [p for p in parts if p not in WF_KEY and p != "None"]
+        if not ks:
+            return ""
+        k = ks[-1]
+        k = k[1:] if re.fullmatch(r"D\d", k) else k
+        return "+".join([x for x in ("Ctrl", "Alt", "Shift") if x in mods] + [k])
+
+    for fn in files:
+        try:
+            src = open(fn, errors="replace").read()
+        except OSError:
+            continue
+        if "Keys." not in src and "ToolStripMenuItem" not in src:
+            continue
+        for m in re.finditer(r"(?:this\.)?(\w+)\.Text\s*=\s*\"((?:[^\"\\]|\\.)*)\"", src):
+            text_of.setdefault(m.group(1), m.group(2))
+        for m in re.finditer(r"(?:this\.)?(\w+)\.ShortcutKeys\s*=\s*([^;]+);", src):
+            keys_of[m.group(1)] = keys(m.group(2))
+        for m in re.finditer(r"\(\s*(?:this\.)?(m?_?\w*[Mm]enu\w*)\s*,\s*((?:\(?\s*Keys\.\w+\s*\)?\s*\|?\s*)+)\)", src):
+            keys_of.setdefault(m.group(1), keys(m.group(2)))
+        kids, strips = {}, []
+        for m in re.finditer(r"(?:this\.)?(\w+)\.(DropDownItems|Items|MenuItems)\.AddRange\(\s*new[^{]*\{([^}]*)\}", src, re.S):
+            kids[m.group(1)] = re.findall(r"(?:this\.)?(\w+)\s*[,\n}]", m.group(3) + ",")
+            if m.group(2) == "Items" and re.search(r"menu", m.group(1), re.I):
+                strips.append(m.group(1))
+        if strips:
+            trees.append((kids, strips))
+
+    def clean(t):
+        return t.replace("&&", "\0").replace("&", "").replace("\0", "&").strip()
+
+    def items_of(kids, name, prefix="", depth=0):
+        res = []
+        for n in kids.get(name, []):
+            t = clean(text_of.get(n, ""))
+            if re.search(r"sep", n, re.I) or t == "-":
+                res.append(None)
+            elif kids.get(n) and depth < 3:
+                res += items_of(kids, n, f"{prefix}{t} › " if t else prefix, depth + 1)
+            elif t:
+                res.append((prefix + t, keys_of.get(n, "")))
+        return res
+
+    best_out = []
+    for kids, strips in trees:
+        for st in strips:
+            out = [(clean(text_of.get(top, "")), items_of(kids, top)) for top in kids.get(st, [])
+                   if clean(text_of.get(top, "")) and kids.get(top)]
+            if sum(len(i) for _, i in out) > sum(len(i) for _, i in best_out):
+                best_out = out
+    return best_out
+
 # ---------------------------------------------------------------- driver
 
 PARSERS = [
@@ -379,6 +506,8 @@ PARSERS = [
     ("tkinter", (".py",), tkinter_menus),
     ("fltk-fluid", (".fl",), fluid_menus),
     ("fltk-cxx", (".cxx", ".cpp", ".cc", ".h", ".H"), flcxx_menus),
+    ("xaml", (".axaml", ".xaml"), xaml_menus),
+    ("winforms", (".cs",), winforms_menus),
 ]
 
 
@@ -423,7 +552,8 @@ def resolve_keys(menus, root):
     if not keys:
         return menus
     found = {}
-    files = [f for f in sources(root, (".tcl", ".tk", ".py", ".txt", ".lang", ".msg", ".po", ".ini", ".json"))]
+    files = [f for f in sources(root, (".tcl", ".tk", ".py", ".txt", ".lang", ".msg", ".po", ".ini", ".json",
+                                        ".resx", ".axaml", ".xaml"))]
     english = re.compile(r"(english|[/_.-]en([_.-]|$)|[/_.-]C\.)", re.I)
     for f in sorted(files, key=lambda f: 0 if english.search(f) else 1):
         if len(found) == len(keys):
@@ -433,11 +563,47 @@ def resolve_keys(menus, root):
         except OSError:
             continue
         for k in keys - found.keys():
-            m = re.search(r"\b" + re.escape(k) + r"\b\s+[\"{]([^\"}\n]+)[\"}]", text)
+            e = re.escape(k)
+            m = (re.search(r"\b" + e + r"\b\s+[\"{]([^\"}\n]+)[\"}]", text)            # Tcl: Key "Text"
+                 or re.search(r"name=\"" + e + r"\"[^>]*>\s*<value>([^<]+)<", text)   # .resx
+                 or re.search(r"\"" + e + r"\"\s*:\s*\"([^\"\n]+)\"", text)         # JSON
+                 or re.search(r"x:Key=\"" + e + r"\"[^>]*>([^<]+)<", text))           # XAML string
             if m:
                 found[k] = m.group(1).strip()
     fix = lambda l: found.get(l, l)
     return [(fix(t), [None if i is None else (fix(i[0]),) + tuple(i[1:]) for i in its]) for t, its in menus]
+
+
+def mnemonics(menus):
+    """XAML access keys ("_File", "_Open"): Alt and the menu's letter opens
+    it, each level's letter goes down ("Sub › Item"). Items without a
+    shortcut get that as their keys; underscores leave the labels."""
+    def letter(seg):
+        m = re.search(r"(?<!_)_([A-Za-z0-9])", seg)
+        return m.group(1) if m else ""
+
+    def clean(seg):
+        return seg.replace("__", "\0").replace("_", "").replace("\0", "_")
+
+    out = []
+    for title, its in menus:
+        ml = letter(title)
+        new, used = [], {}
+        for i in its:
+            if i is None:
+                new.append(None)
+                continue
+            segs = i[0].split(" › ")
+            lets = [letter(x) for x in segs]
+            nav = ""
+            if ml and all(lets):
+                path = " ".join(x.lower() for x in lets)
+                if path not in used:  # the first entry with a letter wins
+                    nav = f"Escape Alt+{ml.upper()} {path}"
+                used[path] = True
+            new.append((" › ".join(clean(x) for x in segs), i[1], nav))
+        out.append((clean(title), new))
+    return out
 
 
 def best(root):
@@ -445,7 +611,7 @@ def best(root):
     res = []
     for name, exts, fn in PARSERS:
         files = list(sources(root, exts))
-        usable = lambda i: i and (i[1] or (len(i) > 2 and i[2]))
+        usable = lambda i: i and (i[1] or (len(i) > 2 and i[2]) or (name == "xaml" and "_" in i[0]))
         menus = [(t, its) for t, its in fn(files) if any(usable(i) for i in its)]
         n = sum(1 for _, its in menus for i in its if usable(i))
         if n:
@@ -512,6 +678,8 @@ def main():
         sys.exit("no menu table with shortcuts found")
     n, parser, menus, _ = found
     menus = resolve_keys(menus, root)
+    if parser == "xaml":
+        menus = mnemonics(menus)
     mid = a.id or a.nixpkgs or origin
     app_ids = [x for x in a.app_id.split(",") if x] or [mid]
     print(f"{parser}: {n} items in {len(menus)} menus", file=sys.stderr)
