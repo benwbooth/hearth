@@ -579,7 +579,11 @@ def fetch_nixpkgs_src(attr):
 
 def sources(root, exts):
     for d, dirs, files in os.walk(root):
-        dirs[:] = [x for x in dirs if not x.startswith(".") and x not in ("test", "tests", "examples", "doc")]
+        # Not the app's own: tests, docs, and bundled libraries (Giada ships
+        # FLTK, whose FLUID menus would win).
+        dirs[:] = [x for x in dirs if not x.startswith(".") and x.lower() not in (
+            "test", "tests", "examples", "doc", "docs", "vendor", "vendored", "third_party", "thirdparty",
+            "3rdparty", "deps", "external", "extern", "subprojects", "fltk", "ntk", "tk", "submodules")]
         for f in files:
             if f.endswith(exts):
                 yield os.path.join(d, f)
@@ -722,6 +726,10 @@ def main():
         sys.exit("no menu table with shortcuts found")
     n, parser, menus, _ = found
     menus = resolve_keys(menus, root)
+    # Several windows' menu bars: the first of each title (the main window
+    # usually comes first in the sources).
+    seen_t = set()
+    menus = [(t, its) for t, its in menus if not (t in seen_t or seen_t.add(t))]
     if parser == "xaml":
         menus = mnemonics(menus)
     mid = a.id or a.nixpkgs or origin
