@@ -1023,8 +1023,20 @@ def probe_flatpak(attr):
     meta = flatpak("info", "--show-metadata", fid).stdout
     talk = sorted(set(re.findall(r"(com\.canonical\.AppMenu\.Registrar|org\.kde\.StatusNotifierWatcher|org\.a11y\.Bus)", meta)))
     argv = ["env", f"FLATPAK_USER_DIR={FLATPAK_DIR}", "flatpak", "run", fid]
+    # A Java app: run it as hearth.globalMenu.javaFlatpaks would (the bridge
+    # folder read-only, JAVA_TOOL_OPTIONS and JDK_JAVA_OPTIONS), so the
+    # survey says which Java Flatpaks work with that override.
+    java_override = False
+    jaw = os.path.realpath(os.path.join(HEARTH_PKG or "/run/current-system/sw", "lib/java-atk-wrapper"))
+    if os.path.isdir(jaw) and (toolkit_of(attr) in ("java-swing", "javafx") or "openjdk" in meta.lower()):
+        opts = (f"-Xbootclasspath/a:{jaw}/java-atk-wrapper.jar"
+                " -Djavax.accessibility.assistive_technologies=org.GNOME.Accessibility.AtkWrapper")
+        argv = argv[:-1] + [f"--filesystem={jaw}:ro", f"--env=JAVA_TOOL_OPTIONS={opts}",
+                            f"--env=JDK_JAVA_OPTIONS={opts}", fid]
+        java_override = True
     rows = []
     r0 = attempt(attr, argv, "session", {}, [])
+    r0["java_override"] = java_override
     r0["hearth"] = HEARTH_PKG or "installed"
     if r0.get("result") != "no-window" and len([m for m in r0.get("menus", []) if not m.endswith(":0")]) < 2 \
             and not (r0.get("inspect") or {}).get("atspi", {}).get("found"):

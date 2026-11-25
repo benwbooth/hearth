@@ -304,6 +304,11 @@ def rebuild():
     for r in out:
         if r["status"] in ("done", "none-needed"):
             r["gap"] = ""  # solved: whatever gap it had is history
+        # Read only with the Java bridge's Flatpak override: these go into
+        # hearth.globalMenu.javaFlatpaks (nix/global-menu.nix).
+        pr = probes.get(r["attr"]) or {}
+        if pr.get("java_override") and r["status"] == "done" and r["solution"].startswith("general:"):
+            r["solution"] += "+java-flatpak"
     with open(TSV, "w") as f:
         f.write("\t".join(COLS) + "\n")
         for r in out:
