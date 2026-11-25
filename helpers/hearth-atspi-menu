@@ -625,6 +625,9 @@ class AtspiMenu:
                     return False
             except Exception:
                 return False
+            # Named like the app's menu and opening one: anywhere in the
+            # window (KFind's and Krename's Help in the bottom button row).
+            return True
         if name in ("...", "…"):
             # Mostly a Browse… button (qt6ct's, a file field's): only one that
             # says it opens a menu counts.
