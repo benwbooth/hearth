@@ -67,4 +67,8 @@ app's own code; ☰ menus read unseen (arbor ProbeWindow), Qt popups by their
 showing event, GTK 4 sliding submenus, Kirigami drawers (open or closed);
 toolbars as an Actions menu; X11 windows read over AT-SPI (Java); the Java
 ATK bridge; appmenu-gtk-module for GTK 2 and GTK 3; menu modules (mpv,
-terminals, COSMIC); the system side as hearth.nixosModules.global-menu.
+terminals, COSMIC); the system side as hearth.nixosModules.global-menu;
+an X11 window's pid from the X server when it sets none (XRes: FLTK, AWT);
+GTK 2 apps on AT-SPI (gail + atk-bridge); games recognized by their own
+desktop Categories (Game with a genre), any toolkit. Survey harness:
+Flatpaks share the portal's runtime dir (Chromium/Electron Flatpaks start).
