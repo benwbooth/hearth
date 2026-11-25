@@ -58,7 +58,8 @@ PanelWindow {
     // banner's delegate (its timer, its animation) survives other changes.
     ListModel { id: model }
     function sync() {
-        const ids = Notifications.banners.map(n => n.id);
+        // (A notification gone meanwhile is null here: no card for it.)
+        const ids = Notifications.banners.filter(n => !!n).map(n => n.id);
         for (let i = model.count - 1; i >= 0; i--)
             if (ids.indexOf(model.get(i).nid) < 0) { model.remove(i); hold.restart(); }
         for (let j = 0; j < ids.length; j++) {
@@ -112,10 +113,14 @@ PanelWindow {
         delegate: NotificationCard {
             id: banner
             required property int nid
-            n: Notifications.byId(nid)
+            // The object itself, from the banner list: looked up in the
+            // server's list instead, a banner that came before the list
+            // had it (or outlived it) was a blank card with a bell.
+            n: Notifications.banners.find(x => !!x && x.id === nid) || Notifications.byId(nid)
             inBanner: true
             width: Theme.notificationWidth
-            height: fullHeight
+            visible: !!n
+            height: n ? fullHeight : 0
             closeTip: "Clear this notification (it won't stay in Notification Center)"
 
             onClicked: if (Math.abs(dragX.x) < 4) Notifications.activate(n)

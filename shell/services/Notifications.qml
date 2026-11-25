@@ -121,7 +121,7 @@ Singleton {
             if (n.transient) n.expire();
             return;
         }
-        const b = banners.filter(x => x !== n);
+        const b = banners.filter(x => !!x && x !== n);
         b.unshift(n);
         // At most four at once; the oldest drop into Notification Center.
         while (b.length > 4) {
@@ -135,7 +135,7 @@ Singleton {
     signal bannerShown(var n)
     function hideBanner(n) {
         if (banners.indexOf(n) < 0) return;
-        banners = banners.filter(x => x !== n);
+        banners = banners.filter(x => !!x && x !== n);
         if (n && n.transient && n.tracked) n.expire();
     }
 
