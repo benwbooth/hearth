@@ -1063,7 +1063,7 @@ def sandboxed(argv):
     xnum = env.get("DISPLAY", ":").lstrip(":").split(".")[0]
     home = os.path.expanduser("~")
     args = ["bwrap", "--dev-bind", "/", "/", "--tmpfs", home, "--tmpfs", os.environ["XDG_RUNTIME_DIR"],
-            "--bind", RIGDIR, RIGDIR, "--tmpfs", "/tmp", "--unshare-net", "--unshare-ipc", "--die-with-parent"]
+            "--bind", RIGDIR, RIGDIR, "--tmpfs", "/tmp", "--unshare-net", "--die-with-parent"]  # IPC shared: X's MIT-SHM needs it (RustDesk)
     for sock in (wl, wl + ".lock"):
         if os.path.exists(sock):
             args += ["--bind", sock, sock]

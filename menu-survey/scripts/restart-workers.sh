@@ -3,7 +3,7 @@
 # every app that isn't a full menu bar yet (the engine changed since).
 set -u
 cd "$(dirname "$0")/.."
-systemctl --user stop hearth-menu-probe-w0 hearth-menu-probe-w1 hearth-menu-probe-w2 hearth-menu-probe-w3 hearth-menu-probe-w4 2>/dev/null
+systemctl --user stop hearth-menu-probe-w0 hearth-menu-probe-w1 hearth-menu-probe-w2 hearth-menu-probe-w3 hearth-menu-probe-w4 hearth-menu-probe-w5 2>/dev/null
 sleep 4
 [ "${NOREQUEUE:-}" ] || python3 -I - <<'PY'
 import glob, json
@@ -20,7 +20,7 @@ for fn in glob.glob("data/probe*.jsonl"):
     open(fn, "w").write("".join(json.dumps(r) + "\n" for r in keep))
 print(n, "requeued")
 PY
-for d in "" 1 2 3 4; do MENU_RIG_DIR=$XDG_RUNTIME_DIR/menu-rig-survey$d scripts/menu-rig.sh stop 2>/dev/null; done
+for d in "" 1 2 3 4 5; do MENU_RIG_DIR=$XDG_RUNTIME_DIR/menu-rig-survey$d scripts/menu-rig.sh stop 2>/dev/null; done
 start() { u=$1; W=$2; shift 2
   for i in $(seq 30); do systemctl --user list-units --all --plain --no-legend "hearth-menu-probe-$u.service" | grep -q . || break; sleep 2; done
   systemd-run --user --quiet --unit=hearth-menu-probe-$u --collect -p Nice=5 -p CPUWeight=50 -p MemoryMax=24G \
@@ -34,4 +34,6 @@ start w2 2 --sources flathub,nixpkgs-uncached --stride 2 --offset 0
 start w3 3 --sources flathub,nixpkgs-uncached --stride 2 --offset 1
 # Apps installed on this machine (installed_apps.py): run from Ben's own copies.
 start w4 4 --sources installed
+# AppImages from AppImageHub and AM (fetch_appimages.py), sandboxed (Ben's OK, 2026-11-24).
+start w5 5 --sources appimage
 systemctl --user list-units 'hearth-menu-probe-*' --no-pager --plain --no-legend | awk '{print $1,$3,$4}'
