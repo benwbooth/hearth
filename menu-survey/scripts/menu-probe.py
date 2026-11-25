@@ -1023,7 +1023,88 @@ def store_delete(outs):
         sh(["nix", "store", "delete", "--recursive", "--skip-alive", *outs], timeout=900)
 
 
+APPIMAGE_DIR = "/var/tmp/menu-rig-" + os.environ.get("USER", "ben") + "/appimages"  # on disk, never /run/user
+APPIMAGES = {}
+
+
+def appimage_url(how):
+    """The x86_64 AppImage to download: a direct URL, or the newest GitHub
+    release that has one."""
+    if how.get("url"):
+        return how["url"]
+    repo = how.get("repo")
+    if not repo:
+        return ""
+    r = subprocess.run(["gh", "api", f"repos/{repo}/releases?per_page=8"], capture_output=True, text=True, timeout=60)
+    try:
+        rels = json.loads(r.stdout)
+    except ValueError:
+        return ""
+    bad = re.compile(r"(aarch64|arm64|armhf|armv7|i[3-6]86|\.zsync$)", re.I)
+    for rel in rels if isinstance(rels, list) else []:
+        assets = [a for a in rel.get("assets") or [] if a.get("name", "").lower().endswith(".appimage")
+                  and not bad.search(a["name"])]
+        assets.sort(key=lambda a: (not re.search(r"x86_64|amd64|x64", a["name"], re.I), a["name"]))
+        if assets:
+            return assets[0]["browser_download_url"]
+    return ""
+
+
+def sandboxed(argv):
+    """Run an untrusted program (a downloaded AppImage) in bubblewrap: your
+    home and the real session's sockets hidden (/run/user, /tmp), only the
+    rig's bus, display and a11y sockets passed in, no network (an abstract
+    X11 socket would reach the real X server otherwise)."""
+    env = {}
+    for l in open(os.path.join(RIGDIR, "arbor.env")):
+        k, _, v = l.rstrip("\n").partition("=")
+        env[k] = v
+    wl = os.path.join(os.environ["XDG_RUNTIME_DIR"], env.get("WAYLAND_DISPLAY", ""))
+    xnum = env.get("DISPLAY", ":").lstrip(":").split(".")[0]
+    home = os.path.expanduser("~")
+    args = ["bwrap", "--dev-bind", "/", "/", "--tmpfs", home, "--tmpfs", os.environ["XDG_RUNTIME_DIR"],
+            "--bind", RIGDIR, RIGDIR, "--tmpfs", "/tmp", "--unshare-net", "--unshare-ipc", "--die-with-parent"]
+    for sock in (wl, wl + ".lock"):
+        if os.path.exists(sock):
+            args += ["--bind", sock, sock]
+    if xnum and os.path.exists(f"/tmp/.X11-unix/X{xnum}"):
+        args += ["--bind", f"/tmp/.X11-unix/X{xnum}", f"/tmp/.X11-unix/X{xnum}"]
+    return args + ["--"] + argv
+
+
+def probe_appimage(attr):
+    how = APPIMAGES.get(attr) or {}
+    url = appimage_url(how)
+    if not url:
+        return [dict(attr=attr, variant="build", result="not-prebuilt", error="no x86_64 AppImage found")]
+    os.makedirs(APPIMAGE_DIR, exist_ok=True)
+    fn = os.path.join(APPIMAGE_DIR, re.sub(r"[^A-Za-z0-9_.+-]", "_", attr) + ".AppImage")
+    r = subprocess.run(["curl", "-sfL", "--max-filesize", str(2 * 1024 ** 3), "-o", fn, url],
+                       capture_output=True, text=True, timeout=1800)
+    try:
+        if r.returncode or not os.path.exists(fn):
+            return [dict(attr=attr, variant="build", result="install-failed", error=f"download: {url} {r.stderr[-200:]}")]
+        os.chmod(fn, 0o755)
+        argv = sandboxed(["/run/current-system/sw/bin/appimage-run", fn])
+        rows = [attempt(attr, argv, "session", {}, [])]
+        r0 = rows[0]
+        r0.update(hearth=HEARTH_PKG or "installed", appimage=url, sandboxed=True)
+        if r0.get("result") != "no-window" and not (r0.get("inspect") or {}).get("atspi", {}).get("found"):
+            r0["inspect"] = r0.get("inspect") or inspect(r0.get("window"))
+        late_check(rows)
+        rows[-1]["shot"] = shot(attr)
+        cleanup()
+        return rows
+    finally:
+        try:
+            os.unlink(fn)
+        except OSError:
+            pass
+
+
 def probe(attr):
+    if attr.startswith("appimage:"):
+        return probe_appimage(attr)
     if attr.startswith("installed:"):
         return probe_installed(attr)
     if attr.startswith("flathub:"):
@@ -1136,7 +1217,8 @@ LOCAL = os.path.join(ROOT, "data", "local")  # this machine's installed apps (gi
 
 
 def app_rows():
-    for fn in (os.path.join(ROOT, "data", "apps.tsv"), os.path.join(LOCAL, "installed_apps.tsv")):
+    for fn in (os.path.join(ROOT, "data", "apps.tsv"), os.path.join(LOCAL, "installed_apps.tsv"),
+               os.path.join(ROOT, "data", "appimages_apps.tsv")):
         try:
             with open(fn) as f:
                 hdr = f.readline().rstrip("\n").split("\t")
@@ -1176,6 +1258,10 @@ def main():
     if a.attrs:
         for r in app_rows():
             APPS[r["attr"]] = r
+    try:
+        APPIMAGES.update(json.load(open(os.path.join(ROOT, "data", "appimages.json"))))
+    except (OSError, ValueError):
+        pass
     try:
         with open(os.path.join(LOCAL, "installed_exec.tsv")) as f:
             for line in f:
