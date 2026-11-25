@@ -86,7 +86,9 @@ MouseArea {
     onPressed: mouse => { ShellState.pressedIn(task); pressPos = Qt.point(mouse.x, mouse.y); dragging = false; previewShow.stop(); }
     onPositionChanged: mouse => {
         // Moving over the icon restarts the rest timer (dock thumbnails).
-        if (task.dock && task.pointed && !preview.visible && !task.pressed) previewShow.restart();
+        // (Not restarted on every move: a hand that isn't perfectly still
+        // never saw its previews.)
+        if (task.dock && task.pointed && !preview.visible && !task.pressed && !previewShow.running) previewShow.begin();
         if (!task.dragHost || !task.pressed || !(task.pressedButtons & Qt.LeftButton)) return;
         const p = task.mapToItem(null, mouse.x, mouse.y);
         if (!task.dragging) {
@@ -268,6 +270,16 @@ MouseArea {
         anchor.margins.left: task.edge === "left" ? gap : task.edge === "right" ? -gap : 0
         color: "transparent"
         visible: false
+        onVisibleChanged: if (task.dock) {
+            ShellState.dockPreviews += visible ? 1 : -1;
+            if (visible) {
+                // The previous app's previews go at once.
+                const prev = ShellState.dockPreview;
+                if (prev && prev !== preview && prev.visible) prev.visible = false;
+                ShellState.dockPreview = preview;
+            } else ShellState.dockPreviewWarmUntil = Date.now() + 500;
+        }
+        Component.onDestruction: if (task.dock && visible) ShellState.dockPreviews -= 1
         implicitWidth: previewFrame.implicitWidth + 2 * pad
         implicitHeight: previewFrame.implicitHeight + 2 * pad
         mask: Region { item: previewFrame }
@@ -275,10 +287,15 @@ MouseArea {
         Timer {
             id: previewShow
             // In the dock the name label is drawn by the dock itself; window
-            // thumbnails only open after the pointer rests on a running app
-            // (restarted on every move), so sweeping across icons never pops
-            // windows in and out.
-            interval: task.dock ? 900 : 450
+            // thumbnails open 150 ms after the pointer reaches a running app
+            // (sweeping across icons doesn't pop windows in and out), and at
+            // once while another app's are open or just were.
+            interval: task.dock ? 150 : 450
+            function begin() {
+                interval = !task.dock ? 450
+                    : (ShellState.dockPreviews > 0 || Date.now() < ShellState.dockPreviewWarmUntil) ? 0 : 150;
+                restart();
+            }
             onTriggered: preview.visible = ((task.pointed && task.hostHovered) || previewHover.hovered)
                                            && !(task.dock && !task.running)
                                            && !menu.open && !task.dragging && !task.pressed
@@ -385,7 +402,7 @@ MouseArea {
     }
 
     onPointedChanged: {
-        if (pointed) { previewHide.stop(); previewShow.restart(); }
+        if (pointed) { previewHide.stop(); previewShow.begin(); }
         else { previewShow.stop(); previewHide.restart(); }
     }
 

@@ -8,6 +8,8 @@ import "../.."
 // how new windows open.
 ColumnLayout {
     id: pane
+    // The app list for the pickers is built only while this pane shows.
+    Binding { target: WindowRules; property: "choicesWanted"; value: pane.visible }
     spacing: 14
 
     Label {

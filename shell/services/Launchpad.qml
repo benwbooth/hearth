@@ -49,16 +49,35 @@ Singleton {
     }
 
     // Every app to show: [{ key, entry, name, icon, section }], by name.
-    readonly property var apps: {
+    // Rebuilt only when the apps really change: Quickshell reports its
+    // application list as changed several times a second with nothing new,
+    // and rebuilding this (and the grid, the Dock's groups... after it) each
+    // time kept the shell's main thread busy: the Dock stuttered, even at
+    // low load. Checked at most every 300 ms, against a signature.
+    property var apps: []
+    property string appsSig: ""
+    function rebuildApps() {
         const seen = new Set();
-        const out = [];
+        const keep = [];
+        const sig = [];
         for (const e of DesktopEntries.applications.values) {
             if (e.noDisplay || seen.has(e.id) || !e.name) continue;
             seen.add(e.id);
-            out.push({ key: e.id, entry: e, name: e.name, icon: e.icon || "application-x-executable", section: sectionOf(e).id });
+            keep.push(e);
+            sig.push(e.id + "\u0001" + e.name + "\u0001" + (e.icon || "") + "\u0001" + (e.categories || []).join(";"));
         }
-        return out.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+        const s = sig.sort().join("\u0002");
+        if (s === appsSig) return;
+        appsSig = s;
+        const out = keep.map(e => ({ key: e.id, entry: e, name: e.name, icon: e.icon || "application-x-executable", section: sectionOf(e).id }));
+        apps = out.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
     }
+    Connections {
+        target: DesktopEntries.applications
+        function onValuesChanged() { if (!appsTimer.running) appsTimer.start(); }
+    }
+    Timer { id: appsTimer; interval: 300; onTriggered: root.rebuildApps() }
+    Component.onCompleted: rebuildApps()
 
     // Collapse or expand a section (remembered in settings).
     function toggleSection(id) {

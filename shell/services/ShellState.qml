@@ -13,6 +13,11 @@ Singleton {
     // next one shows at once (moving along the bar, like macOS).
     property var tooltip: null
     property real tooltipWarmUntil: 0
+    // Dock window previews (bar/TaskButton.qml): one is open, or was a
+    // moment ago, so the next app's opens at once.
+    property int dockPreviews: 0
+    property var dockPreview: null
+    property real dockPreviewWarmUntil: 0
     // A press on a bar/dock button: close the open popup unless it belongs
     // to that button (whose own click toggles it). The popups' focus grab
     // lets clicks through to their bar, so without this a menu stayed open

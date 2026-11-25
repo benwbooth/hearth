@@ -39,8 +39,12 @@ Singleton {
         Settings.set("windowRules", l);
     }
 
-    // Apps to pick from: running ones first, then installed ones.
+    // Apps to pick from: running ones first, then installed ones. Built only
+    // while the Window Rules pane shows (it re-ran on every window and app
+    // list change, on the shell's main thread).
+    property bool choicesWanted: false
     readonly property var appChoices: {
+        if (!choicesWanted) return [];
         const seen = new Set();
         const out = [];
         const entries = DesktopEntries.applications.values;
