@@ -125,6 +125,15 @@ window-rule {
 // hearth's glass: blur behind the menu bar, menus, popups and notifications
 // (installed next to this file).
 include "hearth-layer-rules.kdl"
+// How much arbor blurs behind glass: lightly, like the glass of hearth's Qt
+// apps' menus (MacMenuStyle), where what's behind stays faintly legible.
+// arbor's default (3 passes, offset 3) smeared it to a flat colour that read
+// as opaque.
+blur {
+    passes 1
+    offset 2
+}
+
 // Frosted glass behind every app's popups (GTK 3/4 menus and popovers,
 // Chromium/Electron menus) that don't ask for blur themselves. GTK menus are
 // drawn translucent for it (hearth-color-scheme's gtk.css block, 14 px
