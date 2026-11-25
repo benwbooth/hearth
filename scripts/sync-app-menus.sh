@@ -10,7 +10,7 @@
 #   scripts/sync-app-menus.sh --check    # list copies that differ (exit 1 if any)
 #   scripts/sync-app-menus.sh APP...     # only these apps (folders under ~/src)
 #
-# Apps that list their QML files in build.rs also need each file listed
+# Apps that list their QML files in build.rs (literal "qml/X.qml" paths) also need each file listed
 # there; --check reports missing ones.
 set -euo pipefail
 here=$(cd "$(dirname "$0")/.." && pwd)
@@ -19,7 +19,7 @@ root=${APPS_ROOT:-$HOME/src}
 check=0
 [[ ${1:-} == --check ]] && { check=1; shift; }
 apps=("$@")
-[[ ${#apps[@]} -gt 0 ]] || apps=(almanac canopy earshot grove Kog sheaf tessera treetop)
+[[ ${#apps[@]} -gt 0 ]] || apps=(almanac canopy earshot grove Kog nixos-update-checker sheaf tessera treetop)
 status=0
 for app in "${apps[@]}"; do
   dst=$root/$app/qml
@@ -33,7 +33,7 @@ for app in "${apps[@]}"; do
     fi
     # Explicit build.rs lists (almanac, earshot, Kog, tessera, treetop).
     br=$root/$app/build.rs
-    if [[ -f $br ]] && grep -q '"qml/AppMenu.qml"' "$br" && ! grep -q "\"qml/$name\"" "$br"; then
+    if [[ -f $br ]] && grep -q '"qml/[A-Za-z]*\.qml"' "$br" && ! grep -q "\"qml/$name\"" "$br"; then
       echo "$app: build.rs doesn't list qml/$name" >&2; status=1
     fi
   done
