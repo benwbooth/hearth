@@ -16,6 +16,10 @@ including Auto's 7:00/19:00 switch), so the whole desktop follows:
   block (between hearth's markers) that draws menus as hearth's apps do
   (shared/app-menus/MacMenuStyle.qml): Chromium and Electron take their menu
   colours from it too.
+- Qt 5/6 apps outside Plasma (QT_QPA_PLATFORMTHEME=qt5ct, set in the NixOS
+  config): ~/.config/qt{5,6}ct/qt{5,6}ct.conf and a "hearth" colour scheme,
+  hearth's own palette and accent (shell/Theme.qml), Breeze icons, Inter and
+  the Fusion style. Running Qt apps reload them when they change.
 
 Only what differs is written; with nothing to change it does nothing.
 Prints one JSON line: {"changed": [...]}.
@@ -350,6 +354,74 @@ window-rule {{
     changed.append("arbor-popups.kdl")
 
 
+def qt_palette():
+    """The QPalette roles (WindowText, Button, Light, Midlight, Dark, Mid,
+    Text, BrightText, ButtonText, Base, Window, Shadow, Highlight,
+    HighlightedText, Link, LinkVisited, AlternateBase, NoRole, ToolTipBase,
+    ToolTipText, PlaceholderText, Accent) for active, inactive and disabled,
+    from hearth's Theme.qml colours."""
+    accent = (ACCENT or ("#0a84ff" if DARK else "#007aff")).lower()
+    if accent == "#007aff" and DARK:
+        accent = "#0a84ff"
+    if DARK:
+        fg, dim, window, base, alt, button = "#fcfcfc", "#a1a9b1", "#202326", "#1a1c1f", "#26292d", "#31363b"
+        light, midlight, dark_, mid, shadow, tip = "#4a5058", "#3f444a", "#141618", "#2a2e32", "#000000", "#31363b"
+        off = "#6e747a"
+    else:
+        fg, dim, window, base, alt, button = "#232629", "#6e7882", "#eff0f1", "#ffffff", "#f7f7f8", "#fcfcfc"
+        light, midlight, dark_, mid, shadow, tip = "#ffffff", "#f3f3f4", "#a0a5aa", "#c9ced3", "#474a4c", "#fcfcfc"
+        off = "#a0a5aa"
+    visited = "#a550a7"
+    active = [fg, button, light, midlight, dark_, mid, fg, "#ffffff", fg, base, window, shadow,
+              accent, "#ffffff", accent, visited, alt, "#000000", tip, fg, dim, accent]
+    disabled = list(active)
+    for i in (0, 6, 8, 19):           # the texts
+        disabled[i] = off
+    disabled[12] = mid                # no accent selection on disabled widgets
+    disabled[20] = off
+    return active, list(active), disabled
+
+
+def apply_qtct():
+    """qt5ct/qt6ct: the look, and the "hearth" colour scheme."""
+    active, inactive, disabled = qt_palette()
+    scheme = ("[ColorScheme]\n"
+              f"active_colors={', '.join(active)}\n"
+              f"disabled_colors={', '.join(disabled)}\n"
+              f"inactive_colors={', '.join(inactive)}\n")
+    for ct, font, mono in (("qt5ct", "Inter,10,-1,5,50,0,0,0,0,0", "Monospace,10,-1,5,50,0,0,0,0,0"),
+                           ("qt6ct", "Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1", "Monospace,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1")):
+        base = os.path.join(CONFIG, ct)
+        colors = os.path.join(base, "colors", "hearth.conf")
+        conf = ("[Appearance]\n"
+                f"color_scheme_path={colors}\n"
+                "custom_palette=true\n"
+                f"icon_theme={ICONS}\n"
+                "standard_dialogs=default\n"
+                "style=Fusion\n\n"
+                "[Fonts]\n"
+                f"fixed=\"{mono}\"\n"
+                f"general=\"{font}\"\n\n"
+                "[Interface]\n"
+                "activate_item_on_single_click=1\n"
+                "buttonbox_layout=0\n"
+                "dialog_buttons_have_icons=0\n"
+                "menus_have_icons=true\n"
+                "show_shortcuts_in_context_menus=true\n"
+                "toolbutton_style=4\n"
+                "underline_shortcut=1\n"
+                "wheel_scroll_lines=3\n")
+        for path, text in ((colors, scheme), (os.path.join(base, ct + ".conf"), conf)):
+            try:
+                with open(path) as f:
+                    if f.read() == text:
+                        continue
+            except OSError:
+                pass
+            write_atomic(path, text)
+            changed.append(os.path.relpath(path, CONFIG))
+
+
 def apply_gsettings():
     """GSettings keys GTK and the GTK portal read, written straight to dconf
     (as services/Mouse.qml does): no schemas needed, which hearth's
@@ -401,5 +473,6 @@ if apply_kdeglobals():
 apply_settings_ini()
 apply_menu_css()
 apply_arbor_popups()
+apply_qtct()
 apply_gsettings()
 print(json.dumps({"mode": MODE, "changed": changed}))
