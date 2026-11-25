@@ -30,8 +30,8 @@ start() { u=$1; W=$2; shift 2
 # Two on nixpkgs, two on Flathub (Flathub has as many apps left and each
 # takes longer: install, first-run screens).
 start w0 "" --stride 2 --offset 0; start w1 1 --stride 2 --offset 1
-start w2 2 --sources flathub,nixpkgs-uncached --stride 2 --offset 0
-start w3 3 --sources flathub,nixpkgs-uncached --stride 2 --offset 1
+start w2 2 --sources flathub,nixpkgs-uncached,nixpkgs-unfree --stride 2 --offset 0
+start w3 3 --sources flathub,nixpkgs-uncached,nixpkgs-unfree --stride 2 --offset 1
 # Apps installed on this machine (installed_apps.py): run from Ben's own copies.
 start w4 4 --sources installed
 # AppImages from AppImageHub and AM (fetch_appimages.py), sandboxed (Ben's OK, 2026-11-24).

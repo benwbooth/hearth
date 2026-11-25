@@ -48,6 +48,21 @@ COLS = ["rank", "attr", "source", "toolkit", "pop", "measured", "route", "soluti
 AUTO = {"", "todo", "retest", "partial", "none-needed", "blocked"}  # statuses the measurements may overwrite
 
 
+def load_build_errors():
+    """Latest build/exec row's error per app (why it wasn't run)."""
+    import glob, json
+    errs = {}
+    for fn in sorted(glob.glob(os.path.join(ROOT, "data", "probe*.jsonl"))):
+        for l in open(fn):
+            try:
+                j = json.loads(l)
+            except ValueError:
+                continue
+            if j.get("variant") in ("build", "exec"):
+                errs[j["attr"]] = j.get("error") or ""
+    return errs
+
+
 def load_probes():
     """Latest session row per app from data/probe*.jsonl (with inspect)."""
     import glob, json
@@ -249,11 +264,15 @@ def machine_row(r):
     elif today == "tray-only":
         # No window, a tray icon: its menu is the tray icon's.
         status, solution = "none-needed", "none-needed:tray"
+    elif r["skipped"] in ("not-prebuilt", "install-failed") and today == "untested":
+        # Nothing to run without building it (unfree or uncached, no Flathub
+        # copy), or the download failed: blocked, not waiting.
+        status, solution = "blocked", "todo"
     else:
         status, solution = "retest", "todo"
     return {"rank": r["rank"], "attr": r["attr"], "source": r["source"], "toolkit": r["toolkit"] or "",
             "pop": f"{r['pop']:.3f}", "measured": today, "route": r["route_today"] or "",
-            "solution": solution, "status": status, "gap": "",
+            "solution": solution, "status": status, "gap": "", "skipped": r["skipped"] or "",
             "checked": time.strftime("%Y-%m-%d") if today in ("full", "burger", "none") else "", "notes": ""}
 
 
@@ -262,10 +281,21 @@ def rebuild():
     db.row_factory = sqlite3.Row
     rows = [machine_row(r) for r in db.execute("select * from results order by rank")]
     probes = load_probes()
+    berrs = load_build_errors()
     cats = app_categories()
     for r in rows:
         if r["status"] != "done":
             r["gap"] = gap_of(r["measured"], r["toolkit"], probes.get(r["attr"]))
+            if r["status"] == "blocked" and not r["gap"]:
+                e = berrs.get(r["attr"], "")
+                if re.search(r"does not provide attribute|Did you mean|has been removed|is not a list", e):
+                    r["gap"] = "blocked:not-in-nixpkgs"  # renamed or removed since the app list
+                elif re.search(r"max-jobs|/nix/store/\S+$|will be built|unfree", e) or not e:
+                    r["gap"] = "blocked:" + (r.get("skipped") or "not-prebuilt")
+                else:
+                    # Evaluating /etc/nixos failed at that moment (a config
+                    # mid-edit): the harness's, not the app's. Measure again.
+                    r["status"], r["gap"] = "retest", ""
             if r["gap"] == "no-a11y:sdl-glfw" or (r["gap"].startswith(("no-a11y:", "flatpak-no-a11y"))
                                                   and is_game(cats.get(r["attr"], set()))):
                 # Games (SDL/GLFW/own engine, or Categories=Game with no a11y): their menus are
@@ -407,6 +437,9 @@ GAP_NOTES = {
     "blocked:needs-root": "Runs as root (pkexec): outside your session's buses; keys still reach it (modules)",
     "blocked:needs-other-desktop": "Refuses to run outside its desktop (KWin, GNOME Shell)",
     "blocked:gnome-only": "Refuses to run outside GNOME",
+    "blocked:not-in-nixpkgs": "Renamed or removed from nixpkgs since the app list was made: dropped, or measured through its Flathub copy",
+    "blocked:not-prebuilt": "Unfree or not in the binary cache, and no Flathub copy: testing it means building it (Ben: prebuilt only)",
+    "blocked:install-failed": "Its download or install failed",
     "kirigami-no-menu": "Kirigami/Qt Quick with nothing read: page actions route, retest",
     "atspi-menubar-not-read": "A menu bar on AT-SPI the reader missed: reader bug to look at",
     "mpris-not-shown": "Has MPRIS but no menu shown: reader bug to look at",

@@ -1196,9 +1196,7 @@ def probe(attr):
     src = APPS.get(attr, {}).get("source", "nixpkgs")
     # Not in the binary cache (uncached free, and every unfree package): its
     # Flathub copy instead (a download, never a build), else skipped.
-    if src == "nixpkgs-unfree":
-        return [dict(attr=attr, variant="build", result="not-prebuilt", error="unfree: never in the binary cache")]
-    if src == "nixpkgs-uncached":
+    if src in ("nixpkgs-unfree", "nixpkgs-uncached"):
         fid = APPS[attr].get("flathub")
         if not fid:
             return [dict(attr=attr, variant="build", result="not-prebuilt")]
@@ -1207,6 +1205,13 @@ def probe(attr):
             r["attr"], r["via_flathub"] = attr, fid
         return rows
     outs, err = nix_build(attr, unfree=(src == "nixpkgs-unfree"), timeout=1800 if src == "nixpkgs-unfree" else 900)
+    fid = APPS.get(attr, {}).get("flathub")
+    if not outs and fid and re.search(r"max-jobs|will be built|does not provide|Did you mean|has been removed", err or ""):
+        # Not in the binary cache (or gone from nixpkgs): its Flathub copy.
+        rows = probe_flatpak("flathub:" + fid)
+        for r in rows:
+            r["attr"], r["via_flathub"] = attr, fid
+        return rows
     try:
         return probe_store(attr, outs, err)
     finally:
