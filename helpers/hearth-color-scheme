@@ -16,6 +16,9 @@ including Auto's 7:00/19:00 switch), so the whole desktop follows:
   block (between hearth's markers) that draws menus as hearth's apps do
   (shared/app-menus/MacMenuStyle.qml): Chromium and Electron take their menu
   colours from it too.
+- GTK 2 apps (gftp...): ~/.gtkrc-2.0, Adwaita (gnome-themes-extra) with
+  hearth's palette, accent and menu colour as its gtk-color-scheme, Breeze
+  icons, Inter; lines it doesn't set are kept.
 - Qt 5/6 apps outside Plasma (QT_QPA_PLATFORMTHEME=qt5ct, set in the NixOS
   config): ~/.config/qt{5,6}ct/qt{5,6}ct.conf and a "hearth" colour scheme,
   hearth's own palette and accent (shell/Theme.qml), Breeze icons, Inter and
@@ -422,6 +425,74 @@ def apply_qtct():
             changed.append(os.path.relpath(path, CONFIG))
 
 
+GTKRC_BEGIN = "# hearth: begin (written by hearth-color-scheme; edits here are replaced)"
+GTKRC_END = "# hearth: end"
+
+
+def apply_gtkrc2():
+    """~/.gtkrc-2.0: GTK 2's theme, colours, icons and font."""
+    path = os.path.expanduser("~/.gtkrc-2.0")
+    # (Always named: GTK 2 skips a theme that isn't installed and still
+    # takes the colours, and this only runs when the mode changes.)
+    name = "Adwaita-dark" if DARK else "Adwaita"
+    accent = (ACCENT or ("#0a84ff" if DARK else "#007aff")).lower()
+    if accent == "#007aff" and DARK:
+        accent = "#0a84ff"
+    if DARK:
+        c = dict(fg_color="#fcfcfc", bg_color="#202326", base_color="#1a1c1f", text_color="#fcfcfc",
+                 insensitive_fg_color="#6e747a", insensitive_bg_color="#202326", menu_color="#2b2d30",
+                 window_color="#202326", tooltip_fg_color="#fcfcfc", tooltip_bg_color="#31363b")
+    else:
+        c = dict(fg_color="#232629", bg_color="#eff0f1", base_color="#ffffff", text_color="#232629",
+                 insensitive_fg_color="#a0a5aa", insensitive_bg_color="#eff0f1", menu_color="#f9f9fa",
+                 window_color="#eff0f1", tooltip_fg_color="#232629", tooltip_bg_color="#fcfcfc")
+    c.update(selected_fg_color="#ffffff", selected_bg_color=accent, link_color=accent, visited_link_color="#a550a7")
+    scheme = "\\n".join(f"{k}:{v}" for k, v in c.items())
+    # (The cursor GTK 3 has, hearth's choice.)
+    cursor = ""
+    try:
+        for line in open(os.path.join(CONFIG, "gtk-3.0", "settings.ini")):
+            if line.startswith("gtk-cursor-theme-name="):
+                cursor = line.split("=", 1)[1].strip()
+    except OSError:
+        pass
+    want = {
+        "gtk-theme-name": f'"{name}"',
+        "gtk-icon-theme-name": f'"{ICONS}"',
+        "gtk-font-name": '"Inter 10"',
+        "gtk-color-scheme": f'"{scheme}"',
+    }
+    if cursor:
+        want["gtk-cursor-theme-name"] = f'"{cursor}"'
+    # Menu rows highlighted in the accent itself, flat (Adwaita's engine
+    # shades it darker), as in hearth's and the apps' menus.
+    block = (GTKRC_BEGIN + "\n"
+             'style "hearth-menu-item" {\n'
+             "  bg[PRELIGHT] = @selected_bg_color\n"
+             "  bg[SELECTED] = @selected_bg_color\n"
+             "  fg[PRELIGHT] = @selected_fg_color\n"
+             "  text[PRELIGHT] = @selected_fg_color\n"
+             '  engine "pixmap" {}\n'
+             "}\n"
+             'widget_class "*<GtkMenu>*<GtkMenuItem>*" style "hearth-menu-item"\n'
+             + GTKRC_END)
+    try:
+        before = open(path).read()
+    except OSError:
+        before = ""
+    rest = before
+    if GTKRC_BEGIN in rest and GTKRC_END in rest:
+        head, tail = rest.split(GTKRC_BEGIN, 1)
+        rest = head + tail.split(GTKRC_END, 1)[1]
+    kept = [l for l in rest.splitlines() if l.split("=", 1)[0].strip() not in want]
+    while kept and not kept[-1].strip():
+        kept.pop()
+    after = "\n".join(kept + [f"{k}={v}" for k, v in want.items()] + [block]) + "\n"
+    if after != before:
+        write_atomic(path, after)
+        changed.append("~/.gtkrc-2.0")
+
+
 def apply_gsettings():
     """GSettings keys GTK and the GTK portal read, written straight to dconf
     (as services/Mouse.qml does): no schemas needed, which hearth's
@@ -474,5 +545,6 @@ apply_settings_ini()
 apply_menu_css()
 apply_arbor_popups()
 apply_qtct()
+apply_gtkrc2()
 apply_gsettings()
 print(json.dumps({"mode": MODE, "changed": changed}))
