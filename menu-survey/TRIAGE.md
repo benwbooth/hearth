@@ -45,7 +45,7 @@ Wine front ends and game launchers, looked at one by one (2026-11-24):
 | An Anime Game Launcher (and its sister launchers) | GTK 4, readable; the first-run wizard is clicked through (Continue), then it downloads game components, which the offline test rig can't. Its main window gets the general ☰ route |
 | TwinTail Launcher | Tauri (GTK + web view): readable, no menus: none needed |
 | WineZGUI, WineCharm | Start with Wine's own prefix-setup dialog ("Wine"): Wine has no AT-SPI, nothing readable until it closes |
-| PortProton | Its yad (GTK 3) window shows no accessibility tree in the freedesktop runtime: open |
+| PortProton | First start downloads its Wine components (DXVK, VKD3D-Proton) behind a progress window that doesn't register on the accessibility bus; its main window comes after. Like the anime launchers: measurable only after a full first run |
 
 Still impossible: GNOME Settings (refuses to start outside GNOME), Calf
 (needs a JACK server), KDE System Settings and Info Center (Qt Quick in a
