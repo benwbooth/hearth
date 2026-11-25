@@ -90,6 +90,492 @@
   "source": "https://commons.wikimedia.org/wiki/File:Montane_Forest_Screech-Owl_iNaturalist.jpg"
  },
  {
+  "id": "mouse",
+  "category": "Animals",
+  "title": "Mouse",
+  "file": "mouse.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Mouse%20face"
+ },
+ {
+  "id": "hamster",
+  "category": "Animals",
+  "title": "Hamster",
+  "file": "hamster.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Hamster"
+ },
+ {
+  "id": "bear",
+  "category": "Animals",
+  "title": "Bear",
+  "file": "bear.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Bear"
+ },
+ {
+  "id": "polar-bear",
+  "category": "Animals",
+  "title": "Polar Bear",
+  "file": "polar-bear.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Polar%20bear"
+ },
+ {
+  "id": "tiger",
+  "category": "Animals",
+  "title": "Tiger",
+  "file": "tiger.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Tiger%20face"
+ },
+ {
+  "id": "lion",
+  "category": "Animals",
+  "title": "Lion",
+  "file": "lion.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Lion"
+ },
+ {
+  "id": "cow",
+  "category": "Animals",
+  "title": "Cow",
+  "file": "cow.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Cow%20face"
+ },
+ {
+  "id": "pig",
+  "category": "Animals",
+  "title": "Pig",
+  "file": "pig.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Pig%20face"
+ },
+ {
+  "id": "monkey",
+  "category": "Animals",
+  "title": "Monkey",
+  "file": "monkey.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Monkey%20face"
+ },
+ {
+  "id": "horse",
+  "category": "Animals",
+  "title": "Horse",
+  "file": "horse.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Horse%20face"
+ },
+ {
+  "id": "unicorn",
+  "category": "Animals",
+  "title": "Unicorn",
+  "file": "unicorn.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Unicorn"
+ },
+ {
+  "id": "wolf",
+  "category": "Animals",
+  "title": "Wolf",
+  "file": "wolf.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Wolf"
+ },
+ {
+  "id": "raccoon",
+  "category": "Animals",
+  "title": "Raccoon",
+  "file": "raccoon.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Raccoon"
+ },
+ {
+  "id": "hedgehog",
+  "category": "Animals",
+  "title": "Hedgehog",
+  "file": "hedgehog.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Hedgehog"
+ },
+ {
+  "id": "beaver",
+  "category": "Animals",
+  "title": "Beaver",
+  "file": "beaver.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Beaver"
+ },
+ {
+  "id": "otter",
+  "category": "Animals",
+  "title": "Otter",
+  "file": "otter.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Otter"
+ },
+ {
+  "id": "sloth",
+  "category": "Animals",
+  "title": "Sloth",
+  "file": "sloth.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Sloth"
+ },
+ {
+  "id": "badger",
+  "category": "Animals",
+  "title": "Badger",
+  "file": "badger.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Badger"
+ },
+ {
+  "id": "skunk",
+  "category": "Animals",
+  "title": "Skunk",
+  "file": "skunk.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Skunk"
+ },
+ {
+  "id": "kangaroo",
+  "category": "Animals",
+  "title": "Kangaroo",
+  "file": "kangaroo.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Kangaroo"
+ },
+ {
+  "id": "elephant",
+  "category": "Animals",
+  "title": "Elephant",
+  "file": "elephant.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Elephant"
+ },
+ {
+  "id": "hippo",
+  "category": "Animals",
+  "title": "Hippo",
+  "file": "hippo.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Hippopotamus"
+ },
+ {
+  "id": "giraffe",
+  "category": "Animals",
+  "title": "Giraffe",
+  "file": "giraffe.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Giraffe"
+ },
+ {
+  "id": "zebra",
+  "category": "Animals",
+  "title": "Zebra",
+  "file": "zebra.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Zebra"
+ },
+ {
+  "id": "deer",
+  "category": "Animals",
+  "title": "Deer",
+  "file": "deer.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Deer"
+ },
+ {
+  "id": "llama",
+  "category": "Animals",
+  "title": "Llama",
+  "file": "llama.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Llama"
+ },
+ {
+  "id": "bat",
+  "category": "Animals",
+  "title": "Bat",
+  "file": "bat.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Bat"
+ },
+ {
+  "id": "chipmunk",
+  "category": "Animals",
+  "title": "Chipmunk",
+  "file": "chipmunk.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Chipmunk"
+ },
+ {
+  "id": "orangutan",
+  "category": "Animals",
+  "title": "Orangutan",
+  "file": "orangutan.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Orangutan"
+ },
+ {
+  "id": "seal",
+  "category": "Animals",
+  "title": "Seal",
+  "file": "seal.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Seal"
+ },
+ {
+  "id": "dolphin",
+  "category": "Animals",
+  "title": "Dolphin",
+  "file": "dolphin.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Dolphin"
+ },
+ {
+  "id": "whale",
+  "category": "Animals",
+  "title": "Whale",
+  "file": "whale.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Spouting%20whale"
+ },
+ {
+  "id": "moose",
+  "category": "Animals",
+  "title": "Moose",
+  "file": "moose.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Moose"
+ },
+ {
+  "id": "donkey",
+  "category": "Animals",
+  "title": "Donkey",
+  "file": "donkey.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Donkey"
+ },
+ {
+  "id": "mammoth",
+  "category": "Animals",
+  "title": "Mammoth",
+  "file": "mammoth.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Mammoth"
+ },
+ {
+  "id": "sheep",
+  "category": "Animals",
+  "title": "Sheep",
+  "file": "sheep.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Ewe"
+ },
+ {
+  "id": "goat",
+  "category": "Animals",
+  "title": "Goat",
+  "file": "goat.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Goat"
+ },
+ {
+  "id": "black-cat",
+  "category": "Animals",
+  "title": "Black Cat",
+  "file": "black-cat.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Black%20cat"
+ },
+ {
+  "id": "poodle",
+  "category": "Animals",
+  "title": "Poodle",
+  "file": "poodle.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Poodle"
+ },
+ {
+  "id": "bird",
+  "category": "Birds",
+  "title": "Bird",
+  "file": "bird.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Bird"
+ },
+ {
+  "id": "chick",
+  "category": "Birds",
+  "title": "Chick",
+  "file": "chick.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Front-facing%20baby%20chick"
+ },
+ {
+  "id": "hatching-chick",
+  "category": "Birds",
+  "title": "Hatching Chick",
+  "file": "hatching-chick.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Hatching%20chick"
+ },
+ {
+  "id": "duck",
+  "category": "Birds",
+  "title": "Duck",
+  "file": "duck.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Duck"
+ },
+ {
+  "id": "eagle",
+  "category": "Birds",
+  "title": "Eagle",
+  "file": "eagle.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Eagle"
+ },
+ {
+  "id": "parrot",
+  "category": "Birds",
+  "title": "Parrot",
+  "file": "parrot.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Parrot"
+ },
+ {
+  "id": "peacock",
+  "category": "Birds",
+  "title": "Peacock",
+  "file": "peacock.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Peacock"
+ },
+ {
+  "id": "flamingo",
+  "category": "Birds",
+  "title": "Flamingo",
+  "file": "flamingo.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Flamingo"
+ },
+ {
+  "id": "swan",
+  "category": "Birds",
+  "title": "Swan",
+  "file": "swan.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Swan"
+ },
+ {
+  "id": "dodo",
+  "category": "Birds",
+  "title": "Dodo",
+  "file": "dodo.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Dodo"
+ },
+ {
+  "id": "turkey",
+  "category": "Birds",
+  "title": "Turkey",
+  "file": "turkey.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Turkey"
+ },
+ {
+  "id": "dove",
+  "category": "Birds",
+  "title": "Dove",
+  "file": "dove.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Dove"
+ },
+ {
+  "id": "goose",
+  "category": "Birds",
+  "title": "Goose",
+  "file": "goose.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Goose"
+ },
+ {
+  "id": "rooster",
+  "category": "Birds",
+  "title": "Rooster",
+  "file": "rooster.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Rooster"
+ },
+ {
+  "id": "little-owl",
+  "category": "Birds",
+  "title": "Little Owl",
+  "file": "little-owl.png",
+  "author": "Microsoft (Fluent Emoji)",
+  "licence": "MIT",
+  "source": "https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets/Owl"
+ },
+ {
   "id": "lake",
   "category": "Nature",
   "title": "Mountain lake",
