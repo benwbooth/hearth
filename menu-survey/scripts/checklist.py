@@ -146,6 +146,62 @@ def module_attrs():
     return res
 
 
+APPSTREAM = "/var/lib/flatpak/appstream/flathub/x86_64/active/appstream.xml"
+NOT_ONLY_GAME = {"Emulator", "Development", "Utility", "Graphics", "AudioVideo", "Audio", "Video",
+                 "Office", "Education", "Science", "Network", "System", "Settings", "PackageManager",
+                 "Music", "BoardGame", "CardGame", "LogicGame"}
+
+
+def app_categories():
+    """{attr: set of freedesktop Categories}: the app's own desktop files
+    (nix-locate's list for nixpkgs) and Flathub's AppStream (Flathub apps,
+    and nixpkgs apps through their Flathub twin)."""
+    import json
+    import xml.etree.ElementTree as ET
+    by_path = {}
+    try:
+        for l in open(os.path.join(ROOT, "data", "desktop_entries.jsonl")):
+            d = json.loads(l)
+            by_path[d["path"]] = set(c for c in (d.get("Categories") or "").split(";") if c)
+    except OSError:
+        pass
+    cats = {}
+    try:
+        for l in open(os.path.join(ROOT, "data", "raw", "nixlocate_desktop.tsv")):
+            a, _, path = l.rstrip("\n").partition("\t")
+            cats.setdefault(a.removesuffix(".out"), set()).update(by_path.get(path, ()))
+    except OSError:
+        pass
+    flat = {}
+    try:
+        for _, el in ET.iterparse(APPSTREAM):
+            if el.tag == "component":
+                i = el.findtext("id") or ""
+                flat[i.removesuffix(".desktop")] = {c.text for c in el.iter("category") if c.text}
+                el.clear()
+    except (OSError, ET.ParseError):
+        pass
+    with open(os.path.join(ROOT, "data", "apps.tsv")) as f:
+        for r in csv.DictReader(f, delimiter="\t", quoting=csv.QUOTE_NONE):
+            fid = r["attr"].removeprefix("flathub:") if r["attr"].startswith("flathub:") else r.get("flathub") or ""
+            if fid in flat:
+                cats.setdefault(r["attr"], set()).update(flat[fid])
+    return cats
+
+
+# Genres of games played full-window. A bare "Game" is launchers, mod
+# managers and companion tools; board, card and logic games are often
+# ordinary windows with menus (Scid): those keep their measurement.
+GAME_GENRES = {"ActionGame", "AdventureGame", "ArcadeGame", "BlocksGame", "KidsGame", "RolePlaying",
+               "Shooter", "Simulation", "SportsGame", "StrategyGame"}
+
+
+def is_game(cats):
+    """A game by its own Categories: Game with a genre, and nothing that
+    makes it a tool (emulators, editors, launchers keep their measurement)."""
+    return "Game" in cats and bool(cats & GAME_GENRES) and not (cats & NOT_ONLY_GAME)
+
+
 def machine_row(r):
     today = r["today"] or "untested"
     if today == "no-window":
@@ -172,11 +228,13 @@ def rebuild():
     db.row_factory = sqlite3.Row
     rows = [machine_row(r) for r in db.execute("select * from results order by rank")]
     probes = load_probes()
+    cats = app_categories()
     for r in rows:
         if r["status"] != "done":
             r["gap"] = gap_of(r["measured"], r["toolkit"], probes.get(r["attr"]))
-            if r["gap"] == "no-a11y:sdl-glfw":
-                # Games (SDL/GLFW/own engine, no GUI toolkit): their menus are
+            if r["gap"] == "no-a11y:sdl-glfw" or (r["gap"].startswith(("no-a11y:", "flatpak-no-a11y"))
+                                                  and is_game(cats.get(r["attr"], set()))):
+                # Games (SDL/GLFW/own engine, or Categories=Game with no a11y): their menus are
                 # in the game. Ben, 2026-11-23: no global menu needed; the
                 # emulators with Qt/GTK front ends are classified by those.
                 r["status"], r["solution"], r["gap"] = "none-needed", "none-needed:game", ""
