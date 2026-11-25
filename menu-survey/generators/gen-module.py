@@ -7,6 +7,8 @@ source, one parser per toolkit, so every app on that toolkit is covered.
 Parsers (each returns [(title, [item | None])], item = (label, keys)):
   tk     Tcl/Tk: `set m [menu PATH]`, `X add cascade -label L -menu $m`,
          `$m add command -label L -accelerator A` (xmaxima, Scid)
+  tkinter  Python Tkinter: add_cascade(label=, menu=), add_command(label=,
+         accelerator=) (Thonny)
   fltk   FLUID .fl files (Submenu/MenuItem with `shortcut 0x...`) and C++
          Fl_Menu_Item tables ({"&Open", FL_CTRL+'o', ...}) (ZynAddSubFX)
 
@@ -75,8 +77,13 @@ def tk_label(cmd):
 
 
 def tk_menus(files):
-    """Menu bars from Tcl sources, in definition order."""
-    titles, items, order = {}, {}, []
+    """The main menu bar from Tcl sources. Items: (label, accelerator, nav).
+    nav reaches an item without an accelerator through Tk's mnemonics: Alt
+    and the menu's underlined letter posts it (tk::TraverseToMenu), the
+    entry's underlined letter invokes it (tk::TraverseWithinMenu). Only
+    where the source sets -underline on both: counting arrow presses
+    breaks on tearoffs and entries some platforms leave out."""
+    entries, var = {}, {}
     for fn in files:
         try:
             text = open(fn, errors="replace").read()
@@ -98,25 +105,86 @@ def tk_menus(files):
                 continue
             who, kind, rest = m.groups()
             path = var.get(who[1:], who) if who.startswith("$") else who
-            if kind == "cascade":
-                sub = re.search(r"-menu\s+(?:\$(\w+)|\[menu\s+(\S+)|(\.[\w.]+))", rest)
-                if sub:
-                    sp = var.get(sub.group(1)) if sub.group(1) else (sub.group(2) or sub.group(3))
-                    label = tk_label(rest)
-                    if sp and label:
-                        titles[sp] = label
-                        if sp not in order:
-                            order.append(sp)
-                continue
+            es = entries.setdefault(path, [])
             if kind == "separator":
-                items.setdefault(path, []).append(None)
+                es.append(("sep",))
                 continue
             label = tk_label(rest)
+            ul = re.search(r"-underline\s+(\d+)", rest)
+            ul = int(ul.group(1)) if ul else -1
+            if kind == "cascade":
+                sub = re.search(r"-menu\s+(?:\$(\w+)|\[menu\s+(\S+)|(\.[\w.]+))", rest)
+                sp = (var.get(sub.group(1)) if sub.group(1) else (sub.group(2) or sub.group(3))) if sub else None
+                es.append(("cascade", label, sp, ul))
+                continue
             acc = TK_ACCEL.search(rest)
             keys = norm_keys(next((g for g in acc.groups() if g), "")) if acc else ""
+            es.append(("item", label, keys, ul))
+    subs = {e[2] for es in entries.values() for e in es if e[0] == "cascade"}
+    roots = [p for p, es in entries.items() if p not in subs and sum(e[0] == "cascade" for e in es) >= 2]
+    if not roots:
+        return []
+    root = max(roots, key=lambda p: sum(e[0] == "cascade" for e in entries[p]))
+    out = []
+    def letter(label, ul):
+        c = label[ul] if 0 <= ul < len(label) else ""
+        return c.upper() if c.isalnum() else ""
+
+    for e in (x for x in entries[root] if x[0] == "cascade"):
+        _, title, sp, mul = e
+        ml = letter(title, mul)
+        items, seen, used = [], set(), set()
+        for x in entries.get(sp, []):
+            if x[0] == "sep":
+                items.append(None)
+                continue
+            if x[0] == "item" and x[1] and x[1] not in seen:
+                seen.add(x[1])
+                il = letter(x[1], x[3])
+                # Tk invokes the first entry with that letter: a later one
+                # sharing it can't be reached this way.
+                nav = f"Escape Alt+{ml} {il.lower()}" if ml and il and il not in used else ""
+                used.add(il)
+                items.append((x[1], x[2], nav))
+        if title:
+            out.append((title, items))
+    return out
+
+
+def tkinter_menus(files):
+    """Python Tkinter: `m = tk.Menu(bar)`, `bar.add_cascade(label=_("File"),
+    menu=m)`, `m.add_command(label="Open", accelerator="Ctrl+O")`."""
+    titles, items, order = {}, {}, []
+    s = r"(?:_|N_|gettext|tr)?\(?\s*[rbuf]?[\"']([^\"']*)[\"']\s*\)?"
+    for fn in files:
+        try:
+            text = open(fn, errors="replace").read()
+        except OSError:
+            continue
+        if "add_cascade" not in text and "add_command" not in text:
+            continue
+        text = re.sub(r"\(\s*\n\s*", "(", text)
+        for m in re.finditer(r"([\w.\[\]'\"]+)\.(add_cascade|add_command|add_checkbutton|add_radiobutton|add_separator)\s*\(([^)]*(?:\([^)]*\)[^)]*)*)\)", text):
+            who, kind, args = m.groups()
+            key = (fn, who)
+            lab = re.search(r"\blabel\s*=\s*" + s, args)
+            label = lab.group(1).strip() if lab else ""
+            if kind == "add_cascade":
+                sub = re.search(r"\bmenu\s*=\s*([\w.\[\]'\"]+)", args)
+                if sub and label:
+                    sk = (fn, sub.group(1))
+                    titles[sk] = label
+                    if sk not in order:
+                        order.append(sk)
+                continue
+            if kind == "add_separator":
+                items.setdefault(key, []).append(None)
+                continue
+            acc = re.search(r"\baccelerator\s*=\s*" + s, args)
+            keys = norm_keys(acc.group(1)) if acc else ""
             if label:
-                items.setdefault(path, []).append((label, keys))
-    return [(titles[p], items.get(p, [])) for p in order]
+                items.setdefault(key, []).append((label.replace("&", ""), keys))
+    return [(titles[k], items.get(k, [])) for k in order]
 
 
 # ---------------------------------------------------------------- FLTK
@@ -215,7 +283,9 @@ def flcxx_menus(files):
             continue
         for tab in re.finditer(r"Fl_Menu_Item\s+\w+\s*\[\s*\]\s*=\s*\{(.*?)\};", text, re.S):
             depth = 0
-            for it in re.finditer(r"\{\s*(?:\"((?:[^\"\\]|\\.)*)\"|0|NULL|nullptr)\s*(?:,([^{}]*))?\}", tab.group(1)):
+            body = re.sub(r"\b(?:_|N_|gettext|tr|_t)\s*\(\s*(\"(?:[^\"\\]|\\.)*\")\s*\)", r"\1", tab.group(1))
+            body = re.sub(r"\(\s*(?:const\s+)?char\s*\*\s*\)", "", body)
+            for it in re.finditer(r"\{\s*(?:\"((?:[^\"\\]|\\.)*)\"|0|NULL|nullptr)\s*(?:,([^{}]*))?\}", body):
                 label, rest = it.group(1), it.group(2) or ""
                 if label is None:
                     depth = max(0, depth - 1)
@@ -238,6 +308,7 @@ def flcxx_menus(files):
 
 PARSERS = [
     ("tk", (".tcl", ".tk"), tk_menus),
+    ("tkinter", (".py",), tkinter_menus),
     ("fltk-fluid", (".fl",), fluid_menus),
     ("fltk-cxx", (".cxx", ".cpp", ".cc", ".h", ".H"), flcxx_menus),
 ]
@@ -278,8 +349,9 @@ def best(root):
     res = []
     for name, exts, fn in PARSERS:
         files = list(sources(root, exts))
-        menus = [(t, its) for t, its in fn(files) if any(i and i[1] for i in its)]
-        n = sum(1 for _, its in menus for i in its if i and i[1])
+        usable = lambda i: i and (i[1] or (len(i) > 2 and i[2]))
+        menus = [(t, its) for t, its in fn(files) if any(usable(i) for i in its)]
+        n = sum(1 for _, its in menus for i in its if usable(i))
         if n:
             res.append((n, name, menus, files))
     return max(res, key=lambda r: r[0]) if res else None
@@ -306,7 +378,7 @@ def emit(mid, app_ids, attr, parser, origin, menus):
             if i is None:
                 if keep and keep[-1] is not None:
                     keep.append(None)
-            elif i[1]:
+            elif i[1] or (len(i) > 2 and i[2]):
                 keep.append(i)
         while keep and keep[-1] is None:
             keep.pop()
@@ -318,7 +390,10 @@ def emit(mid, app_ids, attr, parser, origin, menus):
                 out.append("      - separator")
             else:
                 label = i[0].replace("...", "…")
-                out.append(f"      - {{ label: {yaml_str(label)}, shortcut: {i[1]}, do: {{ keys: {i[1]} }} }}")
+                if i[1]:
+                    out.append(f"      - {{ label: {yaml_str(label)}, shortcut: {i[1]}, do: {{ keys: {i[1]} }} }}")
+                else:  # through the app's own menu bar, from the keyboard
+                    out.append(f"      - {{ label: {yaml_str(label)}, do: {{ keys: \"{i[2]}\" }} }}")
     return "\n".join(out) + "\n"
 
 
