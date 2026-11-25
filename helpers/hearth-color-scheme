@@ -202,26 +202,31 @@ MENU_END = "/* hearth menus: end */"
 
 
 def menu_css(gtk4):
-    """Menus as hearth's apps draw theirs (MacMenuStyle.qml), in GTK CSS. GTK
-    can't blur what's behind a menu, so the glass is its solid colour."""
+    """Menus as hearth's apps draw theirs (MacMenuStyle.qml), in GTK CSS.
+    GTK can't blur what's behind a menu; arbor does (its window rule
+    `popups { background-effect { blur true } }`), so menus in GTK's own popup
+    windows get MacMenuStyle's translucent glassTint over that blur. Plain
+    `menu` keeps the solid colour: Chromium/Electron read their menu colour
+    from `window.background menu` (not a popup) and flatten a translucent
+    one into an opaque, off-colour menu."""
     if DARK:
-        c = dict(bg="#2b2d30", fg="#f5f5f7", accent="#0a84ff", dim="rgba(255, 255, 255, 0.55)",
+        c = dict(bg="#2b2d30", glass="rgba(38, 40, 43, 0.74)", fg="#f5f5f7", accent="#0a84ff", dim="rgba(255, 255, 255, 0.55)",
                  dimHover="rgba(255, 255, 255, 0.85)", disabled="rgba(255, 255, 255, 0.28)",
                  sep="rgba(255, 255, 255, 0.13)", edge="rgba(0, 0, 0, 0.28)",
                  rim="rgba(255, 255, 255, 0.05)", shadow="rgba(0, 0, 0, 0.32)")
     else:
-        c = dict(bg="#f9f9fa", fg="#1d1d1f", accent="#007aff", dim="rgba(0, 0, 0, 0.5)",
+        c = dict(bg="#f9f9fa", glass="rgba(249, 249, 250, 0.74)", fg="#1d1d1f", accent="#007aff", dim="rgba(0, 0, 0, 0.5)",
                  dimHover="rgba(255, 255, 255, 0.85)", disabled="rgba(0, 0, 0, 0.26)",
                  sep="rgba(0, 0, 0, 0.11)", edge="rgba(0, 0, 0, 0.09)",
                  rim="rgba(255, 255, 255, 0.40)", shadow="rgba(0, 0, 0, 0.2)")
     font = 'font-family: Inter, "Inter Variable", "SF Pro", "Noto Sans", sans-serif; font-size: 14.1px; letter-spacing: -0.09px;'
     if gtk4:
         return f"""popover.menu > contents {{
-  background-color: {c['bg']}; color: {c['fg']}; border-radius: 14px; padding: 5px;
+  background-color: {c['glass']}; color: {c['fg']}; border-radius: 14px; padding: 5px;
   box-shadow: 0 9px 26px {c['shadow']}, 0 0 0 1px {c['edge']}, inset 0 0 0 1px {c['rim']};
   {font}
 }}
-popover.menu > arrow {{ background-color: {c['bg']}; border-color: {c['edge']}; }}
+popover.menu > arrow {{ background-color: {c['glass']}; border-color: {c['edge']}; }}
 popover.menu modelbutton {{ min-height: 27px; padding: 0 11px; border-radius: 9px; color: {c['fg']}; }}
 popover.menu modelbutton:hover, popover.menu modelbutton:selected {{ background-color: {c['accent']}; color: #ffffff; }}
 popover.menu modelbutton:disabled {{ color: {c['disabled']}; }}
@@ -254,6 +259,8 @@ menu menuitem check, menu menuitem radio {{
 }}
 menu separator, .menu separator {{ min-height: 1px; margin: 4px 11px; background-color: {c['sep']}; }}
 menu > arrow {{ background-color: {c['bg']}; border: none; color: {c['dim']}; }}
+window.popup menu, window.popup .menu, window.popup .context-menu {{ background-color: {c['glass']}; }}
+window.popup menu > arrow {{ background-color: transparent; }}
 popover.menu, popover.background.menu {{
   background-color: {c['bg']}; border-radius: 14px; border: 1px solid {c['edge']}; padding: 5px;
 }}

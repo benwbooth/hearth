@@ -125,6 +125,20 @@ window-rule {
 // hearth's glass: blur behind the menu bar, menus, popups and notifications
 // (installed next to this file).
 include "hearth-layer-rules.kdl"
+// Frosted glass behind every app's popups (GTK 3/4 menus and popovers,
+// Chromium/Electron menus) that don't ask for blur themselves. GTK menus are
+// drawn translucent for it (hearth-color-scheme's gtk.css block, 14 px
+// corners); arbor follows a popup's input region where it gives one (GTK 4's
+// rounded body and arrow), else its geometry, clipped to these corners.
+// Opaque menus (Chromium, Electron) look the same as without it.
+window-rule {
+    popups {
+        geometry-corner-radius 14
+        background-effect {
+            blur true
+        }
+    }
+}
 // Blur and shadows for menus and tooltips when real glass is off (written
 // by hearth, services/RealGlass.qml; missing while real glass is on).
 include optional=true "~/.config/hearth/arbor-glass-fallback.kdl"
