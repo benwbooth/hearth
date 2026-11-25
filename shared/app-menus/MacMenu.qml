@@ -15,7 +15,7 @@ import QtQuick.Controls.Basic
 //     menu.popup()            // at the pointer; popup(item, x, y) next to an item
 //
 // Glass with vibrancy (the window behind is blurred), 12 pt corners, 4 pt
-// around the rows, a soft shadow; a short fade and grow on open; a chosen row
+// around the rows, a soft shadow; a quick fade on open; a chosen row
 // blinks once while the menu fades.
 Menu {
     id: menu
@@ -93,13 +93,9 @@ Menu {
         currentIndex: menu.currentIndex
         ScrollIndicator.vertical: ScrollIndicator {}
     }
-    transformOrigin: Item.Top
-    enter: Transition {
-        ParallelAnimation {
-            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: style.inMs; easing.type: Easing.OutCubic }
-            NumberAnimation { property: "scale"; from: 0.97; to: 1; duration: style.inMs; easing.type: Easing.OutCubic }
-        }
-    }
+    // A quick fade in (no grow: scaling resampled the icons, and a longer
+    // fade made every right-click feel slow, in grove).
+    enter: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: style.inMs; easing.type: Easing.OutCubic } }
     exit: Transition {
         SequentialAnimation {
             PauseAnimation { duration: menu._chosen ? style.blinkMs * 2 : 0 }

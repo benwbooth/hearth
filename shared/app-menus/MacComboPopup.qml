@@ -22,10 +22,16 @@ Popup {
     topPadding: style.padding + 0.001
     leftPadding: style.padding + 0.001
     margins: Math.round(4 * style.pt)
-    x: Math.round(textX - style.gutter - style.padding)
-    y: combo ? Math.round((combo.height - style.rowHeight) / 2 - style.padding - Math.max(0, combo.currentIndex) * style.rowHeight) : 0
+    x: below ? 0 : Math.round(textX - style.gutter - style.padding)
+    // Below the button instead (an editable combo: the list mustn't cover
+    // what is being typed).
+    property bool below: combo ? combo.editable : false
+    // At most this many rows; more scroll.
+    property int maxRows: 16
+    y: !combo ? 0 : below ? combo.height + 2
+        : Math.round((combo.height - style.rowHeight) / 2 - style.padding - Math.max(0, combo.currentIndex) * style.rowHeight)
     width: Math.max(combo ? combo.width - x : 0, list.implicitWidth + leftPadding + rightPadding)
-    implicitHeight: list.contentHeight + topPadding + bottomPadding
+    implicitHeight: Math.min(list.contentHeight, maxRows * style.rowHeight) + topPadding + bottomPadding
     font.family: style.family
     font.pixelSize: style.fontSize
     background: MacMenuBackground { style: pop.macStyle; popup: pop }

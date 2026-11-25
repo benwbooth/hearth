@@ -30,19 +30,25 @@ MenuItem {
     readonly property MacMenuStyle st: menu && menu.macStyle ? menu.macStyle : ownStyle
     MacMenuStyle { id: ownStyle; window: mi.palette.window; highlight: mi.palette.highlight }
     readonly property bool gutter: menu && menu.gutter !== undefined ? menu.gutter : true
-    readonly property string keyText: {
-        if (subMenu) return ""
-        if (shortcutText !== "") return st.pcShortcut(shortcutText)
-        if (typeof shortcut === "string") return st.pcShortcut(shortcut)
-        const s = action ? action.shortcut : undefined
-        return typeof s === "string" ? st.pcShortcut(s) : ""
+    // "Text\tCtrl+X" (platform menus' way of giving the key): shown apart.
+    readonly property string label: text.split("\t")[0]
+    readonly property string tabKey: text.indexOf("\t") >= 0 ? text.split("\t")[1] : ""
+    readonly property string keyText: subMenu ? ""
+        : st.pcShortcut(shortcutText !== "" ? shortcutText : tabKey !== "" ? tabKey : keyReader.nativeText)
+    // Only reads the key (a string or a StandardKey, of `shortcut` or the
+    // Action) for display; the app's Shortcut/Action owns it.
+    Shortcut {
+        id: keyReader
+        enabled: false
+        sequence: mi.shortcut !== undefined && mi.shortcut !== null && mi.shortcut !== "" ? mi.shortcut
+            : mi.action && mi.action.shortcut !== undefined ? mi.action.shortcut : ""
     }
 
     // Choosing: lit through the blink, whatever the pointer does meanwhile.
     property bool chosen: false
     property bool blinkOff: false
     readonly property bool lit: enabled && !blinkOff && (highlighted || chosen)
-    onTriggered: if (menu && menu.macStyle) { chosen = true; blink.restart(); if (menu.choose) menu.choose() }
+    onTriggered: if (!subMenu && menu && menu.macStyle) { chosen = true; blink.restart(); if (menu.choose) menu.choose() }
     SequentialAnimation {
         id: blink
         PropertyAction { target: mi; property: "blinkOff"; value: true }
@@ -142,7 +148,7 @@ MenuItem {
             width: parent.width - textLeft - (key.visible ? key.implicitWidth + 16 : 0) - (mi.subMenu ? 20 : 0) - mi.st.textInset
             anchors.verticalCenter: parent.verticalCenter
             anchors.verticalCenterOffset: 0.001
-            text: mi.text
+            text: mi.label
             color: mi.textColor
             font.family: mi.st.family
             font.pixelSize: mi.st.fontSize

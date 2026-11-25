@@ -54,9 +54,9 @@ QtObject {
     readonly property int separatorHeight: Math.round(9 * pt)
     readonly property int minWidth: Math.round(180 * pt)
 
-    // Motion: a short fade and grow from the anchor on open, a slower fade
+    // Motion: a quick fade on open, a slower fade
     // on close; a chosen row blinks once first (macOS).
-    readonly property int inMs: 160
+    readonly property int inMs: 100
     readonly property int outMs: 180
     readonly property int blinkMs: 55
 
