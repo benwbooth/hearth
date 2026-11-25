@@ -47,6 +47,10 @@ Wine front ends and game launchers, looked at one by one (2026-11-24):
 | WineZGUI, WineCharm | Start with Wine's own prefix-setup dialog ("Wine"): Wine has no AT-SPI, nothing readable until it closes |
 | PortProton | First start downloads its Wine components (DXVK, VKD3D-Proton) behind a progress window that doesn't register on the accessibility bus; its main window comes after. Like the anime launchers: measurable only after a full first run |
 
+ZynAddSubFX: nixpkgs' default build uses Zyn-Fusion (self-drawn OpenGL, no
+keyboard menu commands); the module covers the FLTK/NTK builds
+(`zynaddsubfx-fltk`, `zynaddsubfx-ntk`).
+
 Still impossible: GNOME Settings (refuses to start outside GNOME), Calf
 (needs a JACK server), KDE System Settings and Info Center (Qt Quick in a
 QQuickWidget: wrong positions, no press action; both removed).

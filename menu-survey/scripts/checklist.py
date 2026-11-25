@@ -31,7 +31,9 @@ Usage: checklist.py            rebuild/merge checklist.tsv
 """
 import argparse
 import csv
+import glob
 import os
+import re
 import sqlite3
 import time
 
@@ -130,6 +132,20 @@ def gap_of(measured, toolkit, p):
     return "no-menus-visible"  # likely none-needed: check a screenshot
 
 
+def module_attrs():
+    """{checklist attr: module file} from the repo's menus/*.yaml."""
+    res = {}
+    for fn in sorted(glob.glob(os.path.join(ROOT, "..", "menus", "*.yaml"))):
+        text = open(fn).read()
+        for kind, prefix in (("nixpkgs", ""), ("flatpak", "flathub:")):
+            m = re.search(rf"^\s+{kind}:\s*\[([^\]]*)\]", text, re.M)
+            for a in (m.group(1).split(",") if m else []):
+                a = a.strip().strip("\"'")
+                if a:
+                    res.setdefault(prefix + a, os.path.basename(fn))
+    return res
+
+
 def machine_row(r):
     today = r["today"] or "untested"
     if today == "no-window":
@@ -191,6 +207,15 @@ def rebuild():
             if o.get("solution", "todo") not in ("todo", "") and not o["solution"].startswith("general:"):
                 r["solution"] = o["solution"]
         out.append(r)
+    # Apps a menu module covers (menus/*.yaml: its nixpkgs and flatpak
+    # match lists): done by the module, whatever the measurement found
+    # (a module wins over the other routes, so a measured "general:" there
+    # was the module).
+    mods = module_attrs()
+    for r in out:
+        m = mods.get(r["attr"])
+        if m and r["status"] in AUTO | {"done"}:
+            r["status"], r["solution"], r["gap"] = "done", f"module:{m}", ""
     with open(TSV, "w") as f:
         f.write("\t".join(COLS) + "\n")
         for r in out:

@@ -1,6 +1,8 @@
 # ZynAddSubFX's GUI is FLTK/NTK (no accessibility tree, no menu export). Its
 # File/Instrument/Record/Misc menu bar has no item accelerators, only these
 # window-wide keys (upstream src/UI/guimain.cpp kb_shortcut_handler).
+# Only the FLTK/NTK interface: nixpkgs' plain `zynaddsubfx` builds the
+# Zyn-Fusion one (mruby-zest, program "zest", self-drawn OpenGL, other keys).
 schema: hearth-menu-module/1
 id: zynaddsubfx
 version: 1
@@ -8,7 +10,7 @@ app:
   match:
     app_id: [zynaddsubfx, Zynaddsubfx, zynaddsubfx-ext-gui]
     desktop: [zynaddsubfx-alsa.desktop, zynaddsubfx-jack.desktop, zynaddsubfx-jack-multi.desktop, zynaddsubfx-oss.desktop]
-    nixpkgs: [zynaddsubfx]
+    nixpkgs: [zynaddsubfx-fltk, zynaddsubfx-ntk]
   versions: ">=3.0"
   locales: [en]
 provenance:
