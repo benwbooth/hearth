@@ -18,32 +18,29 @@ general fixes listed at the end. App lists are examples, not exhaustive.
 | Tray-only apps | No menu needed: their menu is the tray icon's | Flameshot, KTeaTime, Sunshine |
 | Apps with only a toolbar | Their toolbar buttons as an Actions menu | ScreenGrab |
 
-## Impossible (no general way without patching the app)
+## Decided 2026-11-24 (Ben)
+
+| Group | Decision |
+|---|---|
+| Apps with no general route (root-only, self-drawn, FLTK/Tk, .NET, JavaFX, proprietary bundles) | Menu modules from each app's documented shortcuts, like the terminals |
+| Java apps as Flatpaks | Try the Java bridge per app through a Flatpak override; keep it only where the app runs |
+| COSMIC/iced apps from Flathub | Menu modules from their key bindings |
+| Wine front ends and game launchers | Look at each past its first run for a readable route |
+
+Why these have no general route:
 
 | Group | Why | Examples |
 |---|---|---|
-| Run as root (pkexec) | Outside your session and its buses | GParted, Timeshift |
-| GNOME-only | Refuses to start outside GNOME | GNOME Settings |
-| JACK-only audio | Needs a JACK server to open a window | Calf |
-| Self-drawn UI (GPU/canvas) | No accessibility tree, no menu export | Zed, Blender, Bforartists, Kodi, Neovide, Ardour, xemu's ImGui bar |
-| FLTK, Tk, NTK | Toolkits without AT-SPI | TigerVNC, Nestopia, Maxima, ZynAddSubFX |
-| .NET (Avalonia, WinForms on Mono) | No AT-SPI on Linux | Ryubing, KeePass 2, PKHeX |
+| Run as root (pkexec) | Outside your session's buses (keys still reach the window) | GParted, Timeshift |
+| Self-drawn UI (GPU/canvas) | No accessibility tree, no menu export | Zed, Blender, Kodi, Neovide, Ardour |
+| FLTK, Tk, NTK | Toolkits without AT-SPI | TigerVNC, Maxima, ZynAddSubFX |
+| .NET (Avalonia, WinForms on Mono) | No AT-SPI on Linux | Ryubing, KeePass 2 |
 | JavaFX | No AT-SPI on Linux | Cryptomator |
-| Proprietary bundles | Their own Qt/GTK without accessibility | Adobe Reader, TeamSpeak 3, Minecraft Launcher |
-| Qt Quick inside a QQuickWidget | Wrong widget positions, no press action on the ☰ | KDE System Settings, Info Center (both removed) |
+| Proprietary bundles | Their own Qt/GTK without accessibility | Adobe Reader, TeamSpeak 3 |
 
-## Open questions
-
-1. **Java apps in Flatpaks** (JDownloader, Burp Suite, IntelliJ IDEA, CPU
-   Info, TL): the bridge isn't loaded inside Flatpaks (the sandbox's JVM
-   would load a host library built against another glibc, and a failure
-   there ends the app). Leave them, or try per-app overrides after testing
-   each?
-2. **COSMIC/iced Flatpaks** (COSMIC Camera, fan-control, Startup
-   Configuration, Writing Tools): like the COSMIC apps, only through
-   hand-written modules per app. Write them?
-3. **Wine front ends** (PortProton, WineCharm, WineZGUI) and the anime-game
-   launchers: mostly first-run screens or web views; no general route yet.
+Still impossible: GNOME Settings (refuses to start outside GNOME), Calf
+(needs a JACK server), KDE System Settings and Info Center (Qt Quick in a
+QQuickWidget: wrong positions, no press action; both removed).
 
 ## General fixes the survey produced (hearth/arbor)
 
