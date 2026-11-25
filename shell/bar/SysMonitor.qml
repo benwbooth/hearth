@@ -606,18 +606,25 @@ MouseArea {
         mask: Region {}
 
         // What it shows: the hovered item's model, or the overall summary.
-        readonly property var model: !visible ? ({ head: "", rows: [], foot: "" })
+        // Built while the delay runs, so it shows at its final size: built
+        // only once visible, it showed empty and grew, a flicker.
+        readonly property var model: !want && !visible ? ({ head: "", rows: [], foot: "" })
             : root.hoverKind ? root.tipModel(root.hoverKind)
             : ({ head: root.summaryText, rows: [], foot: "" })
         readonly property bool want: root.containsMouse && !root.pressed
+        // Fades in and out, as hearth's other tooltips (widgets/Tooltip):
+        // shown at once, the glass's blur reached the compositor a frame
+        // after the pane, a flicker.
+        property bool shown: false
+        onShownChanged: if (shown) visible = true
         onWantChanged: {
             if (want) tipTimer.restart();
-            else { tipTimer.stop(); visible = false; }
+            else { tipTimer.stop(); shown = false; }
         }
         Timer {
             id: tipTimer
             interval: Theme.tooltipDelayMs
-            onTriggered: tip.visible = tip.want
+            onTriggered: tip.shown = tip.want
         }
 
         GlassFrame {
@@ -628,6 +635,9 @@ MouseArea {
             height: implicitHeight
             tint: root.onTop ? Theme.glassMenu : Theme.bgRaised
             radius: Theme.menuRadius
+            opacity: tip.shown ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: tip.shown ? 110 : 160; easing.type: Easing.OutCubic } }
+            onOpacityChanged: if (opacity === 0 && !tip.shown) tip.visible = false
             implicitWidth: tipCol.implicitWidth + 20
             implicitHeight: tipCol.implicitHeight + 16
 
