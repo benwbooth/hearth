@@ -169,6 +169,40 @@ fixed interface (e.g. MPRIS `Play`), not a generic call.
   matches by role + index path, and the CI test runs in each listed locale.
   `keys` and `gtk_action` don't depend on the locale; prefer them.
 
+## 3a. Generators: patterns before models
+
+Every module so far was hand-written, but each came from a source that
+repeats across apps. Turning those sources into extractors means a new app
+of the same family gets its module from code; a local model in the
+background is the last step, for apps no extractor covers. Order to try for
+any new app:
+
+1. **A runtime route** (dbusmenu, GMenuModel, AT-SPI, toolbar, ☰): no module.
+2. **A rule from metadata**: desktop Categories (games: none needed),
+   tray-only, no windows.
+3. **Default-keymap dumps** the app or its config format publishes:
+   kitty, Alacritty, foot, WezTerm (`wezterm show-keys`), mpv
+   (`input.conf`), Kodi (keymap XML), Blender and Bforartists (keymap
+   export from `--background --python`), Ardour (`.keys`), Zed (default
+   keymap JSON), Neovim (`:map`). One extractor per format.
+4. **Toolkit menu tables in source**: FLTK `.fl` menu items
+   (ZynAddSubFX), Tk `menu add command -accelerator` (xmaxima, Scid),
+   Avalonia `.axaml` `MenuItem`/`InputGesture` (Ryubing), WinForms
+   `ShortcutKeys` in `*.Designer.cs` (KeePass), JavaFX
+   `KeyCodeCombination` (Cryptomator), libcosmic `menu::Tree` with
+   `key_binds` (COSMIC Files/Edit/Term, Cedilla, StarryDex, camera,
+   color picker, cosmicding), GTKmm/GTK accelerators (GParted). One
+   parser per toolkit: every app on that toolkit is then covered.
+5. **Keyboard sections of man pages and manuals** (TigerVNC's
+   vncviewer(1), Acrobat's shortcut chapter): a table parser, with the
+   menu grouping from the section headings.
+6. **A local model** reads what the steps above couldn't parse (prose
+   docs, unusual source) and writes the same YAML; the validator and the
+   rig test (send each key, watch for a change) gate it like any module.
+
+Each module's `provenance.generator` names the step and version that made
+it, so a new app version reruns the same extractor.
+
 ## 4. The agent and testing a module in a nested session
 
 **Agent run:** `hearth-menu-agent <window-id>`, started by the menu item. It
