@@ -237,6 +237,10 @@ def machine_row(r):
         status, solution = "partial", f"general:{r['route_today']}-burger"
     elif today == "none":
         status, solution = "todo", "todo"
+    elif today == "terminal-only":
+        # A terminal program (its desktop file says Terminal=true): its
+        # menus are the terminal's. Skipped (Ben, 2026-11-24).
+        status, solution = "none-needed", "none-needed:terminal"
     elif today == "tray-only":
         # No window, a tray icon: its menu is the tray icon's.
         status, solution = "none-needed", "none-needed:tray"

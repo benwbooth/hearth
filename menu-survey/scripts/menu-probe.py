@@ -1114,6 +1114,23 @@ def sandboxed(argv):
     return args + ["--"] + argv
 
 
+def appimage_terminal_only():
+    """Whether the AppImage just run (appimage-run's newest extraction under
+    the attempt homes) has a desktop file with Terminal=true."""
+    import glob
+    dirs = glob.glob(os.path.join(DISKDIR, "apps", "*", "home", ".cache", "appimage-run", "*"))
+    if not dirs:
+        return False
+    newest = max(dirs, key=lambda d: os.path.getmtime(d) if os.path.exists(d) else 0)
+    for f in glob.glob(os.path.join(newest, "*.desktop")):
+        try:
+            if re.search(r"^Terminal\s*=\s*true\s*$", open(f, errors="replace").read(), re.M | re.I):
+                return True
+        except OSError:
+            pass
+    return False
+
+
 def probe_appimage(attr):
     how = APPIMAGES.get(attr) or {}
     url = appimage_url(how)
@@ -1137,6 +1154,10 @@ def probe_appimage(attr):
         if r0.get("result") != "no-window" and not (r0.get("inspect") or {}).get("atspi", {}).get("found"):
             r0["inspect"] = r0.get("inspect") or inspect(r0.get("window"))
         late_check(rows)
+        if rows[-1].get("result") == "no-window" and appimage_terminal_only():
+            # A terminal program (Neovim, Helix): its desktop file says
+            # Terminal=true. Skipped, like terminal-only Flatpaks.
+            rows[-1]["result"] = "terminal-only"
         rows[-1]["shot"] = shot(attr)
         cleanup()
         return rows
