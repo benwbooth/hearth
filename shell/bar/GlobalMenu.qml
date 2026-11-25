@@ -291,7 +291,9 @@ Row {
             MenuTitle {
                 id: title
                 text: topItem.modelData.label
-                icon: topItem.modelData.icon || ""
+                // (Off by default: macOS shows the menu names alone. The
+                // menus' rows keep their icons.)
+                icon: Settings.menubar.menuTitleIcons ? (topItem.modelData.icon || "") : ""
                 tip: "The " + topItem.modelData.label + " menu of " + root.appName
                 enabled: topItem.modelData.enabled
                 popup: pop

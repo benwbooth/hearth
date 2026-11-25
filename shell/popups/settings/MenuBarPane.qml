@@ -48,6 +48,8 @@ ColumnLayout {
         SettingsDivider {}
         SwitchRow { label: "Show the app name"; note: "The bold name of the app you are using, next to the logo."; key: "showAppName" }
         SettingsDivider {}
+        SwitchRow { label: "Icons beside menu names"; note: "An app's icons next to File, Edit, View and its other menus in the bar. The items inside the menus keep their icons either way."; key: "menuTitleIcons" }
+        SettingsDivider {}
         SettingsRow {
             label: "Menu logo"
             note: "The button at the far left that opens the system menu."

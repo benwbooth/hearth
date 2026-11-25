@@ -33,6 +33,7 @@ Singleton {
             opacity: 0.36,              // glass strip opacity, 0.32 .. 0.95
             monochromeIcons: true,      // status icons in the text colour, like SF Symbols
             showAppName: true,
+            menuTitleIcons: false,      // icons beside the app's menu names (File, Edit…); the menus' own rows keep theirs
             logo: "nixos",              // "nixos" | "penguin" | "none"   (shell/assets/<name>.svg)
             clock24h: true,
             showDate: true,
