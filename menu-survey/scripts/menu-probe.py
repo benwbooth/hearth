@@ -1252,6 +1252,17 @@ def app_rows():
 
 
 def main():
+    # Every run, the workers and one-off test runs alike, in its own scope
+    # at idle CPU/IO weight off the desktop's reserved cores: the rig it
+    # starts (arbor, hearth, the bus) inherits it.
+    # (A worker already runs in its limited service: moving it out would
+    # leave it running when the service stops.)
+    in_worker = "hearth-menu-probe-" in open("/proc/self/cgroup").read()
+    if os.environ.get("MENU_PROBE_LIMITED") != "1" and not in_worker:
+        os.environ["MENU_PROBE_LIMITED"] = "1"
+        os.execvp("systemd-run", ["systemd-run", "--user", "--scope", "--quiet", "--collect",
+                                  "-p", "CPUWeight=idle", "-p", "IOWeight=1", "-p", "AllowedCPUs=0-7,12-19",
+                                  sys.executable, "-I", os.path.abspath(__file__), *sys.argv[1:]])
     ap = argparse.ArgumentParser()
     ap.add_argument("--from", dest="start", type=int, default=1)
     ap.add_argument("--count", type=int, default=50)
