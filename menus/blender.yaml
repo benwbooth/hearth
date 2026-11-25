@@ -1,0 +1,168 @@
+# Blender draws its whole UI itself (GHOST + OpenGL/Vulkan) and exports no
+# menus. These are its default "Blender" keymap shortcuts (keymap_data/
+# blender_default.py, non-legacy, Spacebar Action = Play, left-click select),
+# as macOS-style menus. A remapped keymap, the "Industry Compatible" keymap or
+# changed keymap preferences won't match. Blender sends a key to the editor
+# under the mouse pointer, so View/Object/Select items act on the editor the
+# pointer was last over (normally the 3D Viewport). Numpad-only keys (view
+# axes, camera, frame selected) are left out: arbor's chords can't be sure to
+# reach Blender as numpad keys with NumLock in either state.
+schema: hearth-menu-module/1
+id: blender
+version: 1
+app:
+  match:
+    # GHOST Wayland app_id is "blender" (GHOST_SystemWayland.cc, unless
+    # built with WITH_GHOST_WAYLAND_APP_ID, e.g. Flathub); X11 WM_CLASS
+    # "Blender" (StartupWMClass in blender.desktop).
+    app_id: [blender, Blender, org.blender.Blender]
+    desktop: [blender.desktop, org.blender.Blender.desktop]
+    flatpak: [org.blender.Blender]
+    nixpkgs: [blender, blender-hip]
+  versions: ">=4.2"
+  locales: [en]
+provenance:
+  generator: hand-written from Blender's default keymap source (blender 5.1.1, nixpkgs)
+  inputs:
+    - "source:share/blender/5.1/scripts/presets/keyconfig/keymap_data/blender_default.py (km_window, km_screen, km_frames, km_view3d, km_object_mode)"
+    - "source:intern/ghost/intern/GHOST_SystemWayland.cc (ghost_wl_app_id)"
+menus:
+  - title: File
+    items:
+      - { label: New…, shortcut: Ctrl+N, do: { keys: Ctrl+N } }
+      - { label: Open…, shortcut: Ctrl+O, do: { keys: Ctrl+O } }
+      - { label: Open Recent…, shortcut: Ctrl+Shift+O, do: { keys: Ctrl+Shift+O } }
+      - separator
+      - { label: Save, shortcut: Ctrl+S, do: { keys: Ctrl+S } }
+      - { label: Save As…, shortcut: Ctrl+Shift+S, do: { keys: Ctrl+Shift+S } }
+      - { label: Save Incremental, shortcut: Ctrl+Alt+S, do: { keys: Ctrl+Alt+S } }
+      - separator
+      - { label: File Context Menu…, shortcut: F4, do: { keys: F4 } }
+      - separator
+      - { label: Quit Blender, shortcut: Ctrl+Q, do: { keys: Ctrl+Q } }
+  - title: Edit
+    items:
+      - { label: Undo, shortcut: Ctrl+Z, do: { keys: Ctrl+Z } }
+      - { label: Redo, shortcut: Ctrl+Shift+Z, do: { keys: Ctrl+Shift+Z } }
+      - separator
+      - { label: Adjust Last Operation…, shortcut: F9, do: { keys: F9 } }
+      - { label: Repeat Last, shortcut: Shift+R, do: { keys: Shift+R } }
+      - separator
+      - { label: Menu Search…, shortcut: F3, do: { keys: F3 } }
+      - { label: Rename Active Item…, shortcut: F2, do: { keys: F2 } }
+      - { label: Batch Rename…, shortcut: Ctrl+F2, do: { keys: Ctrl+F2 } }
+      - separator
+      - { label: Copy Objects, shortcut: Ctrl+C, do: { keys: Ctrl+C } }
+      - { label: Paste Objects, shortcut: Ctrl+V, do: { keys: Ctrl+V } }
+      - separator
+      - { label: Quick Favorites…, shortcut: Q, do: { keys: Q } }
+      - separator
+      - { label: Preferences…, shortcut: "Ctrl+,", do: { keys: "Ctrl+," } }
+  - title: Select
+    items:
+      - { label: All, shortcut: A, do: { keys: A } }
+      - { label: None, shortcut: Alt+A, do: { keys: Alt+A } }
+      - { label: Invert, shortcut: Ctrl+I, do: { keys: Ctrl+I } }
+      - separator
+      - { label: Box Select, shortcut: B, do: { keys: B } }
+      - { label: Circle Select, shortcut: C, do: { keys: C } }
+      - separator
+      - { label: Select Linked…, shortcut: Shift+L, do: { keys: Shift+L } }
+      - { label: Select Grouped…, shortcut: Shift+G, do: { keys: Shift+G } }
+      - { label: Select Parent, shortcut: "[", do: { keys: "[" } }
+      - { label: Select Child, shortcut: "]", do: { keys: "]" } }
+  - title: Object
+    items:
+      - { label: Add…, shortcut: Shift+A, do: { keys: Shift+A } }
+      - { label: Duplicate, shortcut: Shift+D, do: { keys: Shift+D } }
+      - { label: Duplicate Linked, shortcut: Alt+D, do: { keys: Alt+D } }
+      - { label: Join, shortcut: Ctrl+J, do: { keys: Ctrl+J } }
+      - { label: Delete, shortcut: Delete, do: { keys: Delete } }
+      - separator
+      - { label: Move, shortcut: G, do: { keys: G } }
+      - { label: Rotate, shortcut: R, do: { keys: R } }
+      - { label: Scale, shortcut: S, do: { keys: S } }
+      - { label: Mirror…, shortcut: Ctrl+M, do: { keys: Ctrl+M } }
+      - separator
+      - { label: Clear Location, shortcut: Alt+G, do: { keys: Alt+G } }
+      - { label: Clear Rotation, shortcut: Alt+R, do: { keys: Alt+R } }
+      - { label: Clear Scale, shortcut: Alt+S, do: { keys: Alt+S } }
+      - { label: Apply…, shortcut: Ctrl+A, do: { keys: Ctrl+A } }
+      - separator
+      - { label: Set Parent…, shortcut: Ctrl+P, do: { keys: Ctrl+P } }
+      - { label: Clear Parent…, shortcut: Alt+P, do: { keys: Alt+P } }
+      - { label: Link/Transfer Data…, shortcut: Ctrl+L, do: { keys: Ctrl+L } }
+      - separator
+      - { label: Move to Collection…, shortcut: M, do: { keys: M } }
+      - { label: Link to Collection…, shortcut: Shift+M, do: { keys: Shift+M } }
+      - { label: New Collection from Selected, shortcut: Ctrl+G, do: { keys: Ctrl+G } }
+      - separator
+      - { label: Hide Selected, shortcut: H, do: { keys: H } }
+      - { label: Hide Unselected, shortcut: Shift+H, do: { keys: Shift+H } }
+      - { label: Show Hidden, shortcut: Alt+H, do: { keys: Alt+H } }
+      - separator
+      - { label: Toggle Edit Mode, shortcut: Tab, do: { keys: Tab } }
+      - { label: Mode Menu…, shortcut: Ctrl+Tab, do: { keys: Ctrl+Tab } }
+  - title: View
+    items:
+      - { label: Toolbar, shortcut: T, do: { keys: T } }
+      - { label: Sidebar, shortcut: N, do: { keys: N } }
+      - separator
+      - { label: Frame All, shortcut: Home, do: { keys: Home } }
+      - { label: Center Cursor and Frame All, shortcut: Shift+C, do: { keys: Shift+C } }
+      - { label: Local View, shortcut: /, do: { keys: / } }
+      - { label: Fly/Walk Navigation, shortcut: Shift+F, do: { keys: Shift+F } }
+      - { label: Zoom Region…, shortcut: Shift+B, do: { keys: Shift+B } }
+      - separator
+      - { label: Toggle Wireframe, shortcut: Shift+Z, do: { keys: Shift+Z } }
+      - { label: Toggle X-Ray, shortcut: Alt+Z, do: { keys: Alt+Z } }
+      - { label: Toggle Overlays, shortcut: Alt+Shift+Z, do: { keys: Alt+Shift+Z } }
+      - { label: Toggle Gizmos, shortcut: Ctrl+`, do: { keys: Ctrl+` } }
+      - { label: Toggle Snapping, shortcut: Shift+Tab, do: { keys: Shift+Tab } }
+      - separator
+      - { label: Toggle Quad View, shortcut: Ctrl+Alt+Q, do: { keys: Ctrl+Alt+Q } }
+      - { label: Toggle Maximize Area, shortcut: Ctrl+Space, do: { keys: Ctrl+Space } }
+      - { label: Toggle Fullscreen Area, shortcut: Ctrl+Alt+Space, do: { keys: Ctrl+Alt+Space } }
+  - title: Playback
+    items:
+      - { label: Play/Pause Animation, shortcut: Space, do: { keys: Space } }
+      - { label: Play in Reverse, shortcut: Ctrl+Shift+Space, do: { keys: Ctrl+Shift+Space } }
+      - separator
+      - { label: Previous Frame, shortcut: Left, do: { keys: Left } }
+      - { label: Next Frame, shortcut: Right, do: { keys: Right } }
+      - { label: Previous Keyframe, shortcut: Up, do: { keys: Up } }
+      - { label: Next Keyframe, shortcut: Down, do: { keys: Down } }
+      - { label: Jump to Start, shortcut: Shift+Left, do: { keys: Shift+Left } }
+      - { label: Jump to End, shortcut: Shift+Right, do: { keys: Shift+Right } }
+      - separator
+      - { label: Insert Keyframe, shortcut: I, do: { keys: I } }
+      - { label: Delete Keyframe, shortcut: Alt+I, do: { keys: Alt+I } }
+      - { label: Keyframe Insert Menu…, shortcut: K, do: { keys: K } }
+  - title: Render
+    items:
+      - { label: Render Image, shortcut: F12, do: { keys: F12 } }
+      - { label: Render Animation, shortcut: Ctrl+F12, do: { keys: Ctrl+F12 } }
+      - separator
+      - { label: View Render, shortcut: F11, do: { keys: F11 } }
+      - { label: View Animation, shortcut: Ctrl+F11, do: { keys: Ctrl+F11 } }
+  - title: Window
+    items:
+      - { label: Next Workspace, shortcut: Ctrl+Page Down, do: { keys: Ctrl+PageDown } }
+      - { label: Previous Workspace, shortcut: Ctrl+Page Up, do: { keys: Ctrl+PageUp } }
+      - separator
+      - { label: File Browser, shortcut: Shift+F1, do: { keys: Shift+F1 } }
+      - { label: Movie Clip Editor, shortcut: Shift+F2, do: { keys: Shift+F2 } }
+      - { label: Node Editors, shortcut: Shift+F3, do: { keys: Shift+F3 } }
+      - { label: Python Console, shortcut: Shift+F4, do: { keys: Shift+F4 } }
+      - { label: 3D Viewport, shortcut: Shift+F5, do: { keys: Shift+F5 } }
+      - { label: Graph Editor / Drivers, shortcut: Shift+F6, do: { keys: Shift+F6 } }
+      - { label: Properties, shortcut: Shift+F7, do: { keys: Shift+F7 } }
+      - { label: Video Sequencer, shortcut: Shift+F8, do: { keys: Shift+F8 } }
+      - { label: Outliner, shortcut: Shift+F9, do: { keys: Shift+F9 } }
+      - { label: Image/UV Editor, shortcut: Shift+F10, do: { keys: Shift+F10 } }
+      - { label: Text Editor, shortcut: Shift+F11, do: { keys: Shift+F11 } }
+      - { label: Dope Sheet / Timeline, shortcut: Shift+F12, do: { keys: Shift+F12 } }
+  - title: Help
+    items:
+      - { label: Blender Manual, do: { open_help: "https://docs.blender.org/manual/en/latest/" } }
+      - { label: Keymap Reference, do: { open_help: "https://docs.blender.org/manual/en/latest/interface/keymap/blender_default.html" } }

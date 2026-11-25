@@ -1,0 +1,25 @@
+# ZynAddSubFX's GUI is FLTK/NTK (no accessibility tree, no menu export). Its
+# File/Instrument/Record/Misc menu bar has no item accelerators, only these
+# window-wide keys (upstream src/UI/guimain.cpp kb_shortcut_handler).
+schema: hearth-menu-module/1
+id: zynaddsubfx
+version: 1
+app:
+  match:
+    app_id: [zynaddsubfx, Zynaddsubfx, zynaddsubfx-ext-gui]
+    desktop: [zynaddsubfx-alsa.desktop, zynaddsubfx-jack.desktop, zynaddsubfx-jack-multi.desktop, zynaddsubfx-oss.desktop]
+    nixpkgs: [zynaddsubfx]
+  versions: ">=3.0"
+  locales: [en]
+provenance:
+  generator: hand-written from upstream source (zynaddsubfx 3.0.6, src/UI/guimain.cpp, src/UI/MasterUI.fl, 2026-11-24)
+  inputs: [source:src/UI/guimain.cpp, source:src/UI/MasterUI.fl]
+menus:
+  - title: Edit
+    items:
+      - { label: Undo, shortcut: Ctrl+Z, do: { keys: Ctrl+Z } }
+      - { label: Redo, shortcut: Ctrl+R, do: { keys: Ctrl+R } }
+  - title: Window
+    items:
+      - { label: Panel Window, shortcut: Ctrl+Shift+P, do: { keys: Ctrl+Shift+P } }
+      - { label: Advanced Interface, shortcut: Ctrl+Shift+S, do: { keys: Ctrl+Shift+S } }

@@ -1,0 +1,37 @@
+# Cryptomator is JavaFX (no accessibility tree on Linux, no menu bar). These
+# are the main window's built-in keys (upstream ui/mainwindow/
+# MainWindowSceneFactory.java, ui/common/DefaultSceneFactory.java,
+# ui/mainwindow/VaultListController.java; labels from i18n/strings.properties).
+schema: hearth-menu-module/1
+id: org.cryptomator.Cryptomator
+version: 1
+app:
+  match:
+    app_id: [org.cryptomator.Cryptomator, "org.cryptomator.launcher.Cryptomator$MainApp", cryptomator, Cryptomator]
+    desktop: [org.cryptomator.Cryptomator.desktop, cryptomator.desktop]
+    flatpak: [org.cryptomator.Cryptomator]
+    nixpkgs: [cryptomator]
+  versions: ">=1.10"
+  locales: [en]
+provenance:
+  generator: hand-written from upstream source (cryptomator 1.19.6, MainWindowSceneFactory.java, DefaultSceneFactory.java, VaultListController.java, 2026-11-24)
+  inputs: [source:MainWindowSceneFactory.java, source:DefaultSceneFactory.java, source:VaultListController.java]
+menus:
+  - title: Vault
+    items:
+      - { label: Create New Vault…, shortcut: Ctrl+N, do: { keys: Ctrl+N } }
+      - { label: Open Existing Vault…, shortcut: Ctrl+O, do: { keys: Ctrl+O } }
+      - separator
+      - { label: Remove…, shortcut: Delete, do: { keys: Delete } }
+      - separator
+      - { label: Close Window, shortcut: Ctrl+W, do: { keys: Ctrl+W } }
+  - title: Window
+    items:
+      - { label: Select Vault 1, shortcut: Ctrl+1, do: { keys: Ctrl+1 } }
+      - { label: Select Vault 2, shortcut: Ctrl+2, do: { keys: Ctrl+2 } }
+      - { label: Select Vault 3, shortcut: Ctrl+3, do: { keys: Ctrl+3 } }
+      - { label: Select Vault 4, shortcut: Ctrl+4, do: { keys: Ctrl+4 } }
+      - { label: Select Vault 5, shortcut: Ctrl+5, do: { keys: Ctrl+5 } }
+  - title: Help
+    items:
+      - { label: Cryptomator Documentation (web), do: { open_help: "https://docs.cryptomator.org/" } }

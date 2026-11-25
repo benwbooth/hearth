@@ -1,0 +1,139 @@
+# Bforartists (a Blender fork) draws its whole UI itself (GHOST) and exports
+# no menus. Its default keymap differs a lot from Blender's (W/E/R tools,
+# Ctrl+W/E/R transforms, Shift+Space plays, no Quit or Preferences key), so
+# these come from Bforartists' own default keymap dump (Bforartists.py), as
+# macOS-style menus. A remapped keymap or the Blender/Industry keymaps won't
+# match. Keys go to the editor under the mouse pointer, so View/Object/Select
+# items act on the editor the pointer was last over (normally the 3D
+# Viewport). Numpad-only keys are left out (arbor's chords can't be sure to
+# reach it as numpad keys with NumLock in either state).
+schema: hearth-menu-module/1
+id: de.bforartists.Bforartists
+version: 1
+app:
+  match:
+    # GHOST Wayland app_id "Bforartists" (GHOST_SystemWayland.cc, bfa patch);
+    # X11 WM_CLASS "Bforartists" (StartupWMClass in bforartists.desktop).
+    # Flathub installs the desktop file as de.bforartists.Bforartists.desktop.
+    # Not in nixpkgs.
+    app_id: [Bforartists, bforartists, de.bforartists.Bforartists]
+    desktop: [bforartists.desktop, de.bforartists.Bforartists.desktop]
+    flatpak: [de.bforartists.Bforartists]
+  versions: ">=4.4"
+  locales: [en]
+provenance:
+  generator: hand-written from Bforartists' default keymap (github.com/Bforartists/Bforartists master, keyconfig_version 5.3.4, 2026-11-24)
+  inputs:
+    - "source:scripts/presets/keyconfig/Bforartists.py (Window, Screen, Frames, 3D View, 3D View Generic, Object Mode keymaps)"
+    - "source:intern/ghost/intern/GHOST_SystemWayland.cc (ghost_wl_app_id)"
+    - "source:release/freedesktop/bforartists.desktop"
+    - "flathub:de.bforartists.Bforartists.yaml"
+menus:
+  - title: File
+    items:
+      - { label: New, shortcut: Ctrl+N, do: { keys: Ctrl+N } }
+      - { label: Open…, shortcut: Ctrl+O, do: { keys: Ctrl+O } }
+      - separator
+      - { label: Save, shortcut: Ctrl+S, do: { keys: Ctrl+S } }
+      - { label: Save As…, shortcut: Ctrl+Shift+S, do: { keys: Ctrl+Shift+S } }
+      - separator
+      - { label: File Context Menu…, shortcut: F4, do: { keys: F4 } }
+  - title: Edit
+    items:
+      - { label: Undo, shortcut: Ctrl+Z, do: { keys: Ctrl+Z } }
+      - { label: Redo, shortcut: Ctrl+Shift+Z, do: { keys: Ctrl+Shift+Z } }
+      - { label: Adjust Last Operation…, shortcut: F6, do: { keys: F6 } }
+      - separator
+      - { label: Menu Search…, shortcut: F3, do: { keys: F3 } }
+      - { label: Rename Active Item…, shortcut: F2, do: { keys: F2 } }
+      - { label: Batch Rename…, shortcut: Ctrl+F2, do: { keys: Ctrl+F2 } }
+      - separator
+      - { label: Copy Objects, shortcut: Ctrl+C, do: { keys: Ctrl+C } }
+      - { label: Paste Objects, shortcut: Ctrl+V, do: { keys: Ctrl+V } }
+      - separator
+      - { label: Quick Favorites…, shortcut: Q, do: { keys: Q } }
+  - title: Select
+    items:
+      - { label: All, shortcut: A, do: { keys: A } }
+      - { label: None, shortcut: Alt+A, do: { keys: Alt+A } }
+      - { label: Invert, shortcut: Ctrl+I, do: { keys: Ctrl+I } }
+      - separator
+      - { label: Select Box Tool, shortcut: B, do: { keys: B } }
+      - { label: Select Circle Tool, shortcut: G, do: { keys: G } }
+  - title: Object
+    items:
+      - { label: Add…, shortcut: Shift+A, do: { keys: Shift+A } }
+      - { label: Duplicate, shortcut: Shift+D, do: { keys: Shift+D } }
+      - { label: Duplicate Linked, shortcut: Alt+D, do: { keys: Alt+D } }
+      - { label: Join, shortcut: Ctrl+J, do: { keys: Ctrl+J } }
+      - { label: Delete, shortcut: Delete, do: { keys: Delete } }
+      - separator
+      - { label: Move, shortcut: Ctrl+W, do: { keys: Ctrl+W } }
+      - { label: Rotate, shortcut: Ctrl+E, do: { keys: Ctrl+E } }
+      - { label: Scale, shortcut: Ctrl+R, do: { keys: Ctrl+R } }
+      - separator
+      - { label: Move Tool, shortcut: W, do: { keys: W } }
+      - { label: Rotate Tool, shortcut: E, do: { keys: E } }
+      - { label: Scale Tool, shortcut: R, do: { keys: R } }
+      - separator
+      - { label: Set Parent…, shortcut: Ctrl+P, do: { keys: Ctrl+P } }
+      - { label: Clear Parent…, shortcut: Alt+P, do: { keys: Alt+P } }
+      - separator
+      - { label: Hide Selected, shortcut: H, do: { keys: H } }
+      - { label: Hide Unselected, shortcut: Shift+H, do: { keys: Shift+H } }
+      - { label: Show Hidden, shortcut: Alt+H, do: { keys: Alt+H } }
+      - separator
+      - { label: Object Mode, shortcut: "1", do: { keys: "1" } }
+      - { label: Edit Mode, shortcut: "2", do: { keys: "2" } }
+      - { label: Sculpt Mode, shortcut: "3", do: { keys: "3" } }
+      - { label: Pose Mode, shortcut: Shift+2, do: { keys: Shift+2 } }
+  - title: View
+    items:
+      - { label: Toggle Regions…, shortcut: T, do: { keys: T } }
+      - separator
+      - { label: Frame Selected, shortcut: F, do: { keys: F } }
+      - { label: Frame All, shortcut: Home, do: { keys: Home } }
+      - { label: Center Cursor and Frame All, shortcut: Shift+C, do: { keys: Shift+C } }
+      - { label: Zoom In, shortcut: Ctrl+=, do: { keys: Ctrl+= } }
+      - { label: Zoom Out, shortcut: Ctrl+-, do: { keys: Ctrl+- } }
+      - { label: Zoom Region…, shortcut: Shift+B, do: { keys: Shift+B } }
+      - { label: Fly/Walk Navigation, shortcut: Shift+`, do: { keys: Shift+` } }
+      - separator
+      - { label: Toggle X-Ray, shortcut: Alt+Z, do: { keys: Alt+Z } }
+      - { label: Toggle Overlays, shortcut: Tab, do: { keys: Tab } }
+      - { label: Toggle Gizmos, shortcut: Shift+Tab, do: { keys: Shift+Tab } }
+      - separator
+      - { label: Toggle Quad View, shortcut: Ctrl+Alt+Q, do: { keys: Ctrl+Alt+Q } }
+      - { label: Toggle Maximize Area, shortcut: Ctrl+Space, do: { keys: Ctrl+Space } }
+      - { label: Toggle Fullscreen Area, shortcut: Ctrl+Alt+Space, do: { keys: Ctrl+Alt+Space } }
+      - { label: Flip Region, shortcut: F5, do: { keys: F5 } }
+  - title: Playback
+    items:
+      - { label: Play/Pause Animation, shortcut: Shift+Space, do: { keys: Shift+Space } }
+      - { label: Play in Reverse, shortcut: Ctrl+Shift+Space, do: { keys: Ctrl+Shift+Space } }
+      - separator
+      - { label: Previous Frame, shortcut: Left, do: { keys: Left } }
+      - { label: Next Frame, shortcut: Right, do: { keys: Right } }
+      - { label: Next Keyframe, shortcut: Up, do: { keys: Up } }
+      - { label: Previous Keyframe, shortcut: Down, do: { keys: Down } }
+      - { label: Jump to Start, shortcut: Shift+Left, do: { keys: Shift+Left } }
+      - { label: Jump to End, shortcut: Shift+Right, do: { keys: Shift+Right } }
+      - separator
+      - { label: Insert Keyframe, shortcut: I, do: { keys: I } }
+      - { label: Delete Keyframe, shortcut: Alt+I, do: { keys: Alt+I } }
+      - { label: Keyframe Insert Menu…, shortcut: K, do: { keys: K } }
+  - title: Render
+    items:
+      - { label: Render Image, shortcut: F12, do: { keys: F12 } }
+      - { label: Render Animation, shortcut: Ctrl+F12, do: { keys: Ctrl+F12 } }
+      - separator
+      - { label: View Render, shortcut: F11, do: { keys: F11 } }
+      - { label: View Animation, shortcut: Ctrl+F11, do: { keys: Ctrl+F11 } }
+  - title: Window
+    items:
+      - { label: Next Workspace, shortcut: Ctrl+Page Down, do: { keys: Ctrl+PageDown } }
+      - { label: Previous Workspace, shortcut: Ctrl+Page Up, do: { keys: Ctrl+PageUp } }
+  - title: Help
+    items:
+      - { label: Bforartists Manual, do: { open_help: "https://www.bforartists.co/docs/getting-started" } }
+      - { label: Bforartists Website, do: { open_help: "https://www.bforartists.co/" } }

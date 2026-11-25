@@ -1,0 +1,158 @@
+# Zed draws its own UI (GPUI) with an in-window app menu (F10) and exports
+# no global menu. These are its default Linux key bindings (VS Code-style
+# base keymap, assets/keymaps/default-linux.json), as macOS-style menus.
+# A different base keymap (JetBrains, Sublime, Vim mode...) or your own
+# keymap.json won't match. Editor items act on the focused editor.
+schema: hearth-menu-module/1
+id: dev.zed.Zed
+version: 1
+app:
+  match:
+    # GPUI uses the release channel's app id as Wayland app_id and X11
+    # WM_CLASS (crates/release_channel: dev.zed.Zed, -Preview, -Nightly, -Dev).
+    app_id: [dev.zed.Zed, dev.zed.Zed-Preview, dev.zed.Zed-Nightly, dev.zed.Zed-Dev]
+    desktop: [dev.zed.Zed.desktop, dev.zed.Zed-Preview.desktop, zed.desktop]
+    flatpak: [dev.zed.Zed, dev.zed.Zed-Preview]
+    nixpkgs: [zed-editor, zed-editor-fhs]
+  versions: ">=0.200"
+  locales: [en]
+provenance:
+  generator: hand-written from Zed's default Linux keymap (zed-industries/zed v1.25.3)
+  inputs:
+    - "source:assets/keymaps/default-linux.json"
+    - "source:crates/release_channel/src/lib.rs (app_id)"
+menus:
+  - title: File
+    items:
+      - { label: New File, shortcut: Ctrl+N, do: { keys: Ctrl+N } }
+      - { label: New Window, shortcut: Ctrl+Shift+N, do: { keys: Ctrl+Shift+N } }
+      - separator
+      - { label: Open Files…, shortcut: Ctrl+O, do: { keys: Ctrl+O } }
+      - { label: Open Folder…, shortcut: Ctrl+K Ctrl+O, do: { keys: Ctrl+K Ctrl+O } }
+      - { label: Open Recent…, shortcut: Ctrl+R, do: { keys: Ctrl+R } }
+      - { label: Open Remote…, shortcut: Ctrl+Alt+Shift+O, do: { keys: Ctrl+Alt+Shift+O } }
+      - separator
+      - { label: Save, shortcut: Ctrl+S, do: { keys: Ctrl+S } }
+      - { label: Save As…, shortcut: Ctrl+Shift+S, do: { keys: Ctrl+Shift+S } }
+      - { label: Save All, shortcut: Ctrl+Alt+S, do: { keys: Ctrl+Alt+S } }
+      - { label: Save Without Formatting, shortcut: Ctrl+K S, do: { keys: Ctrl+K S } }
+      - separator
+      - { label: Reopen Closed Tab, shortcut: Ctrl+Shift+T, do: { keys: Ctrl+Shift+T } }
+      - { label: Close Tab, shortcut: Ctrl+W, do: { keys: Ctrl+W } }
+      - { label: Close All Tabs, shortcut: Ctrl+K W, do: { keys: Ctrl+K W } }
+      - { label: Close Window, shortcut: Ctrl+Shift+W, do: { keys: Ctrl+Shift+W } }
+      - separator
+      - { label: Quit Zed, shortcut: Ctrl+Q, do: { keys: Ctrl+Q } }
+  - title: Edit
+    items:
+      - { label: Undo, shortcut: Ctrl+Z, do: { keys: Ctrl+Z } }
+      - { label: Redo, shortcut: Ctrl+Shift+Z, do: { keys: Ctrl+Shift+Z } }
+      - separator
+      - { label: Cut, shortcut: Ctrl+X, do: { keys: Ctrl+X } }
+      - { label: Copy, shortcut: Ctrl+C, do: { keys: Ctrl+C } }
+      - { label: Paste, shortcut: Ctrl+V, do: { keys: Ctrl+V } }
+      - separator
+      - { label: Find, shortcut: Ctrl+F, do: { keys: Ctrl+F } }
+      - { label: Find and Replace, shortcut: Ctrl+H, do: { keys: Ctrl+H } }
+      - { label: Find in Project, shortcut: Ctrl+Shift+F, do: { keys: Ctrl+Shift+F } }
+      - { label: Replace in Project, shortcut: Ctrl+Shift+H, do: { keys: Ctrl+Shift+H } }
+      - separator
+      - { label: Toggle Comment, shortcut: Ctrl+/, do: { keys: Ctrl+/ } }
+      - { label: Format Document, shortcut: Ctrl+Shift+I, do: { keys: Ctrl+Shift+I } }
+      - { label: Indent, shortcut: "Ctrl+]", do: { keys: "Ctrl+]" } }
+      - { label: Outdent, shortcut: "Ctrl+[", do: { keys: "Ctrl+[" } }
+      - { label: Delete Line, shortcut: Ctrl+Shift+K, do: { keys: Ctrl+Shift+K } }
+      - { label: Join Lines, shortcut: Ctrl+Shift+J, do: { keys: Ctrl+Shift+J } }
+      - { label: Rewrap, shortcut: Ctrl+K Q, do: { keys: Ctrl+K Q } }
+  - title: Selection
+    items:
+      - { label: Select All, shortcut: Ctrl+A, do: { keys: Ctrl+A } }
+      - { label: Select Line, shortcut: Ctrl+L, do: { keys: Ctrl+L } }
+      - { label: Expand Selection, shortcut: Alt+Shift+Right, do: { keys: Alt+Shift+Right } }
+      - { label: Shrink Selection, shortcut: Alt+Shift+Left, do: { keys: Alt+Shift+Left } }
+      - separator
+      - { label: Add Cursor Above, shortcut: Alt+Shift+Up, do: { keys: Alt+Shift+Up } }
+      - { label: Add Cursor Below, shortcut: Alt+Shift+Down, do: { keys: Alt+Shift+Down } }
+      - { label: Add Next Occurrence, shortcut: Ctrl+D, do: { keys: Ctrl+D } }
+      - { label: Select All Occurrences, shortcut: Ctrl+Shift+L, do: { keys: Ctrl+Shift+L } }
+      - separator
+      - { label: Move Line Up, shortcut: Alt+Up, do: { keys: Alt+Up } }
+      - { label: Move Line Down, shortcut: Alt+Down, do: { keys: Alt+Down } }
+      - { label: Duplicate Line Down, shortcut: Ctrl+Alt+Shift+Down, do: { keys: Ctrl+Alt+Shift+Down } }
+  - title: View
+    items:
+      - { label: Command Palette…, shortcut: Ctrl+Shift+P, do: { keys: Ctrl+Shift+P } }
+      - separator
+      - { label: Zoom In, shortcut: Ctrl+=, do: { keys: Ctrl+= } }
+      - { label: Zoom Out, shortcut: Ctrl+-, do: { keys: Ctrl+- } }
+      - { label: Reset Zoom, shortcut: Ctrl+0, do: { keys: Ctrl+0 } }
+      - separator
+      - { label: Toggle Left Dock, shortcut: Ctrl+B, do: { keys: Ctrl+B } }
+      - { label: Toggle Right Dock, shortcut: Ctrl+Alt+B, do: { keys: Ctrl+Alt+B } }
+      - { label: Toggle Bottom Dock, shortcut: Ctrl+J, do: { keys: Ctrl+J } }
+      - { label: Toggle All Docks, shortcut: Ctrl+Alt+Y, do: { keys: Ctrl+Alt+Y } }
+      - separator
+      - { label: Project Panel, shortcut: Ctrl+Shift+E, do: { keys: Ctrl+Shift+E } }
+      - { label: Outline Panel, shortcut: Ctrl+Shift+B, do: { keys: Ctrl+Shift+B } }
+      - { label: Git Panel, shortcut: Ctrl+Shift+G, do: { keys: Ctrl+Shift+G } }
+      - { label: Debug Panel, shortcut: Ctrl+Shift+D, do: { keys: Ctrl+Shift+D } }
+      - { label: Terminal Panel, shortcut: Ctrl+`, do: { keys: Ctrl+` } }
+      - { label: Agent Panel, shortcut: "Ctrl+?", do: { keys: "Ctrl+?" } }
+      - { label: Diagnostics, shortcut: Ctrl+Shift+M, do: { keys: Ctrl+Shift+M } }
+      - separator
+      - { label: Toggle Soft Wrap, shortcut: Ctrl+K Z, do: { keys: Ctrl+K Z } }
+      - { label: Toggle Line Numbers, shortcut: Ctrl+;, do: { keys: Ctrl+; } }
+      - { label: Zoom Pane, shortcut: Shift+Escape, do: { keys: Shift+Escape } }
+      - { label: Toggle Full Screen, shortcut: F11, do: { keys: F11 } }
+  - title: Go
+    items:
+      - { label: Go to File…, shortcut: Ctrl+P, do: { keys: Ctrl+P } }
+      - { label: Go to Symbol in Project…, shortcut: Ctrl+T, do: { keys: Ctrl+T } }
+      - { label: Go to Symbol in Editor…, shortcut: Ctrl+Shift+O, do: { keys: Ctrl+Shift+O } }
+      - { label: Go to Line…, shortcut: Ctrl+G, do: { keys: Ctrl+G } }
+      - separator
+      - { label: Go Back, shortcut: Ctrl+Alt+-, do: { keys: Ctrl+Alt+- } }
+      - { label: Go Forward, shortcut: Ctrl+Alt+_, do: { keys: Ctrl+Alt+_ } }
+      - separator
+      - { label: Go to Definition, shortcut: F12, do: { keys: F12 } }
+      - { label: Go to Type Definition, shortcut: Ctrl+F12, do: { keys: Ctrl+F12 } }
+      - { label: Go to Implementation, shortcut: Shift+F12, do: { keys: Shift+F12 } }
+      - { label: Find All References, shortcut: Alt+Shift+F12, do: { keys: Alt+Shift+F12 } }
+      - { label: Rename Symbol, shortcut: F2, do: { keys: F2 } }
+      - { label: Code Actions, shortcut: Ctrl+., do: { keys: Ctrl+. } }
+      - separator
+      - { label: Next Problem, shortcut: F8, do: { keys: F8 } }
+      - { label: Previous Problem, shortcut: Shift+F8, do: { keys: Shift+F8 } }
+      - { label: Next Change, shortcut: Alt+., do: { keys: Alt+. } }
+      - { label: Previous Change, shortcut: "Alt+,", do: { keys: "Alt+," } }
+  - title: Run
+    items:
+      - { label: Spawn Task…, shortcut: Alt+Shift+T, do: { keys: Alt+Shift+T } }
+      - { label: Rerun Task, shortcut: Alt+T, do: { keys: Alt+T } }
+      - separator
+      - { label: Start Debugger, shortcut: F4, do: { keys: F4 } }
+      - { label: Rerun Debug Session, shortcut: F5, do: { keys: F5 } }
+      - { label: Toggle Breakpoint, shortcut: F9, do: { keys: F9 } }
+  - title: Window
+    items:
+      - { label: Next Tab, shortcut: Ctrl+Page Down, do: { keys: Ctrl+PageDown } }
+      - { label: Previous Tab, shortcut: Ctrl+Page Up, do: { keys: Ctrl+PageUp } }
+      - { label: Tab Switcher…, shortcut: Ctrl+Tab, do: { keys: Ctrl+Tab } }
+      - separator
+      - { label: Split Right, shortcut: Ctrl+K Right, do: { keys: Ctrl+K Right } }
+      - { label: Split Left, shortcut: Ctrl+K Left, do: { keys: Ctrl+K Left } }
+      - { label: Split Up, shortcut: Ctrl+K Up, do: { keys: Ctrl+K Up } }
+      - { label: Split Down, shortcut: Ctrl+K Down, do: { keys: Ctrl+K Down } }
+      - separator
+      - { label: Focus Next Part, shortcut: F6, do: { keys: F6 } }
+      - { label: Focus Previous Part, shortcut: Shift+F6, do: { keys: Shift+F6 } }
+  - title: Settings
+    items:
+      - { label: Settings…, shortcut: "Ctrl+,", do: { keys: "Ctrl+," } }
+      - { label: Keymap Editor…, shortcut: Ctrl+K Ctrl+S, do: { keys: Ctrl+K Ctrl+S } }
+      - { label: Select Theme…, shortcut: Ctrl+K Ctrl+T, do: { keys: Ctrl+K Ctrl+T } }
+      - { label: Extensions, shortcut: Ctrl+Shift+X, do: { keys: Ctrl+Shift+X } }
+  - title: Help
+    items:
+      - { label: Zed Documentation, do: { open_help: "https://zed.dev/docs/" } }
+      - { label: Key Bindings, do: { open_help: "https://zed.dev/docs/key-bindings" } }

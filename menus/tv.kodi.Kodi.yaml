@@ -1,0 +1,102 @@
+# Kodi draws its whole UI itself (skinned GUI, no toolkit) and exports no
+# menus. These are its default keyboard bindings (system/keymaps/
+# keyboard.xml: the <global> section, plus <FullscreenVideo> for the video
+# items), as macOS-style menus. Custom keymaps in userdata/keymaps or a
+# Keymap Editor add-on change them. The Video menu only works while a video
+# plays full screen; elsewhere those keys do something else.
+schema: hearth-menu-module/1
+id: tv.kodi.Kodi
+version: 1
+app:
+  match:
+    # Wayland app_id and X11 WM_CLASS are both the app name "Kodi"
+    # (CCompileInfo::GetAppName() in WinSystemWayland.cpp; the title string
+    # in WinSystemX11.cpp). kodi.desktop has no StartupWMClass.
+    app_id: [Kodi, kodi, tv.kodi.Kodi]
+    desktop: [kodi.desktop, tv.kodi.Kodi.desktop]
+    flatpak: [tv.kodi.Kodi]
+    nixpkgs: [kodi, kodi-wayland, kodi-gbm]
+  versions: ">=20"
+  locales: [en]
+provenance:
+  generator: hand-written from Kodi's default keyboard keymap (xbmc/xbmc 21.3-Omega)
+  inputs:
+    - "source:system/keymaps/keyboard.xml (global, FullscreenVideo)"
+    - "source:xbmc/windowing/wayland/WinSystemWayland.cpp, xbmc/windowing/X11/WinSystemX11.cpp"
+menus:
+  - title: Playback
+    items:
+      - { label: Play, shortcut: P, do: { keys: P } }
+      - { label: Pause, shortcut: Space, do: { keys: Space } }
+      - { label: Stop, shortcut: X, do: { keys: X } }
+      - separator
+      - { label: Fast Forward, shortcut: F, do: { keys: F } }
+      - { label: Rewind, shortcut: R, do: { keys: R } }
+      - { label: Next Item, shortcut: ".", do: { keys: "." } }
+      - { label: Previous Item, shortcut: ",", do: { keys: "," } }
+      - separator
+      - { label: Queue Item, shortcut: Q, do: { keys: Q } }
+      - { label: Switch Player…, shortcut: Y, do: { keys: Y } }
+      - { label: Player Controls, shortcut: Ctrl+N, do: { keys: Ctrl+N } }
+      - { label: Record, shortcut: Ctrl+R, do: { keys: Ctrl+R } }
+      - separator
+      - { label: Volume Up, shortcut: "=", do: { keys: "=" } }
+      - { label: Volume Down, shortcut: "-", do: { keys: "-" } }
+      - { label: Mute, shortcut: F8, do: { keys: F8 } }
+  - title: Video
+    items:
+      - { label: Show OSD, shortcut: M, do: { keys: M } }
+      - { label: Playlist, shortcut: C, do: { keys: C } }
+      - { label: Player Process Info, shortcut: O, do: { keys: O } }
+      - separator
+      - { label: Step Back, shortcut: Left, do: { keys: Left } }
+      - { label: Step Forward, shortcut: Right, do: { keys: Right } }
+      - { label: Chapter or Big Step Forward, shortcut: Up, do: { keys: Up } }
+      - { label: Chapter or Big Step Back, shortcut: Down, do: { keys: Down } }
+      - { label: Create Bookmark, shortcut: Ctrl+B, do: { keys: Ctrl+B } }
+      - separator
+      - { label: Show/Hide Subtitles, shortcut: T, do: { keys: T } }
+      - { label: Next Subtitle, shortcut: L, do: { keys: L } }
+      - { label: Next Audio Language, shortcut: Ctrl+A, do: { keys: Ctrl+A } }
+      - { label: Audio Delay…, shortcut: A, do: { keys: A } }
+      - { label: Next Video Stream, shortcut: Ctrl+V, do: { keys: Ctrl+V } }
+      - { label: Aspect Ratio, shortcut: Z, do: { keys: Z } }
+      - { label: Teletext, shortcut: V, do: { keys: V } }
+  - title: View
+    items:
+      - { label: Information, shortcut: I, do: { keys: I } }
+      - { label: Context Menu, shortcut: C, do: { keys: C } }
+      - separator
+      - { label: Fullscreen Video/GUI, shortcut: Tab, do: { keys: Tab } }
+      - { label: Toggle Windowed/Fullscreen, shortcut: \, do: { keys: \ } }
+      - { label: Toggle HDR, shortcut: F11, do: { keys: F11 } }
+      - separator
+      - { label: First Page, shortcut: Home, do: { keys: Home } }
+      - { label: Last Page, shortcut: End, do: { keys: End } }
+      - separator
+      - { label: Take Screenshot, shortcut: Ctrl+S, do: { keys: Ctrl+S } }
+  - title: Go
+    items:
+      - { label: Back, shortcut: Backspace, do: { keys: Backspace } }
+      - { label: Previous Menu, shortcut: Escape, do: { keys: Escape } }
+      - separator
+      - { label: Videos, shortcut: Ctrl+E, do: { keys: Ctrl+E } }
+      - { label: Music, shortcut: Ctrl+M, do: { keys: Ctrl+M } }
+      - { label: Pictures, shortcut: Ctrl+I, do: { keys: Ctrl+I } }
+      - separator
+      - { label: TV Guide, shortcut: E, do: { keys: E } }
+      - { label: TV Channels, shortcut: H, do: { keys: H } }
+      - { label: Radio Channels, shortcut: J, do: { keys: J } }
+      - { label: TV Recordings, shortcut: K, do: { keys: K } }
+      - { label: TV Timers, shortcut: B, do: { keys: B } }
+  - title: System
+    items:
+      - { label: Settings, shortcut: Alt+S, do: { keys: Alt+S } }
+      - { label: Reload Keymaps, shortcut: Ctrl+Shift+K, do: { keys: Ctrl+Shift+K } }
+      - { label: Toggle Debug Logging, shortcut: Ctrl+Shift+D, do: { keys: Ctrl+Shift+D } }
+      - separator
+      - { label: Power Menu…, shortcut: S, do: { keys: S } }
+  - title: Help
+    items:
+      - { label: Kodi Wiki, do: { open_help: "https://kodi.wiki/" } }
+      - { label: Keyboard Controls, do: { open_help: "https://kodi.wiki/view/Keyboard_controls" } }

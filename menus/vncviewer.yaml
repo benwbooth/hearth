@@ -1,0 +1,26 @@
+# TigerVNC's viewer is FLTK (no accessibility tree, no menu export). These
+# are its documented default viewer shortcuts (vncviewer(1) "KEYBOARD
+# SHORTCUTS", ShortcutModifiers = Ctrl,Alt). Disconnect, Options, Send
+# Ctrl-Alt-Del etc. live in the popup menu that Viewer Menu opens; they have
+# no direct key. TigerVNC before 1.16 used F8 for the menu instead.
+schema: hearth-menu-module/1
+id: vncviewer
+version: 1
+app:
+  match:
+    app_id: [vncviewer, Vncviewer, tigervnc]
+    desktop: [vncviewer.desktop]
+    nixpkgs: [tigervnc]
+  versions: ">=1.16"
+  locales: [en]
+provenance:
+  generator: hand-written from upstream source and man page (tigervnc 1.16.2, vncviewer/vncviewer.man, vncviewer/Viewport.cxx, 2026-11-24)
+  inputs: [docs:vncviewer.man, source:vncviewer/Viewport.cxx]
+menus:
+  - title: Connection
+    items:
+      - { label: Viewer Menu…, shortcut: Ctrl+Alt+M, do: { keys: Ctrl+Alt+M } }
+      - { label: Grab Keyboard, shortcut: Ctrl+Alt+G, do: { keys: Ctrl+Alt+G } }
+  - title: View
+    items:
+      - { label: Full Screen, shortcut: Ctrl+Alt+Enter, do: { keys: Ctrl+Alt+Enter } }

@@ -866,9 +866,28 @@ def module_for(app_id):
                 v = match.get(k) or []
                 keys |= set(v if isinstance(v, list) else [v])
             for k in keys:
-                by_key[str(k).lower().removesuffix(".desktop")] = (m, path)
+                by_key[_module_key(str(k))] = (m, path)
         _modules.update(stamp=stamp, by_key=by_key)
-    return _modules["by_key"].get(app_id.lower().removesuffix(".desktop"))
+    return _modules["by_key"].get(_module_key(app_id))
+
+
+def _module_key(s):
+    """An app id as modules match it: case-insensitive, without .desktop,
+    and without Nix's wrapper renaming (Tk/X11 apps take their class from
+    the program name: ".xmaxima-wrapped")."""
+    s = s.lower().removesuffix(".desktop")
+    if s.startswith(".") and s.endswith("-wrapped"):
+        s = s[1:-len("-wrapped")]
+    return s
+
+
+def module_for_pid(pid):
+    """The module named like the window's program, for windows that report
+    no usable id (FLTK's ZynAddSubFX sets no WM_CLASS)."""
+    try:
+        return module_for(os.path.basename(os.readlink(f"/proc/{pid}/exe")))
+    except (OSError, ValueError):
+        return None
 
 
 class ModuleMenu:
@@ -1449,6 +1468,13 @@ class X11Window:
                         break
         except dbus.DBusException as e:
             err(e)
+        if new is None and xid:
+            # No module by its id: one by its program's name.
+            found = module_for_pid(x11_pid(xid)) if x11_pid(xid) else None
+            if found:
+                if isinstance(self.inner, ModuleMenu):
+                    return False
+                new = ModuleMenu(self.key, found[0], found[1], self.window, None)
         if new is None and xid:
             # Nothing exported: the window's own menu bar over AT-SPI, as for
             # Wayland windows (Java Swing through the ATK bridge, X11 Qt and

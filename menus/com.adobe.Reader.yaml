@@ -1,0 +1,46 @@
+# Adobe Reader 9.5.5 for Linux (Flathub com.adobe.Reader, i386 GTK2 bundle)
+# exposes no menus hearth can read. These are Adobe's documented default
+# keys for Acrobat/Reader 9 on Windows/UNIX ("Using Acrobat 9", chapter 16
+# Keyboard shortcuts: Keys for navigating a PDF, Keys for general
+# navigating, Keys for working with navigation panels). Reader's own menu
+# accelerators aren't in that chapter, so they're left out.
+schema: hearth-menu-module/1
+id: com.adobe.Reader
+version: 1
+app:
+  match:
+    app_id: [com.adobe.Reader, acroread, AcroRead, Acroread]
+    desktop: [com.adobe.Reader.desktop, AdobeReader.desktop, acroread.desktop]
+    flatpak: [com.adobe.Reader]
+  versions: ">=9.5 <10"
+  locales: [en]
+provenance:
+  generator: hand-written from Adobe's Acrobat 9 user guide, Keyboard shortcuts chapter (copy at manualslib.com/manual/506570, pp. 363-365), and github.com/flathub/com.adobe.Reader AdobeReader.desktop, 2026-11-24
+  inputs: [docs:using-acrobat-9-keyboard-shortcuts, flathub:AdobeReader.desktop]
+menus:
+  - title: File
+    items:
+      - { label: Close, shortcut: Ctrl+F4, do: { keys: Ctrl+F4 } }
+  - title: Edit
+    items:
+      - { label: Find Next Result, shortcut: F3, do: { keys: F3 } }
+  - title: View
+    items:
+      - { label: Zoom In, shortcut: Ctrl+=, do: { keys: Ctrl+= } }
+      - { label: Zoom Out, shortcut: Ctrl+-, do: { keys: Ctrl+- } }
+      - separator
+      - label: Page Navigation
+        items:
+          - { label: First Page, shortcut: Home, do: { keys: Home } }
+          - { label: Previous Page, shortcut: Left, do: { keys: Left } }
+          - { label: Next Page, shortcut: Right, do: { keys: Right } }
+          - { label: Last Page, shortcut: End, do: { keys: End } }
+          - separator
+          - { label: Previous Screen, shortcut: Page Up, do: { keys: PageUp } }
+          - { label: Next Screen, shortcut: Page Down, do: { keys: PageDown } }
+      - separator
+      - { label: Navigation Panels, shortcut: Ctrl+Shift+F5, do: { keys: Ctrl+Shift+F5 } }
+  - title: Window
+    items:
+      - { label: Next Open Document, shortcut: Ctrl+F6, do: { keys: Ctrl+F6 } }
+      - { label: Previous Open Document, shortcut: Ctrl+Shift+F6, do: { keys: Ctrl+Shift+F6 } }

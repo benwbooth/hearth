@@ -1,0 +1,97 @@
+# Neovide (a Neovim GUI) draws its own window and exports no menus. On Linux
+# it has no shortcuts of its own (window/wrapper/linux.rs handles none): every
+# key goes to Neovim. So these menus type Neovim's documented default
+# commands and mappings (:help index, :help default-mappings, :help
+# lsp-defaults), each starting with Ctrl+\ Ctrl+N, which goes to Normal mode
+# from any mode (:help CTRL-\_CTRL-N). Your init.lua mappings, plugins or a
+# remapped leader don't change these, but mappings that shadow these keys
+# will. The Code menu needs a language server attached to the buffer.
+schema: hearth-menu-module/1
+id: neovide
+version: 1
+app:
+  match:
+    # Wayland app_id and X11 WM_CLASS default to "neovide" (src/cmd_line.rs
+    # --wayland_app_id / --x11-wm-class; StartupWMClass=neovide).
+    app_id: [neovide]
+    desktop: [neovide.desktop]
+    nixpkgs: [neovide]
+  versions: ">=0.13"
+  locales: [en]
+provenance:
+  generator: hand-written from Neovide's Linux key handling and Neovim's default commands/mappings (neovide main 2026-11-24, neovim v0.11.5)
+  inputs:
+    - "source:neovide src/window/wrapper/linux.rs, src/window/keyboard_manager.rs, src/cmd_line.rs"
+    - "source:neovim runtime/lua/vim/_defaults.lua"
+    - "docs:https://neovim.io/doc/user/index.html"
+    - "docs:https://neovim.io/doc/user/lsp.html#lsp-defaults"
+menus:
+  - title: File
+    items:
+      - { label: New Buffer, shortcut: ":enew", do: { keys: 'Ctrl+\ Ctrl+N : e n e w Enter' } }
+      - { label: New Tab, shortcut: ":tabnew", do: { keys: 'Ctrl+\ Ctrl+N : t a b n e w Enter' } }
+      - { label: Open File…, shortcut: ":e", do: { keys: 'Ctrl+\ Ctrl+N : e Space' } }
+      - separator
+      - { label: Save, shortcut: ":w", do: { keys: 'Ctrl+\ Ctrl+N : w Enter' } }
+      - { label: Save As…, shortcut: ":saveas", do: { keys: 'Ctrl+\ Ctrl+N : s a v e a s Space' } }
+      - { label: Save All, shortcut: ":wa", do: { keys: 'Ctrl+\ Ctrl+N : w a Enter' } }
+      - separator
+      - { label: Close Window, shortcut: ":q", do: { keys: 'Ctrl+\ Ctrl+N : q Enter' } }
+      - { label: Quit, shortcut: ":qa", do: { keys: 'Ctrl+\ Ctrl+N : q a Enter' } }
+  - title: Edit
+    items:
+      - { label: Undo, shortcut: u, do: { keys: 'Ctrl+\ Ctrl+N u' } }
+      - { label: Redo, shortcut: Ctrl+R, do: { keys: 'Ctrl+\ Ctrl+N Ctrl+R' } }
+      - separator
+      - { label: Copy Line to Clipboard, shortcut: '"+yy', do: { keys: 'Ctrl+\ Ctrl+N " + y y' } }
+      - { label: Paste from Clipboard, shortcut: '"+p', do: { keys: 'Ctrl+\ Ctrl+N " + p' } }
+      - { label: Select All, shortcut: ggVG, do: { keys: 'Ctrl+\ Ctrl+N g g Shift+V Shift+G' } }
+      - separator
+      - { label: Find…, shortcut: /, do: { keys: 'Ctrl+\ Ctrl+N /' } }
+      - { label: Find Next, shortcut: n, do: { keys: 'Ctrl+\ Ctrl+N n' } }
+      - { label: Find Previous, shortcut: N, do: { keys: 'Ctrl+\ Ctrl+N Shift+N' } }
+      - { label: Replace in File…, shortcut: ":%s/", do: { keys: 'Ctrl+\ Ctrl+N : % s /' } }
+      - { label: Clear Search Highlight, shortcut: Ctrl+L, do: { keys: 'Ctrl+\ Ctrl+N Ctrl+L' } }
+      - separator
+      - { label: Toggle Comment, shortcut: gcc, do: { keys: 'Ctrl+\ Ctrl+N g c c' } }
+  - title: View
+    items:
+      - { label: Toggle Line Numbers, shortcut: ":set number!", do: { keys: 'Ctrl+\ Ctrl+N : s e t Space n u m b e r ! Enter' } }
+      - { label: Toggle Line Wrap, shortcut: ":set wrap!", do: { keys: 'Ctrl+\ Ctrl+N : s e t Space w r a p ! Enter' } }
+      - separator
+      - { label: Next Buffer, shortcut: "]b", do: { keys: 'Ctrl+\ Ctrl+N ] b' } }
+      - { label: Previous Buffer, shortcut: "[b", do: { keys: 'Ctrl+\ Ctrl+N [ b' } }
+      - { label: Next Quickfix Item, shortcut: "]q", do: { keys: 'Ctrl+\ Ctrl+N ] q' } }
+      - { label: Previous Quickfix Item, shortcut: "[q", do: { keys: 'Ctrl+\ Ctrl+N [ q' } }
+  - title: Code
+    items:
+      - { label: Hover Documentation, shortcut: K, do: { keys: 'Ctrl+\ Ctrl+N Shift+K' } }
+      - { label: Go to Definition, shortcut: "Ctrl+]", do: { keys: 'Ctrl+\ Ctrl+N Ctrl+]' } }
+      - { label: Go to Implementation, shortcut: gri, do: { keys: 'Ctrl+\ Ctrl+N g r i' } }
+      - { label: Go to Type Definition, shortcut: grt, do: { keys: 'Ctrl+\ Ctrl+N g r t' } }
+      - { label: Find References, shortcut: grr, do: { keys: 'Ctrl+\ Ctrl+N g r r' } }
+      - { label: Document Symbols, shortcut: gO, do: { keys: 'Ctrl+\ Ctrl+N g Shift+O' } }
+      - separator
+      - { label: Rename Symbol, shortcut: grn, do: { keys: 'Ctrl+\ Ctrl+N g r n' } }
+      - { label: Code Action, shortcut: gra, do: { keys: 'Ctrl+\ Ctrl+N g r a' } }
+      - separator
+      - { label: Next Diagnostic, shortcut: "]d", do: { keys: 'Ctrl+\ Ctrl+N ] d' } }
+      - { label: Previous Diagnostic, shortcut: "[d", do: { keys: 'Ctrl+\ Ctrl+N [ d' } }
+      - { label: Show Diagnostic, shortcut: Ctrl+W d, do: { keys: 'Ctrl+\ Ctrl+N Ctrl+W d' } }
+  - title: Window
+    items:
+      - { label: Split Horizontally, shortcut: Ctrl+W s, do: { keys: 'Ctrl+\ Ctrl+N Ctrl+W s' } }
+      - { label: Split Vertically, shortcut: Ctrl+W v, do: { keys: 'Ctrl+\ Ctrl+N Ctrl+W v' } }
+      - { label: Next Split, shortcut: Ctrl+W w, do: { keys: 'Ctrl+\ Ctrl+N Ctrl+W w' } }
+      - { label: Close Split, shortcut: Ctrl+W c, do: { keys: 'Ctrl+\ Ctrl+N Ctrl+W c' } }
+      - { label: Close Other Splits, shortcut: Ctrl+W o, do: { keys: 'Ctrl+\ Ctrl+N Ctrl+W o' } }
+      - { label: Equalize Splits, shortcut: Ctrl+W =, do: { keys: 'Ctrl+\ Ctrl+N Ctrl+W =' } }
+      - separator
+      - { label: Next Tab, shortcut: gt, do: { keys: 'Ctrl+\ Ctrl+N g t' } }
+      - { label: Previous Tab, shortcut: gT, do: { keys: 'Ctrl+\ Ctrl+N g Shift+T' } }
+      - { label: Close Tab, shortcut: ":tabclose", do: { keys: 'Ctrl+\ Ctrl+N : t a b c l o s e Enter' } }
+  - title: Help
+    items:
+      - { label: Neovim Help, shortcut: ":help", do: { keys: 'Ctrl+\ Ctrl+N : h e l p Enter' } }
+      - { label: Neovide Documentation, do: { open_help: "https://neovide.dev/" } }
+      - { label: Neovim Documentation, do: { open_help: "https://neovim.io/doc/user/" } }

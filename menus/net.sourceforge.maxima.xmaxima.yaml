@@ -1,0 +1,46 @@
+# xmaxima is Tk: its File/Edit menu bar is drawn by Tk on X11, with no
+# accessibility tree. This mirrors the items that have a default key
+# (upstream interfaces/xmaxima/Tkmaxima/Menu.tcl, accelerators bound to the
+# console text widget in Menu.tcl/Bindings.tcl). Restart, Exit, Options,
+# Maxima and Help items have no key. wxMaxima needs no module: its GTK menu
+# bar is read over AT-SPI.
+schema: hearth-menu-module/1
+id: net.sourceforge.maxima.xmaxima
+version: 1
+app:
+  match:
+    app_id: [xmaxima, Xmaxima, net.sourceforge.maxima.xmaxima]
+    desktop: [net.sourceforge.maxima.xmaxima.desktop, xmaxima.desktop]
+    nixpkgs: [maxima]
+  versions: ">=5.40"
+  locales: [en]
+provenance:
+  generator: hand-written from upstream source (maxima-5.47.0 tarball, interfaces/xmaxima/Tkmaxima/Menu.tcl and Bindings.tcl, 2026-11-24)
+  inputs: [source:Tkmaxima/Menu.tcl, source:Tkmaxima/Bindings.tcl]
+menus:
+  - title: File
+    items:
+      - { label: Batch File…, shortcut: Alt+B, do: { keys: Alt+B } }
+      - { label: Batch File Silently…, shortcut: Alt+O, do: { keys: Alt+O } }
+      - { label: Restore Maxima State…, shortcut: Alt+I, do: { keys: Alt+I } }
+      - separator
+      - { label: Save Maxima State to File…, shortcut: Ctrl+S, do: { keys: Ctrl+S } }
+      - { label: Save Maxima Input to File…, shortcut: Ctrl+A, do: { keys: Ctrl+A } }
+      - separator
+      - { label: Interrupt, shortcut: Ctrl+G, do: { keys: Ctrl+G } }
+      - { label: Input Prompt, shortcut: Alt+S, do: { keys: Alt+S } }
+  - title: Edit
+    items:
+      - { label: Cut, shortcut: Ctrl+X, do: { keys: Ctrl+X } }
+      - { label: Copy, shortcut: Ctrl+C, do: { keys: Ctrl+C } }
+      - { label: Paste, shortcut: Ctrl+V, do: { keys: Ctrl+V } }
+      - separator
+      - { label: Kill, shortcut: Ctrl+K, do: { keys: Ctrl+K } }
+      - { label: Yank, shortcut: Ctrl+Y, do: { keys: Ctrl+Y } }
+      - separator
+      - { label: Previous Input, shortcut: Alt+P, do: { keys: Alt+P } }
+      - { label: Next Input, shortcut: Alt+N, do: { keys: Alt+N } }
+      - { label: Clear Input, shortcut: Ctrl+U, do: { keys: Ctrl+U } }
+  - title: Help
+    items:
+      - { label: Maxima Manual (web), do: { open_help: "https://maxima.sourceforge.io/docs/manual/maxima_toc.html" } }

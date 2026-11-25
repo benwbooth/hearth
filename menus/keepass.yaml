@@ -1,0 +1,70 @@
+# KeePass 2 is Mono WinForms: its File/Group/Entry/Find menu bar is drawn by
+# Mono on X11 with no accessibility tree. This mirrors the items that have a
+# default shortcut (upstream KeePass/Forms/MainForm_Functions.cs
+# AssignMenuShortcuts, labels from MainForm.Designer.cs/KPRes). On Mono the
+# Move items use Ctrl+Shift+F5..F8 (Mono workaround 1245). Delete, Enter and
+# the Move keys act on the group tree or entry list, whichever has focus.
+schema: hearth-menu-module/1
+id: keepass
+version: 1
+app:
+  match:
+    app_id: [keepass2, KeePass2, keepass, KeePass]
+    desktop: [keepass.desktop, keepass2.desktop]
+    nixpkgs: [keepass]
+  versions: ">=2.50"
+  locales: [en]
+provenance:
+  generator: hand-written from upstream source (KeePass-2.60-Source.zip, KeePass/Forms/MainForm_Functions.cs, MainForm.Designer.cs, KeePassLib/PwDefs.cs, 2026-11-24)
+  inputs: [source:MainForm_Functions.cs, source:MainForm.Designer.cs, source:KPRes.Generated.cs]
+menus:
+  - title: File
+    items:
+      - { label: New…, shortcut: Ctrl+N, do: { keys: Ctrl+N } }
+      - { label: Open File…, shortcut: Ctrl+O, do: { keys: Ctrl+O } }
+      - { label: Open URL…, shortcut: Ctrl+Shift+O, do: { keys: Ctrl+Shift+O } }
+      - { label: Close, shortcut: Ctrl+W, do: { keys: Ctrl+W } }
+      - separator
+      - { label: Save, shortcut: Ctrl+S, do: { keys: Ctrl+S } }
+      - separator
+      - { label: Print…, shortcut: Ctrl+P, do: { keys: Ctrl+P } }
+      - separator
+      - { label: Synchronize with File…, shortcut: Ctrl+R, do: { keys: Ctrl+R } }
+      - { label: Synchronize with URL…, shortcut: Ctrl+Shift+R, do: { keys: Ctrl+Shift+R } }
+      - separator
+      - { label: Lock Workspace, shortcut: Ctrl+L, do: { keys: Ctrl+L } }
+      - separator
+      - { label: Exit, shortcut: Ctrl+Q, do: { keys: Ctrl+Q } }
+  - title: Group
+    items:
+      - { label: Move Group to Top, shortcut: Ctrl+Shift+F5, do: { keys: Ctrl+Shift+F5 } }
+      - { label: Move Group One Up, shortcut: Ctrl+Shift+F6, do: { keys: Ctrl+Shift+F6 } }
+      - { label: Move Group One Down, shortcut: Ctrl+Shift+F7, do: { keys: Ctrl+Shift+F7 } }
+      - { label: Move Group to Bottom, shortcut: Ctrl+Shift+F8, do: { keys: Ctrl+Shift+F8 } }
+      - separator
+      - { label: Print Group…, shortcut: Ctrl+Shift+P, do: { keys: Ctrl+Shift+P } }
+  - title: Entry
+    items:
+      - { label: Copy User Name, shortcut: Ctrl+B, do: { keys: Ctrl+B } }
+      - { label: Copy Password, shortcut: Ctrl+C, do: { keys: Ctrl+C } }
+      - label: URL(s)
+        items:
+          - { label: Open, shortcut: Ctrl+U, do: { keys: Ctrl+U } }
+          - { label: Copy, shortcut: Ctrl+Shift+U, do: { keys: Ctrl+Shift+U } }
+      - { label: Perform Auto-Type, shortcut: Ctrl+V, do: { keys: Ctrl+V } }
+      - separator
+      - { label: Add Entry…, shortcut: Ctrl+I, do: { keys: Ctrl+I } }
+      - { label: Edit Entry…, shortcut: Enter, do: { keys: Enter } }
+      - { label: Duplicate Entry…, shortcut: Ctrl+K, do: { keys: Ctrl+K } }
+      - { label: Delete Entry, shortcut: Delete, do: { keys: Delete } }
+      - separator
+      - { label: Select All, shortcut: Ctrl+A, do: { keys: Ctrl+A } }
+  - title: Find
+    items:
+      - { label: Find…, shortcut: Ctrl+F, do: { keys: Ctrl+F } }
+      - { label: Find in Selected Group…, shortcut: Ctrl+Shift+F, do: { keys: Ctrl+Shift+F } }
+      - separator
+      - { label: "Selected Entry's Group", shortcut: Ctrl+G, do: { keys: Ctrl+G } }
+  - title: Help
+    items:
+      - { label: Help Contents, shortcut: F1, do: { keys: F1 } }

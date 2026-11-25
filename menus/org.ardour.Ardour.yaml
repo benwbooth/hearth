@@ -1,0 +1,155 @@
+# Ardour draws its menu bar inside its window with its own GTK2 fork (ytk)
+# and exports no global menu. These are its default "Mnemonic US" key
+# bindings (gtk2_ardour/ardour.keys.in, with Linux modifiers: Primary = Ctrl,
+# Secondary = Alt, Tertiary = Shift), as macOS-style menus. Bindings changed
+# in Window > Keyboard Shortcuts won't match. Editor items act on the Editor
+# window; Ardour's edit point (playhead, mouse or marker) decides where.
+schema: hearth-menu-module/1
+id: org.ardour.Ardour
+version: 1
+app:
+  match:
+    # GTK2 on X11 (XWayland): WM_CLASS "Ardour" (StartupWMClass in
+    # ardour.desktop.in). The desktop file is named after the major version
+    # (ardour9.desktop in nixpkgs); Flathub uses org.ardour.Ardour.
+    app_id: [Ardour, ardour, org.ardour.Ardour]
+    desktop: [ardour9.desktop, ardour8.desktop, ardour.desktop, org.ardour.Ardour.desktop]
+    flatpak: [org.ardour.Ardour]
+    nixpkgs: [ardour, ardour_8]
+  versions: ">=8"
+  locales: [en]
+provenance:
+  generator: hand-written from Ardour's default key bindings (Ardour/ardour 9.7)
+  inputs:
+    - "source:gtk2_ardour/ardour.keys.in"
+    - "source:tools/fmt-bindings (Linux modifier map)"
+    - "source:gtk2_ardour/ardour.desktop.in"
+menus:
+  - title: Session
+    items:
+      - { label: New Session…, shortcut: Ctrl+N, do: { keys: Ctrl+N } }
+      - { label: Open Session…, shortcut: Ctrl+O, do: { keys: Ctrl+O } }
+      - { label: Recent Sessions…, shortcut: Ctrl+Shift+O, do: { keys: Ctrl+Shift+O } }
+      - separator
+      - { label: Save, shortcut: Ctrl+S, do: { keys: Ctrl+S } }
+      - { label: Snapshot (& keep working on current version)…, shortcut: Ctrl+Shift+S, do: { keys: Ctrl+Shift+S } }
+      - separator
+      - { label: Add Track/Bus…, shortcut: Ctrl+Shift+N, do: { keys: Ctrl+Shift+N } }
+      - { label: Import Audio Files…, shortcut: Ctrl+I, do: { keys: Ctrl+I } }
+      - separator
+      - { label: Export Session…, shortcut: Alt+E, do: { keys: Alt+E } }
+      - { label: Quick Export…, shortcut: Ctrl+E, do: { keys: Ctrl+E } }
+      - { label: Stem Export…, shortcut: Alt+Shift+E, do: { keys: Alt+Shift+E } }
+      - separator
+      - { label: Quit, shortcut: Ctrl+Q, do: { keys: Ctrl+Q } }
+  - title: Edit
+    items:
+      - { label: Undo, shortcut: Ctrl+Z, do: { keys: Ctrl+Z } }
+      - { label: Redo, shortcut: Ctrl+R, do: { keys: Ctrl+R } }
+      - separator
+      - { label: Cut, shortcut: Ctrl+X, do: { keys: Ctrl+X } }
+      - { label: Copy, shortcut: Ctrl+C, do: { keys: Ctrl+C } }
+      - { label: Paste, shortcut: Ctrl+V, do: { keys: Ctrl+V } }
+      - { label: Delete, shortcut: Delete, do: { keys: Delete } }
+      - separator
+      - { label: Select All Objects, shortcut: Ctrl+A, do: { keys: Ctrl+A } }
+      - { label: Select All in Loop Range, shortcut: Ctrl+L, do: { keys: Ctrl+L } }
+      - { label: Select All after Edit Point, shortcut: Ctrl+Shift+E, do: { keys: Ctrl+Shift+E } }
+      - { label: Deselect All, shortcut: Escape, do: { keys: Escape } }
+      - separator
+      - { label: Duplicate, shortcut: Ctrl+D, do: { keys: Ctrl+D } }
+      - { label: Multi-Duplicate…, shortcut: Alt+D, do: { keys: Alt+D } }
+      - { label: Split/Separate, shortcut: S, do: { keys: S } }
+      - { label: Crop Range, shortcut: Ctrl+Alt+C, do: { keys: Ctrl+Alt+C } }
+      - { label: Consolidate Range, shortcut: Alt+Shift+C, do: { keys: Alt+Shift+C } }
+      - separator
+      - { label: Find Track/Bus…, shortcut: Ctrl+Shift+L, do: { keys: Ctrl+Shift+L } }
+  - title: Region
+    items:
+      - { label: Play Selected Regions, shortcut: H, do: { keys: H } }
+      - { label: Mute/Unmute, shortcut: Alt+1, do: { keys: Alt+1 } }
+      - { label: Normalize…, shortcut: Alt+3, do: { keys: Alt+3 } }
+      - { label: Reverse, shortcut: Alt+4, do: { keys: Alt+4 } }
+      - { label: Quantize MIDI…, shortcut: Alt+5, do: { keys: Alt+5 } }
+      - { label: Boost Gain, shortcut: Alt+6, do: { keys: Alt+6 } }
+      - { label: Cut Gain, shortcut: Alt+7, do: { keys: Alt+7 } }
+      - { label: Transpose…, shortcut: Alt+8, do: { keys: Alt+8 } }
+      - { label: Rename…, shortcut: Alt+9, do: { keys: Alt+9 } }
+      - separator
+      - { label: Trim Front, shortcut: J, do: { keys: J } }
+      - { label: Trim Back, shortcut: K, do: { keys: K } }
+      - { label: Group Selected Regions, shortcut: Ctrl+G, do: { keys: Ctrl+G } }
+      - { label: Ungroup Selected Regions, shortcut: Ctrl+Shift+G, do: { keys: Ctrl+Shift+G } }
+      - { label: Export Region…, shortcut: Ctrl+Alt+E, do: { keys: Ctrl+Alt+E } }
+  - title: Transport
+    items:
+      - { label: Play/Stop, shortcut: Space, do: { keys: Space } }
+      - { label: Play Edit Range, shortcut: Alt+Space, do: { keys: Alt+Space } }
+      - { label: Stop and Discard Capture, shortcut: Ctrl+Space, do: { keys: Ctrl+Space } }
+      - { label: Loop Play, shortcut: L, do: { keys: L } }
+      - separator
+      - { label: Engage Record, shortcut: Shift+R, do: { keys: Shift+R } }
+      - { label: Start Recording, shortcut: Shift+Space, do: { keys: Shift+Space } }
+      - separator
+      - { label: Rewind, shortcut: Shift+Left, do: { keys: Shift+Left } }
+      - { label: Fast Forward, shortcut: Shift+Right, do: { keys: Shift+Right } }
+      - { label: Go to Start, shortcut: Home, do: { keys: Home } }
+      - { label: Go to End, shortcut: End, do: { keys: End } }
+      - separator
+      - { label: Toggle Click (Metronome), shortcut: "`", do: { keys: "`" } }
+      - { label: Toggle Punch In/Out, shortcut: "8", do: { keys: "8" } }
+      - { label: Toggle Auto Return, shortcut: "7", do: { keys: "7" } }
+      - { label: Toggle Follow Playhead, shortcut: Ctrl+F, do: { keys: Ctrl+F } }
+      - { label: MIDI Panic, shortcut: Ctrl+`, do: { keys: Ctrl+` } }
+  - title: Markers
+    items:
+      - { label: Add Marker, shortcut: Tab, do: { keys: Tab } }
+      - { label: Remove Marker, shortcut: Ctrl+Tab, do: { keys: Ctrl+Tab } }
+      - { label: Jump to Previous Mark, shortcut: Q, do: { keys: Q } }
+      - { label: Jump to Next Mark, shortcut: W, do: { keys: W } }
+      - separator
+      - { label: Set Range Start, shortcut: ",", do: { keys: "," } }
+      - { label: Set Range End, shortcut: ".", do: { keys: "." } }
+      - { label: Set Loop Start, shortcut: "Alt+,", do: { keys: "Alt+," } }
+      - { label: Set Loop End, shortcut: Alt+., do: { keys: Alt+. } }
+      - { label: Set Punch Start, shortcut: "Ctrl+,", do: { keys: "Ctrl+," } }
+      - { label: Set Punch End, shortcut: Ctrl+., do: { keys: Ctrl+. } }
+  - title: View
+    items:
+      - { label: Zoom In, shortcut: "=", do: { keys: "=" } }
+      - { label: Zoom Out, shortcut: "-", do: { keys: "-" } }
+      - { label: Zoom to Session, shortcut: Ctrl+Shift+_, do: { keys: Ctrl+Shift+- } }
+      - { label: Zoom to Selection, shortcut: Z, do: { keys: Z } }
+      - { label: Toggle Last Two Zoom States, shortcut: Shift+Z, do: { keys: Shift+Z } }
+      - separator
+      - { label: Expand Track Height, shortcut: Alt+=, do: { keys: Alt+= } }
+      - { label: Shrink Track Height, shortcut: Alt+-, do: { keys: Alt+- } }
+      - { label: Fit Selection Vertically, shortcut: F, do: { keys: F } }
+      - separator
+      - { label: Editor List, shortcut: Shift+L, do: { keys: Shift+L } }
+      - { label: Editor Mixer Strip, shortcut: Shift+E, do: { keys: Shift+E } }
+      - { label: Summary, shortcut: Shift+S, do: { keys: Shift+S } }
+      - separator
+      - { label: Maximise Editor Space, shortcut: Ctrl+Alt+F, do: { keys: Ctrl+Alt+F } }
+      - { label: Maximise Mixer Space, shortcut: Ctrl+Shift+F, do: { keys: Ctrl+Shift+F } }
+  - title: Window
+    items:
+      - { label: Mixer, shortcut: Alt+M, do: { keys: Alt+M } }
+      - { label: Recorder, shortcut: Alt+R, do: { keys: Alt+R } }
+      - { label: Cues, shortcut: Alt+C, do: { keys: Alt+C } }
+      - { label: Next Tab, shortcut: Ctrl+Page Down, do: { keys: Ctrl+PageDown } }
+      - { label: Previous Tab, shortcut: Ctrl+Page Up, do: { keys: Ctrl+PageUp } }
+      - separator
+      - { label: Locations, shortcut: Alt+L, do: { keys: Alt+L } }
+      - { label: Meterbridge, shortcut: Alt+B, do: { keys: Alt+B } }
+      - { label: Audio Connections, shortcut: Alt+Shift+A, do: { keys: Alt+Shift+A } }
+      - { label: MIDI Connections, shortcut: Alt+Shift+M, do: { keys: Alt+Shift+M } }
+      - { label: Virtual MIDI Keyboard, shortcut: Alt+K, do: { keys: Alt+K } }
+      - { label: Realtime Analyzer, shortcut: Alt+Shift+S, do: { keys: Alt+Shift+S } }
+      - { label: Video Monitor, shortcut: Alt+V, do: { keys: Alt+V } }
+      - separator
+      - { label: Preferences, shortcut: Alt+O, do: { keys: Alt+O } }
+  - title: Help
+    items:
+      - { label: Ardour Manual, do: { open_help: "https://manual.ardour.org/" } }
+      - { label: Default Keyboard Bindings, do: { open_help: "https://manual.ardour.org/appendix/default-keyboard-shortcuts/" } }

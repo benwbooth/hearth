@@ -1,0 +1,40 @@
+# GParted runs as root (pkexec) on XWayland, so hearth can't reach its
+# GtkMenuBar over AT-SPI. This mirrors its GParted/Edit/View/Device/
+# Partition/Help menus with the items that have a default accelerator
+# (upstream src/Win_GParted.cc init_menubar/init_partition_menu; Quit, Copy
+# and Paste use GTK stock accelerators). Format to, Mount on, Name, Flags,
+# Check, Label, UUID, Information etc. have none.
+schema: hearth-menu-module/1
+id: gparted
+version: 1
+app:
+  match:
+    app_id: [gpartedbin, Gpartedbin, gparted, GParted]
+    desktop: [gparted.desktop]
+    nixpkgs: [gparted]
+  versions: ">=1.0"
+  locales: [en]
+provenance:
+  generator: hand-written from upstream source (gparted-1.8.1 tarball, src/Win_GParted.cc, 2026-11-24)
+  inputs: [source:src/Win_GParted.cc, source:src/MenuHelpers.cc]
+menus:
+  - title: GParted
+    items:
+      - { label: Refresh Devices, shortcut: Ctrl+R, do: { keys: Ctrl+R } }
+      - separator
+      - { label: Quit, shortcut: Ctrl+Q, do: { keys: Ctrl+Q } }
+  - title: Edit
+    items:
+      - { label: Undo Last Operation, shortcut: Ctrl+Z, do: { keys: Ctrl+Z } }
+      - { label: Apply All Operations, shortcut: Ctrl+Enter, do: { keys: Ctrl+Enter } }
+  - title: Partition
+    items:
+      - { label: New, shortcut: Insert, do: { keys: Insert } }
+      - { label: Delete, shortcut: Delete, do: { keys: Delete } }
+      - separator
+      - { label: Copy, shortcut: Ctrl+C, do: { keys: Ctrl+C } }
+      - { label: Paste, shortcut: Ctrl+V, do: { keys: Ctrl+V } }
+  - title: Help
+    items:
+      - { label: Contents, shortcut: F1, do: { keys: F1 } }
+      - { label: GParted Manual (web), do: { open_help: "https://gparted.org/display-doc.php?name=help-manual" } }
