@@ -69,9 +69,10 @@ Item {
         source: grab
         blurEnabled: true
         blur: 1
-        blurMax: 40
+        blurMax: bg.style.backdropBlur
         autoPaddingEnabled: false
-        saturation: 0.35
+        saturation: bg.style.backdropSaturation
+        brightness: bg.style.backdropBrightness
         maskEnabled: true
         maskSource: mask
     }
@@ -87,16 +88,46 @@ Item {
         anchors.margins: 1
         radius: bg.style.radius - 1
         gradient: Gradient {
-            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, bg.style.dark ? 0.05 : 0.22) }
-            GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0) }
+            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, bg.style.dark ? 0.06 : 0.20) }
+            GradientStop { position: 0.3; color: Qt.rgba(1, 1, 1, 0) }
         }
     }
-    Rectangle {   // the specular rim
+    Rectangle {   // the rim, all round
         anchors.fill: parent
         anchors.margins: 1
         radius: bg.style.radius - 1
         color: "transparent"
         border.width: 1
         border.color: bg.style.glassRim
+    }
+    // The specular edge: a bright rim along the top that fades down the
+    // sides (a rim ring, masked by a top-to-bottom fade).
+    Item {
+        anchors.fill: parent
+        anchors.margins: 1
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            maskEnabled: true
+            maskSource: specFade
+            maskThresholdMin: 0.0
+            maskSpreadAtMin: 1.0
+        }
+        Rectangle {
+            anchors.fill: parent
+            radius: bg.style.radius - 1
+            color: "transparent"
+            border.width: 1
+            border.color: bg.style.glassSpecular
+        }
+    }
+    Rectangle {
+        id: specFade
+        anchors.fill: parent
+        visible: false
+        layer.enabled: true
+        gradient: Gradient {
+            GradientStop { position: 0.0; color: "white" }
+            GradientStop { position: 0.45; color: "transparent" }
+        }
     }
 }

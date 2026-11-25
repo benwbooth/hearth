@@ -26,6 +26,8 @@ QtObject {
     // 13 pt (Inter runs ~4% larger than SF Pro at the same size).
     readonly property real fontSize: Math.round(13 * pt * (family.indexOf("Inter") === 0 ? 0.962 : 1) * 10) / 10
     readonly property real letterSpacing: -0.09
+    // (Shortcuts: a little looser, as macOS spaces its key glyphs.)
+    readonly property real keySpacing: 0.6
 
     readonly property color fg: dark ? "#f5f5f7" : "#1d1d1f"
     readonly property color fgSecondary: dark ? Qt.rgba(1, 1, 1, 0.55) : Qt.rgba(0, 0, 0, 0.5)
@@ -36,10 +38,17 @@ QtObject {
 
     // Glass: a translucent tint over the blurred window behind the menu
     // (vibrancy), a thin bright rim, a darker outline and a soft shadow.
-    readonly property color glassTint: dark ? Qt.rgba(0.15, 0.155, 0.17, 0.80) : Qt.rgba(0.975, 0.975, 0.98, 0.78)
+    readonly property color glassTint: dark ? Qt.rgba(0.13, 0.135, 0.15, 0.56) : Qt.rgba(0.985, 0.985, 0.99, 0.68)
     // (Where nothing behind can be blurred: nearly opaque.)
     readonly property color glassSolid: dark ? Qt.rgba(0.17, 0.175, 0.19, 0.985) : Qt.rgba(0.975, 0.975, 0.98, 0.985)
-    readonly property color glassRim: dark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.75)
+    readonly property color glassRim: dark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.55)
+    // The specular edge: brightest along the top, fading down the sides.
+    readonly property color glassSpecular: dark ? Qt.rgba(1, 1, 1, 0.32) : Qt.rgba(1, 1, 1, 0.95)
+    // How the backdrop is treated: blurred well past recognition, its
+    // colours lifted (macOS vibrancy), darkened a touch in dark mode.
+    readonly property real backdropBlur: 64
+    readonly property real backdropSaturation: 0.75
+    readonly property real backdropBrightness: dark ? -0.08 : 0.06
     readonly property color glassEdge: dark ? Qt.rgba(0, 0, 0, 0.55) : Qt.rgba(0, 0, 0, 0.16)
     readonly property color shadow: Qt.rgba(0, 0, 0, dark ? 0.32 : 0.2)
     readonly property real shadowBlur: 26

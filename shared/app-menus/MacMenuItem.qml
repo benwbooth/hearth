@@ -172,7 +172,7 @@ MenuItem {
             color: !mi.enabled ? mi.st.fgDisabled : mi.lit ? mi.st.accentText : mi.st.fgSecondary
             font.family: mi.st.family
             font.pixelSize: mi.st.fontSize
-            font.letterSpacing: 0.6
+            font.letterSpacing: mi.st.keySpacing
             textFormat: Text.PlainText
             renderType: Text.NativeRendering
         }
