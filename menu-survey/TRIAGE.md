@@ -38,6 +38,15 @@ Why these have no general route:
 | JavaFX | No AT-SPI on Linux | Cryptomator |
 | Proprietary bundles | Their own Qt/GTK without accessibility | Adobe Reader, TeamSpeak 3 |
 
+Wine front ends and game launchers, looked at one by one (2026-11-24):
+
+| App | Finding |
+|---|---|
+| An Anime Game Launcher (and its sister launchers) | GTK 4, readable; the first-run wizard is clicked through (Continue), then it downloads game components, which the offline test rig can't. Its main window gets the general ☰ route |
+| TwinTail Launcher | Tauri (GTK + web view): readable, no menus: none needed |
+| WineZGUI, WineCharm | Start with Wine's own prefix-setup dialog ("Wine"): Wine has no AT-SPI, nothing readable until it closes |
+| PortProton | Its yad (GTK 3) window shows no accessibility tree in the freedesktop runtime: open |
+
 Still impossible: GNOME Settings (refuses to start outside GNOME), Calf
 (needs a JACK server), KDE System Settings and Info Center (Qt Quick in a
 QQuickWidget: wrong positions, no press action; both removed).
