@@ -620,7 +620,8 @@ def attempt(attr, argv, variant, extra_env, extra_args, wait_win=50, wait_menu=1
     SCOPE["n"] += 1
     SCOPE["unit"] = f"menuprobe-{os.getpid()}-{SCOPE['n']}.scope"
     proc = subprocess.Popen(["systemd-run", "--user", "--scope", "--quiet", "--collect", "--unit", SCOPE["unit"],
-                             "-p", "MemoryMax=8G", "prlimit", "--core=0", "--", "setsid", RIG, "run", "env", *envargs, *argv, *extra_args], env=ENV,
+                             "-p", "MemoryMax=8G", "-p", "CPUWeight=idle", "-p", "IOWeight=1",
+                             "-p", "AllowedCPUs=0-7,12-19", "prlimit", "--core=0", "--", "setsid", RIG, "run", "env", *envargs, *argv, *extra_args], env=ENV,
                             stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                             cwd=env["HOME"])  # apps drop logs/configs in their cwd
     t0 = time.time()

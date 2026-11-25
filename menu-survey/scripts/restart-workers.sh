@@ -23,7 +23,7 @@ PY
 for d in "" 1 2 3 4 5; do MENU_RIG_DIR=$XDG_RUNTIME_DIR/menu-rig-survey$d scripts/menu-rig.sh stop 2>/dev/null; done
 start() { u=$1; W=$2; shift 2
   for i in $(seq 30); do systemctl --user list-units --all --plain --no-legend "hearth-menu-probe-$u.service" | grep -q . || break; sleep 2; done
-  systemd-run --user --quiet --unit=hearth-menu-probe-$u --collect -p Nice=5 -p CPUWeight=50 -p MemoryMax=24G \
+  systemd-run --user --quiet --unit=hearth-menu-probe-$u --collect -p Nice=5 -p CPUWeight=idle -p IOWeight=1 -p AllowedCPUs=0-7,12-19 -p MemoryMax=24G \
     -p StandardOutput=append:$PWD/data/probe$W.log -p StandardError=append:$PWD/data/probe$W.log --working-directory=$PWD \
     -E PATH="$PATH" -E HOME="$HOME" -E XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" -E DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" \
     -E MENU_PROBE_WORKER=$W -E MENU_PROBE_DEVLOOP=1 python3 -I scripts/menu-probe.py --count 5000 --keep-rig "$@"; }
