@@ -63,6 +63,12 @@ menus/); most others have no menu table with keys. Avalonia apps' access-key
 modules (MSBuild Log Viewer, Libation) wait on a test: Avalonia draws an
 empty window in the rig, so its Alt+letter navigation isn't verified.
 
+Sound: the rig runs PipeWire (no devices, a dummy sink) with its PulseAudio
+server and libjack, so apps that need a sound server or JACK start: Calf
+(File, Add plugin), ptcollab, pulsemeeter. Your desktop has PipeWire's
+PulseAudio but not its JACK (services.pipewire.jack.enable), so JACK apps
+like Calf don't start there yet.
+
 AppImages: Tauri apps check that their executable is under
 "$TMPDIR/.mount_" (where the FUSE runtime mounts) whenever APPIMAGE/APPDIR
 is set, and panic under appimage-run. Running appimage-run with
@@ -76,8 +82,7 @@ ZynAddSubFX: nixpkgs' default build uses Zyn-Fusion (self-drawn OpenGL, no
 keyboard menu commands); the module covers the FLTK/NTK builds
 (`zynaddsubfx-fltk`, `zynaddsubfx-ntk`).
 
-Still impossible: GNOME Settings (refuses to start outside GNOME), Calf
-(needs a JACK server), KDE System Settings and Info Center (Qt Quick in a
+Still impossible: GNOME Settings (refuses to start outside GNOME), KDE System Settings and Info Center (Qt Quick in a
 QQuickWidget: wrong positions, no press action; both removed).
 
 ## General fixes the survey produced (hearth/arbor)

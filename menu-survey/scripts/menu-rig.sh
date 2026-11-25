@@ -85,6 +85,32 @@ EOF
     dbus-daemon --nofork --config-file="$R/bus.conf"
   for _ in $(seq 50); do [[ -S $R/bus.sock ]] && break; sleep 0.1; done
   echo "unix:path=$R/bus.sock" > "$R/bus"
+  # Sound for apps that won't start without it (a PulseAudio server, JACK
+  # through PipeWire's libjack): PipeWire in the rig, playing to a dummy
+  # sink. WirePlumber's device monitors are off, so the rig never opens
+  # your sound cards, Bluetooth or cameras.
+  if command -v pipewire >/dev/null && command -v wireplumber >/dev/null && command -v pipewire-pulse >/dev/null; then
+    mkdir -p "$D/home/.config/pipewire/pipewire.conf.d" "$D/home/.config/wireplumber/wireplumber.conf.d"
+    cat > "$D/home/.config/pipewire/pipewire.conf.d/rig-null-sink.conf" <<'PW'
+context.objects = [
+  { factory = adapter
+    args = { factory.name = support.null-audio-sink node.name = "rig-null" node.description = "Rig dummy output"
+             media.class = "Audio/Sink" audio.position = [ FL FR ] } }
+]
+PW
+    cat > "$D/home/.config/wireplumber/wireplumber.conf.d/rig-no-devices.conf" <<'WP'
+wireplumber.profiles = {
+  main = { monitor.alsa = disabled, monitor.alsa-midi = disabled, monitor.bluez = disabled,
+           monitor.bluez-midi = disabled, monitor.v4l2 = disabled, monitor.libcamera = disabled }
+}
+WP
+    for pw in pipewire wireplumber pipewire-pulse; do
+      daemon "$R/$pw.pid" "$R/$pw.log" env -u DISPLAY -u WAYLAND_DISPLAY -u PIPEWIRE_REMOTE -u PULSE_SERVER \
+        HOME="$D/home" XDG_CONFIG_HOME="$D/home/.config" XDG_STATE_HOME="$D/home/.local/state" \
+        XDG_RUNTIME_DIR="$R/run" DBUS_SESSION_BUS_ADDRESS="unix:path=$R/bus.sock" "$pw"
+      sleep 0.5
+    done
+  fi
   priv_env
   mkdir -p "$D/home/.config/arbor"
   printf 'prefer-no-csd\nhotkey-overlay { skip-at-startup; }\n' > "$D/home/.config/arbor/config.kdl"
@@ -137,7 +163,7 @@ stop)
     { tr '\0' '\n' < /proc/$pid/environ; } 2>/dev/null | grep -q "^DBUS_SESSION_BUS_ADDRESS=unix:path=$R/bus.sock\(,\|$\)" \
       && kill "$pid" 2>/dev/null
   done
-  for p in hearth arbor dbus; do
+  for p in hearth arbor pipewire-pulse wireplumber pipewire dbus; do
     [[ -f $R/$p.pid ]] && kill -- -"$(cat "$R/$p.pid")" 2>/dev/null || true
   done
   sleep 0.5

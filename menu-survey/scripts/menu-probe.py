@@ -622,6 +622,15 @@ def attempt(attr, argv, variant, extra_env, extra_args, wait_win=50, wait_menu=1
     for k, d in dirs.items():
         os.makedirs(os.path.join(base, d), mode=0o700, exist_ok=True)
         env[k] = os.path.join(base, d)
+    # The rig's PipeWire (menu-rig.sh): a PulseAudio server and JACK through
+    # PipeWire's libjack, for apps that won't start without sound.
+    rig_run = os.path.join(RIGDIR, "run")
+    if os.path.exists(os.path.join(rig_run, "pipewire-0")):
+        env["PIPEWIRE_RUNTIME_DIR"] = rig_run
+        env["PULSE_SERVER"] = "unix:" + os.path.join(rig_run, "pulse", "native")
+        pwjack = tool("pipewire-jack", "pipewire.jack")
+        if pwjack and not any(x in " ".join(argv[:6]) for x in ("flatpak", "appimage-run", "bwrap")):
+            env["LD_LIBRARY_PATH"] = os.path.join(pwjack, "lib")
     if any("appimage-run" in a for a in argv):
         # appimage-run extracts to $XDG_CACHE_HOME/appimage-run/<hash>; under
         # $TMPDIR/.mount_* it passes Tauri's AppImage check (its executable
