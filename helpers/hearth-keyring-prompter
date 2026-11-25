@@ -230,6 +230,9 @@ class Prompter(dbus.service.Object):
             "passwordNew": bool(props.get("password-new", False)),
             "choiceLabel": props.get("choice-label", ""),
             "choiceChosen": bool(props.get("choice-chosen", False)),
+            # hearth-askpass's prompts ("sudo", "ssh-key", "ssh"): the dialog words them
+            # for what they are instead of as a keyring prompt.
+            "kind": props.get("x-hearth-kind", ""),
             "continueLabel": props.get("continue-label", ""),
             "cancelLabel": props.get("cancel-label", ""),
         })

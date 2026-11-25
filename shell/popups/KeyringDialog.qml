@@ -32,8 +32,12 @@ Scope {
         if (isUnlock) return "Unlock Your Saved Passwords";
         return req.title || "Keyring";
     }
+    // hearth-askpass's prompts: sudo's "Administrator password", an SSH
+    // key's passphrase, other SSH questions. Their own words, no keyring talk.
+    readonly property string kind: req && req.kind ? req.kind : ""
     function body() {
         if (!req) return "";
+        if (kind) return req.message || "";
         if (isUnlock)
             return "An app wants a password it saved in your keyring"
                 + (keyringName ? " “" + keyringName + "”" : "")
@@ -42,6 +46,7 @@ Scope {
     }
     function hint() {
         if (!req) return "";
+        if (kind) return req.description || "";
         if (isUnlock)
             return "This is usually the password you log in with. If you changed your login password recently, try your old one.";
         if (isNew) return "Pick a password you'll remember: you'll need it to get these saved passwords back. Your login password is a good choice, because then logging in unlocks it too.";
@@ -116,7 +121,7 @@ Scope {
                 Icon {
                     Layout.alignment: Qt.AlignHCenter
                     implicitSize: 56
-                    name: "dialog-password"
+                    name: root.kind === "sudo" ? "security-high" : root.kind === "ssh" ? "network-server" : "dialog-password"
                     fallback: "system-lock-screen"
                 }
                 Label {
@@ -165,7 +170,8 @@ Scope {
                     Layout.topMargin: 4
                     visible: root.isPassword
                     enabled: !root.busy
-                    placeholder: root.isNew ? "New password" : "Keyring password"
+                    placeholder: root.isNew ? "New password" : root.kind === "ssh-key" ? "Passphrase"
+                        : root.kind ? "Password" : "Keyring password"
                     input.echoMode: TextInput.Password
                     onTextChanged: root.passText = text
                     onAccepted: root.isNew && confirm.text === "" ? confirm.input.forceActiveFocus() : win.submit()
@@ -203,13 +209,14 @@ Scope {
                     spacing: 8
                     PushButton {
                         text: "What's this?"
+                        visible: !root.kind
                         tooltip: "Help › Saved passwords: what the keyring is and which password it wants"
                         onClicked: Help.guideRequested("passwords", "")
                     }
                     Item { Layout.fillWidth: true }
                     PushButton {
                         text: root.req && root.req.cancelLabel ? root.req.cancelLabel : "Cancel"
-                        tooltip: "Leave it locked: the app goes without the saved password (Esc)"
+                        tooltip: root.kind ? "Don't allow it (Esc)" : "Leave it locked: the app goes without the saved password (Esc)"
                         enabled: !root.busy
                         onClicked: win.cancel()
                     }

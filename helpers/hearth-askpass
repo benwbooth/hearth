@@ -1,0 +1,423 @@
+#!/usr/bin/env python3
+"""SUDO_ASKPASS and SSH_ASKPASS for hearth: asks in hearth's own password
+dialog (popups/KeyringDialog, through helpers/hearth-keyring-prompter).
+
+It is a client of the "system prompter" (org.gnome.keyring.SystemPrompter):
+the same D-Bus prompt protocol the keyring and gcr-ssh-agent use, so the
+password comes back AES-encrypted over a Diffie-Hellman key, never in the
+clear on the bus.
+
+  sudo -A CMD           "Administrator password", naming the command and
+                        what started sudo; nothing is remembered.
+  ssh / ssh-add         a key's passphrase: "SSH key passphrase" with the
+                        key's name. A passphrase saved in the keyring (where
+                        gcr-ssh-agent keeps them: Generic schema,
+                        unique=ssh-store:<key>, or the older askpass's
+                        server=ksshaskpass user=<key>) answers without
+                        asking; "Remember in my keyring" saves it there.
+                        "Bad passphrase" forgets the saved one and asks.
+  SSH_ASKPASS_PROMPT=confirm (ssh-add -c, host keys): Allow / Deny.
+  anything else         the prompt's own words, e.g. a host's password.
+
+With no prompter on the session bus (hearth not running, a text console)
+it asks on the terminal instead. Prints the answer on stdout; exit 1 when
+cancelled. Never logs a password.
+"""
+import base64
+import hashlib
+import hmac
+import itertools
+import os
+import re
+import secrets
+import sys
+import termios
+
+PROMPTER = "org.gnome.keyring.SystemPrompter"
+PROMPTER_PATH = "/org/gnome/keyring/Prompter"
+PROMPTER_IFACE = "org.gnome.keyring.internal.Prompter"
+CALLBACK_IFACE = "org.gnome.keyring.internal.Prompter.Callback"
+SS = "org.freedesktop.secrets"
+SS_PATH = "/org/freedesktop/secrets"
+GENERIC = "org.freedesktop.Secret.Generic"
+
+DH_PRIME = int(
+    "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74"
+    "020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F1437"
+    "4FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7ED"
+    "EE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF05"
+    "98DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB"
+    "9ED529077096966D670C354E4ABC9804F1746C08CA237327FFFFFFFFFFFFFFFF", 16)
+DH_BYTES = 192
+PROTOCOL = "[sx-aes-1]\n"
+
+KEY_PROMPT = re.compile(r"^(Bad passphrase, try again for|Enter passphrase for)( key)? '?([^']+?)'?: *$")
+
+
+# ---------------------------------------------------------------- terminal
+def ask_tty(prompt, echo=False):
+    """The fallback: no hearth to ask through."""
+    try:
+        tty = open("/dev/tty", "r+")
+    except OSError:
+        sys.exit(1)
+    with tty:
+        tty.write(prompt)
+        tty.flush()
+        fd = tty.fileno()
+        old = termios.tcgetattr(fd)
+        if not echo:
+            new = termios.tcgetattr(fd)
+            new[3] &= ~termios.ECHO
+            termios.tcsetattr(fd, termios.TCSAFLUSH, new)
+        try:
+            line = tty.readline()
+        finally:
+            termios.tcsetattr(fd, termios.TCSAFLUSH, old)
+            if not echo:
+                tty.write("\n")
+    if not line:
+        sys.exit(1)
+    return line.rstrip("\n")
+
+
+# ---------------------------------------------------------------- the bus
+def session_bus():
+    import dbus
+    if not os.environ.get("DBUS_SESSION_BUS_ADDRESS"):
+        run = os.environ.get("XDG_RUNTIME_DIR") or "/run/user/%d" % os.getuid()
+        if os.path.exists(run + "/bus"):
+            os.environ["DBUS_SESSION_BUS_ADDRESS"] = "unix:path=%s/bus" % run
+    try:
+        import dbus.mainloop.glib
+        dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+        bus = dbus.SessionBus()
+        return bus if bus.name_has_owner(PROMPTER) else None
+    except Exception:
+        return None
+
+
+def to_bytes(n):
+    return n.to_bytes(max(1, (n.bit_length() + 7) // 8), "big")
+
+
+def hkdf_sha256(ikm, length):
+    prk = hmac.new(b"\0" * 32, ikm, hashlib.sha256).digest()
+    okm, block = b"", b""
+    for i in itertools.count(1):
+        if len(okm) >= length:
+            return okm[:length]
+        block = hmac.new(prk, block + bytes([i]), hashlib.sha256).digest()
+        okm += block
+
+
+def parse_exchange(text):
+    out = {}
+    if not text.startswith(PROTOCOL):
+        return out
+    for line in text[len(PROTOCOL):].split("\n"):
+        key, sep, value = line.partition("=")
+        if sep and value:
+            try:
+                out[key.strip()] = base64.b64decode(value.strip())
+            except ValueError:
+                pass
+    return out
+
+
+def system_prompt(bus, kind, ptype, props):
+    """One prompt in hearth's dialog. Returns (accepted, secret or None, choice)."""
+    import dbus
+    import dbus.service
+    from gi.repository import GLib
+    from cryptography.hazmat.primitives import padding
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+    loop = GLib.MainLoop()
+    got = []
+
+    class Callback(dbus.service.Object):
+        @dbus.service.method(CALLBACK_IFACE, in_signature="sa{sv}s", out_signature="")
+        def PromptReady(self, reply, properties, exchange):
+            got.append((str(reply), dict(properties), str(exchange)))
+            GLib.idle_add(loop.quit)
+
+        @dbus.service.method(CALLBACK_IFACE, in_signature="", out_signature="")
+        def PromptDone(self):
+            got.append(None)
+            GLib.idle_add(loop.quit)
+
+    path = "/org/hearth/askpass/p%d" % os.getpid()
+    Callback(bus, path)
+    prompter = dbus.Interface(bus.get_object(PROMPTER, PROMPTER_PATH, introspect=False), PROMPTER_IFACE)
+
+    def wait():
+        timeout = GLib.timeout_add_seconds(600, loop.quit)
+        loop.run()
+        GLib.source_remove(timeout)
+        return got.pop(0) if got else None
+
+    prompter.BeginPrompting(dbus.ObjectPath(path))
+    first = wait()
+    if not first:
+        return False, None, False
+    peer = parse_exchange(first[2]).get("public")
+    if not peer:
+        return False, None, False
+    private = secrets.randbits(1536) % (DH_PRIME - 2) + 1
+    public = pow(2, private, DH_PRIME)
+    shared = pow(int.from_bytes(peer, "big"), private, DH_PRIME)
+    key = hkdf_sha256(shared.to_bytes(DH_BYTES, "big"), 16)
+    ours = PROTOCOL + "public=" + base64.b64encode(to_bytes(public)).decode()
+
+    variant = {k: (dbus.Boolean(v, variant_level=1) if isinstance(v, bool) else dbus.String(v, variant_level=1))
+               for k, v in dict(props, **{"x-hearth-kind": kind}).items()}
+    try:
+        prompter.PerformPrompt(dbus.ObjectPath(path), ptype, dbus.Dictionary(variant, signature="sv"), ours)
+        answer = wait()
+    finally:
+        try:
+            prompter.StopPrompting(dbus.ObjectPath(path))
+        except dbus.DBusException:
+            pass
+    if not answer or answer[0] != "yes":
+        return False, None, False
+    reply_props = answer[1]
+    choice = bool(reply_props.get("choice-chosen", False))
+    if ptype != "password":
+        return True, None, choice
+    fields = parse_exchange(answer[2])
+    if "secret" not in fields or "iv" not in fields:
+        return True, "", choice
+    dec = Cipher(algorithms.AES(key), modes.CBC(fields["iv"])).decryptor()
+    data = dec.update(fields["secret"]) + dec.finalize()
+    unpad = padding.PKCS7(128).unpadder()
+    secret = (unpad.update(data) + unpad.finalize()).decode("utf-8", "replace")
+    return True, secret, choice
+
+
+# ---------------------------------------------------------------- keyring
+def keyring_find(bus, attrs):
+    """Saved passphrase for attrs, or None (never asks to unlock)."""
+    import dbus
+    try:
+        svc = dbus.Interface(bus.get_object(SS, SS_PATH), "org.freedesktop.Secret.Service")
+        unlocked, _ = svc.SearchItems(dbus.Dictionary(attrs, signature="ss"))
+        if not unlocked:
+            return None
+        _, session = svc.OpenSession("plain", dbus.String("", variant_level=1))
+        secrets_ = svc.GetSecrets(unlocked[:1], session)
+        for _, value in secrets_.items():
+            return bytes(value[2]).decode("utf-8")
+    except Exception:
+        return None
+    return None
+
+
+def keyring_forget(bus, attrs):
+    import dbus
+    try:
+        svc = dbus.Interface(bus.get_object(SS, SS_PATH), "org.freedesktop.Secret.Service")
+        unlocked, _ = svc.SearchItems(dbus.Dictionary(attrs, signature="ss"))
+        for path in unlocked:
+            dbus.Interface(bus.get_object(SS, path), "org.freedesktop.Secret.Item").Delete()
+    except Exception:
+        pass
+
+
+def keyring_save(bus, label, attrs, value):
+    import dbus
+    try:
+        svc = dbus.Interface(bus.get_object(SS, SS_PATH), "org.freedesktop.Secret.Service")
+        col = svc.ReadAlias("default")
+        if str(col) == "/":
+            return
+        _, session = svc.OpenSession("plain", dbus.String("", variant_level=1))
+        props = {"org.freedesktop.Secret.Item.Label": dbus.String(label),
+                 "org.freedesktop.Secret.Item.Attributes": dbus.Dictionary(attrs, signature="ss")}
+        dbus.Interface(bus.get_object(SS, col), "org.freedesktop.Secret.Collection").CreateItem(
+            dbus.Dictionary(props, signature="sv"),
+            dbus.Struct((session, dbus.ByteArray(b""), dbus.ByteArray(value.encode()), "text/plain"),
+                        signature="oayays"),
+            True)
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------- sudo
+def proc_cmdline(pid):
+    try:
+        with open("/proc/%d/cmdline" % pid, "rb") as f:
+            return [a.decode("utf-8", "replace") for a in f.read().split(b"\0") if a]
+    except OSError:
+        return []
+
+
+def proc_comm(pid):
+    try:
+        with open("/proc/%d/comm" % pid) as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def proc_ppid(pid):
+    try:
+        with open("/proc/%d/stat" % pid) as f:
+            return int(f.read().rsplit(")", 1)[1].split()[1])
+    except (OSError, ValueError, IndexError):
+        return 0
+
+
+def sudo_command(pid):
+    """What sudo (pid) was asked to run, without sudo's own options."""
+    args = proc_cmdline(pid)[1:]
+    with_value = {"-u", "-g", "-C", "-D", "-h", "-p", "-r", "-t", "-T", "-U", "--user", "--group",
+                  "--chdir", "--host", "--prompt", "--role", "--type", "--command-timeout", "--other-user"}
+    i = 0
+    while i < len(args) and args[i].startswith("-") and args[i] != "--":
+        i += 2 if args[i] in with_value else 1
+    if i < len(args) and args[i] == "--":
+        i += 1
+    cmd = " ".join(args[i:])
+    return cmd if len(cmd) <= 300 else cmd[:297] + "…"
+
+
+def ask_sudo(bus, prompt):
+    sudo = os.getppid()
+    cmd = sudo_command(sudo) if proc_comm(sudo) == "sudo" else ""
+    starter = proc_comm(proc_ppid(sudo)) if cmd else ""
+    # sudo asks again after a wrong password: remember that we were here.
+    run = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
+    mark = os.path.join(run, "hearth-askpass-sudo-%d" % sudo)
+    retry = os.path.exists(mark)
+    try:
+        names = os.listdir(run)
+    except OSError:
+        names = []
+    for f in names:  # markers of sudo runs that are over
+        if f.startswith("hearth-askpass-sudo-") and not os.path.exists("/proc/" + f.rsplit("-", 1)[1]):
+            try:
+                os.unlink(os.path.join(run, f))
+            except OSError:
+                pass
+    if bus is None:
+        return ask_tty(prompt or "Password: ")
+    desc = ("To run: " + cmd if cmd else "A program asks to run something as the administrator (root).")
+    if starter and starter not in ("bash", "zsh", "fish", "sh", "tessh"):
+        desc += "\nAsked by: " + starter
+    ok, secret, _ = system_prompt(bus, "sudo", "password", {
+        "title": "Administrator password",
+        "message": "Type your password to allow this.",
+        "description": desc,
+        "warning": "That password didn't work. Try again." if retry else "",
+        "continue-label": "Allow",
+        "cancel-label": "Cancel",
+    })
+    if not ok:
+        try:
+            os.unlink(mark)
+        except OSError:
+            pass
+        sys.exit(1)
+    try:
+        open(mark, "w").close()
+    except OSError:
+        pass
+    return secret
+
+
+# ---------------------------------------------------------------- ssh
+def ask_ssh_key(bus, key, bad):
+    name = os.path.basename(key)
+    gcr = {"xdg:schema": GENERIC, "unique": "ssh-store:" + key}
+    old = {"server": "ksshaskpass", "user": key}
+    if bus is None:
+        return ask_tty("Passphrase for SSH key %s: " % name)
+    if bad:
+        keyring_forget(bus, gcr)
+        keyring_forget(bus, old)
+    else:
+        for attrs in (gcr, old):
+            saved = keyring_find(bus, attrs)
+            if saved:
+                return saved
+    ok, secret, remember = system_prompt(bus, "ssh-key", "password", {
+        "title": "SSH key passphrase",
+        "message": "Type the passphrase of your SSH key “%s”." % name,
+        "description": key,
+        "warning": "That passphrase didn't work. Try again." if bad else "",
+        "choice-label": "Remember in my keyring (unlocks it by itself next time)",
+        "choice-chosen": True,
+        "continue-label": "Unlock",
+        "cancel-label": "Cancel",
+    })
+    if not ok:
+        sys.exit(1)
+    if remember and secret:
+        keyring_save(bus, "Unlock password for: " + name, gcr, secret)
+    return secret
+
+
+def ask_confirm(bus, prompt):
+    if bus is None:
+        return ask_tty((prompt or "Allow?") + " [yes/no] ", echo=True).strip().lower() in ("y", "yes")
+    ok, _, _ = system_prompt(bus, "ssh", "confirm", {
+        "title": "SSH",
+        "message": prompt,
+        "description": "",
+        "continue-label": "Allow",
+        "cancel-label": "Deny",
+    })
+    return ok
+
+
+def ask_ssh_other(bus, prompt):
+    if re.search(r"\(yes/no(/\[fingerprint\])?\)\?", prompt):
+        # ssh wants "yes" typed (an unknown host key).
+        if bus is None:
+            return ask_tty(prompt + " ", echo=True)
+        ok, _, _ = system_prompt(bus, "ssh", "confirm", {
+            "title": "Connect to this computer?",
+            "message": "It's the first time you connect to it, or its key changed.",
+            "description": prompt,
+            "continue-label": "Connect",
+            "cancel-label": "Don't Connect",
+        })
+        return "yes" if ok else "no"
+    if bus is None:
+        return ask_tty(prompt or "Password: ")
+    ok, secret, _ = system_prompt(bus, "ssh", "password", {
+        "title": "SSH password",
+        "message": prompt.strip().rstrip(":") or "Password",
+        "description": "",
+        "continue-label": "OK",
+        "cancel-label": "Cancel",
+    })
+    if not ok:
+        sys.exit(1)
+    return secret
+
+
+def main():
+    prompt = " ".join(sys.argv[1:]).strip()
+    bus = session_bus()
+    mode = os.environ.get("SSH_ASKPASS_PROMPT", "")
+    if mode == "none":
+        return 0  # ssh only tells us something; nothing to ask
+    if mode == "confirm":
+        return 0 if ask_confirm(bus, prompt) else 1
+    m = KEY_PROMPT.match(prompt)
+    if m:
+        answer = ask_ssh_key(bus, os.path.expanduser(m.group(3)), m.group(1).startswith("Bad"))
+    elif proc_comm(os.getppid()) == "sudo" or prompt.startswith("[sudo]"):
+        answer = ask_sudo(bus, prompt)
+    else:
+        answer = ask_ssh_other(bus, prompt)
+    sys.stdout.write((answer or "") + "\n")
+    sys.stdout.flush()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
