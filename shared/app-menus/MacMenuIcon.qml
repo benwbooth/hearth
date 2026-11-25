@@ -19,7 +19,7 @@ Item {
     // An app's image provider, (name, device px) => URL, loaded off the UI
     // thread; null: the icon theme, looked up here.
     property var iconUrl: null
-    // Recolour a one-colour icon (transparent: as drawn).
+    // Recolour a one-colour icon (transparent: as drawn; theme icons only).
     property color color: "transparent"
     readonly property real dpr: {
         const w = ci.Window.window
@@ -57,12 +57,13 @@ Item {
     }
     Component {
         id: providerIcon
-        IconImage {
+        // (An Image: IconImage doesn't load from image providers. The
+        // provider draws the icon in the right colours itself.)
+        Image {
             source: ci.iconUrl(ci.name, ci.px > 0 ? ci.px : Math.round(ci.size * ci.dpr))
             sourceSize: Qt.size(ci.pt, ci.pt)
             asynchronous: true
             cache: true
-            Binding on color { when: ci.color.a > 0; value: ci.color }
         }
     }
     transform: Translate { id: gridSnap }

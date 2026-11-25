@@ -15,7 +15,10 @@ Item {
     // What's behind: the window's content (the popup is drawn above it, in
     // the window's overlay, so the capture never includes the menu itself).
     readonly property Item behind: Window.window ? Window.window.contentItem : null
+    // (Blurring needs shaders: with the software renderer the tint stays
+    // nearly opaque instead.)
     readonly property bool vibrancy: behind !== null && visible && width > 0
+        && GraphicsInfo.api !== GraphicsInfo.Software && GraphicsInfo.api !== GraphicsInfo.Unknown
     property rect area: Qt.rect(0, 0, 0, 0)
     function aim() {
         if (!behind) return

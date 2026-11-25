@@ -40,8 +40,12 @@ MenuItem {
     Shortcut {
         id: keyReader
         enabled: false
-        sequence: mi.shortcut !== undefined && mi.shortcut !== null && mi.shortcut !== "" ? mi.shortcut
-            : mi.action && mi.action.shortcut !== undefined ? mi.action.shortcut : ""
+        // (`sequences`: a StandardKey with several bindings warns as `sequence`.)
+        sequences: {
+            const k = mi.shortcut !== undefined && mi.shortcut !== null && mi.shortcut !== "" ? mi.shortcut
+                : mi.action && mi.action.shortcut !== undefined ? mi.action.shortcut : ""
+            return k === "" || k === undefined || k === null ? [] : [k]
+        }
     }
 
     // Choosing: lit through the blink, whatever the pointer does meanwhile.
