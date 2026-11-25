@@ -87,10 +87,13 @@ QQuickWidget: wrong positions, no press action; both removed).
 
 Open (2026-11-25): GTK 3 apps whose ☰ is a classic GtkMenu (Catfish, Helvum's
 GTK 4 button differs) don't open it in the rig: the accessible press and
-arbor's synthetic click leave the button pressed but no popup maps. A
-GtkMenu on Wayland needs a grab with a real input serial; whether arbor
-grants it for synthetic input is the next thing to check (arbor side). These
-show as "partial" (the ☰ found, unread).
+arbor's synthetic click leave the button pressed but no popup maps. arbor's
+click-window pressed, released and moved the pointer focus away in one
+dispatch; GTK 3 opens a GtkMenu on press and maps it only while the pointer
+is over its window. arbor 815bd1cf holds the button 100 ms and restores the
+pointer after 400 ms, like a real click; to verify once a built arbor has it
+(devloop builds arbor only when Ben swaps). These show as "partial" (the ☰
+found, unread).
 
 ## Proposed impossible (for Ben's triage, 2026-11-25)
 
