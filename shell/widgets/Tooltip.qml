@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import "../services"
 import ".."
 
 // Hover tooltip (macOS help tag) shown next to `anchorItem` after
@@ -29,12 +30,33 @@ PopupWindow {
     implicitHeight: frame.implicitHeight + 2 * pad
     mask: Region {}
 
-    // Shown: fades in; hidden: fades out, then unmaps.
+    // Shown: fades in; hidden: fades out, then unmaps. Moving on to another
+    // item while a tooltip shows (or just did) switches to its tooltip at
+    // once, and the old one goes without fading, like macOS.
     property bool shown: false
-    onShownChanged: if (shown) visible = true
+    property bool instant: false
+    onShownChanged: {
+        if (shown) {
+            // The last one goes at once, shown or still fading out.
+            const prev = ShellState.tooltip;
+            if (prev && prev !== tip) {
+                if (prev.shown) { prev.instant = true; prev.shown = false; }
+                else prev.visible = false;
+            }
+            ShellState.tooltip = tip;
+            visible = true;
+        } else {
+            if (ShellState.tooltip === tip) ShellState.tooltipWarmUntil = Date.now() + 500;
+            if (instant) { instant = false; visible = false; }
+        }
+    }
     onHoveredChanged: {
-        if (hovered && text) showTimer.restart();
-        else { showTimer.stop(); shown = false; }
+        if (hovered && text) {
+            if (Date.now() < ShellState.tooltipWarmUntil || (ShellState.tooltip && ShellState.tooltip.shown)) {
+                showTimer.stop();
+                tip.shown = true;
+            } else showTimer.restart();
+        } else { showTimer.stop(); shown = false; }
     }
     onTextChanged: if (!text) shown = false
 
@@ -51,7 +73,7 @@ PopupWindow {
         width: implicitWidth
         height: implicitHeight
         opacity: tip.shown ? 1 : 0
-        Behavior on opacity { NumberAnimation { duration: tip.shown ? 110 : 160; easing.type: Easing.OutCubic } }
+        Behavior on opacity { NumberAnimation { duration: tip.shown ? 110 : (tip.instant ? 0 : 160); easing.type: Easing.OutCubic } }
         onOpacityChanged: if (opacity === 0 && !tip.shown) tip.visible = false
         tint: Theme.glassTip
         radius: Math.round(7 * Theme.pt)
