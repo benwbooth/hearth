@@ -47,9 +47,18 @@ Wine front ends and game launchers, looked at one by one (2026-11-24):
 | WineZGUI, WineCharm | Start with Wine's own prefix-setup dialog ("Wine"): Wine has no AT-SPI, nothing readable until it closes |
 | PortProton | First start downloads its Wine components (DXVK, VKD3D-Proton) behind a progress window that doesn't register on the accessibility bus; its main window comes after. Like the anime launchers: measurable only after a full first run |
 
-EFL apps (Enlightenment's Terminology, Ephoto, Evisum): `ELM_ATSPI_MODE=1`
-is EFL's switch, but its AT-SPI bridge never starts in the rig (nothing
-registers, nothing logged); open.
+EFL apps (Enlightenment's Terminology, Ephoto, Evisum): EFL's AT-SPI bridge
+starts only with both `ELM_ATSPI_MODE=1` and the a11y bus's
+`org.a11y.Status.ScreenReaderEnabled` true (verified in the rig: Ephoto's
+tree, buttons, check boxes, settings panel). ScreenReaderEnabled is
+session-wide: it would also make Chromium, Electron and Firefox keep full
+accessibility trees (CPU and memory in every such app). Waiting on Ben.
+
+AppImages: Tauri apps refuse appimage-run (APPIMAGE set but not run from a
+/tmp/.mount_ FUSE mount; NixOS's appimage-run too). AppImages needing
+glibc 2.43 or host libraries run on menu-survey/appimage-run.nix
+(unstable's appimage-run plus the missing libraries), which would fix them
+for programs.appimage on the desktop as well.
 
 ZynAddSubFX: nixpkgs' default build uses Zyn-Fusion (self-drawn OpenGL, no
 keyboard menu commands); the module covers the FLTK/NTK builds
