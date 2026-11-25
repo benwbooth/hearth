@@ -14,8 +14,8 @@
 #   bus by asking org.a11y.Bus, never by path.
 # - Flatpaks get an empty JAVA_TOOL_OPTIONS (with nix-flatpak): the session
 #   loads hearth's Java ATK bridge into every JVM (arbor/config.kdl), whose
-#   jar a sandbox can't see, and Java ends a Swing app whose assistive
-#   technology can't load.
+#   jar a sandbox can't see. Java apps listed in
+#   hearth.globalMenu.javaFlatpaks get the bridge instead (tested per app).
 #
 # The rest lives with the session and the apps:
 # - arbor/config.kdl (hearth's session config): GTK_MODULES (appmenu-gtk-
@@ -24,8 +24,24 @@
 #   `hearth.lib.globalMenu.electronFlags` in their wrappers: Electron only
 #   builds its accessibility tree with it (or with a screen reader).
 self:
-{ lib, options, ... }:
+{ config, lib, options, ... }:
+let
+  jaw = "/run/current-system/sw/lib/java-atk-wrapper";
+  javaToolOptions = "-Xbootclasspath/a:${jaw}/java-atk-wrapper.jar"
+    + " -Djavax.accessibility.assistive_technologies=org.GNOME.Accessibility.AtkWrapper";
+in
 {
+  # Java apps installed as Flatpaks that get the Java bridge (and so a
+  # global menu): the bridge works inside Flatpaks (it uses the runtime's
+  # own GLib/ATK there), but each app is added only once tested, as Ben
+  # decided (2026-11-24). They see the bridge's folder read-only.
+  options.hearth.globalMenu.javaFlatpaks = lib.mkOption {
+    type = lib.types.listOf lib.types.str;
+    default = [ ];
+    example = [ "org.jdownloader.JDownloader" ];
+    description = "Flatpak ids of Java apps that load hearth's Java accessibility bridge.";
+  };
+
   config = lib.mkMerge [
     {
       services.gnome.at-spi2-core.enable = true;
@@ -36,7 +52,15 @@ self:
       };
     }
     (lib.optionalAttrs (options ? services.flatpak.overrides) {
-      services.flatpak.overrides.global.Environment.JAVA_TOOL_OPTIONS = "";
+      services.flatpak.overrides = {
+        global.Environment.JAVA_TOOL_OPTIONS = "";
+      } // lib.genAttrs config.hearth.globalMenu.javaFlatpaks (_: {
+        Context.filesystems = [ "${jaw}:ro" ];
+        Environment.JAVA_TOOL_OPTIONS = javaToolOptions;
+        # Read by the java launcher too; kept by launchers that strip
+        # JAVA_TOOL_OPTIONS when they restart themselves (TL).
+        Environment.JDK_JAVA_OPTIONS = javaToolOptions;
+      });
     })
   ];
 }
