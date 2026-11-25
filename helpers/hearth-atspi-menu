@@ -476,6 +476,11 @@ class AtspiMenu:
                         # its buttons, as an Actions menu.
                         toolbar = self.search(A, f, lambda o, r: r == A.Role.TOOL_BAR
                                               and len(self.toolbar_buttons(o)) >= 2, web=False)
+                        if toolbar is None and len(self.page_actions(A, f)) >= 2:
+                            # 5. Kirigami/Qt Quick pages: a sidebar of actions
+                            # (loose menu items) and the page header's
+                            # buttons (Arianna, KRecorder).
+                            toolbar = f
                         if toolbar is None:
                             continue
                         trigger = toolbar
@@ -505,9 +510,47 @@ class AtspiMenu:
                 return True
         return False
 
+    NOT_ACTIONS = {"close", "minimize", "maximize", "restore", "back", "search", "clear", "menu",
+                   "open drawer", "close drawer", "show drawer"}
+
+    def page_actions(self, A, frame):
+        """{label: accessible} of a page's commands outside any menu or
+        toolbar: menu items not in a menu (a Kirigami sidebar drawer) and
+        named buttons in the window's top 120 px (its page header)."""
+        found = {}
+        btn = set(BUTTON_ROLES())
+        holders = {A.Role.MENU, A.Role.MENU_BAR, A.Role.POPUP_MENU}
+
+        def test(o, r):
+            try:
+                if r not in btn and r != A.Role.MENU_ITEM:
+                    return False
+                name = split_shortcut((o.get_name() or "").strip().split("\n")[0])[0].strip()
+                if not name or name.lower() in self.NOT_ACTIONS or name in found:
+                    return False
+                if not o.get_state_set().contains(A.StateType.SHOWING):
+                    return False
+                if r == A.Role.MENU_ITEM:
+                    par = o.get_parent()
+                    if par is None or par.get_role() in holders:
+                        return False
+                    found[name] = o
+                    return False
+                e = o.get_component_iface().get_extents(A.CoordType.WINDOW)
+                if self.to_surface(o, e.x, e.y)[1] < 120:
+                    found[name] = o
+            except Exception:
+                pass
+            return False
+        self.search(A, frame, test, web=False)
+        return found
+
     def toolbar_buttons(self, tb):
-        """{label: button} of a toolbar's showing, named buttons."""
+        """{label: button} of a toolbar's showing, named buttons (the page's
+        actions when the "toolbar" is the window itself)."""
         A = Atspi
+        if tb is getattr(self, "frame", None) or (tb is not None and tb.get_role() == A.Role.FRAME):
+            return self.page_actions(A, tb)
         roles = set(BUTTON_ROLES()) | {A.Role.TOGGLE_BUTTON}
         found = {}
         try:
