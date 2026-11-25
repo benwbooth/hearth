@@ -213,13 +213,13 @@ def menu_css(gtk4):
     opacity (apply_arbor_popups), which gives the same glass."""
     if DARK:
         c = dict(bg="#2b2d30", glass="rgba(38, 40, 43, 0.74)", chromium="#26282b",
-                 highlight="rgba(255, 255, 255, 0.06)", fg="#f5f5f7", accent="#0a84ff", dim="rgba(255, 255, 255, 0.55)",
+                 highlight="rgba(255, 255, 255, 0.06)", hover="rgba(255, 255, 255, 0.06)", press="rgba(255, 255, 255, 0.12)", fg="#f5f5f7", accent="#0a84ff", dim="rgba(255, 255, 255, 0.55)",
                  dimHover="rgba(255, 255, 255, 0.85)", disabled="rgba(255, 255, 255, 0.28)",
                  sep="rgba(255, 255, 255, 0.13)", edge="rgba(0, 0, 0, 0.28)",
                  rim="rgba(255, 255, 255, 0.05)", shadow="rgba(0, 0, 0, 0.32)")
     else:
         c = dict(bg="#f9f9fa", glass="rgba(249, 249, 250, 0.74)", chromium="#f9f9fa",
-                 highlight="rgba(255, 255, 255, 0.20)", fg="#1d1d1f", accent="#007aff", dim="rgba(0, 0, 0, 0.5)",
+                 highlight="rgba(255, 255, 255, 0.20)", hover="rgba(0, 0, 0, 0.05)", press="rgba(0, 0, 0, 0.10)", fg="#1d1d1f", accent="#007aff", dim="rgba(0, 0, 0, 0.5)",
                  dimHover="rgba(255, 255, 255, 0.85)", disabled="rgba(0, 0, 0, 0.26)",
                  sep="rgba(0, 0, 0, 0.11)", edge="rgba(0, 0, 0, 0.09)",
                  rim="rgba(255, 255, 255, 0.40)", shadow="rgba(0, 0, 0, 0.2)")
@@ -272,7 +272,24 @@ popover.menu, popover.background.menu {{
 }}
 popover.menu modelbutton {{ min-height: 27px; padding: 0 11px; border-radius: 9px; color: {c['fg']}; }}
 popover.menu modelbutton:hover {{ background-color: {c['accent']}; color: #ffffff; }}
-popover.menu separator {{ margin: 4px 11px; background-color: {c['sep']}; }}
+popover.menu separator {{ margin: 4px 11px; background-color: {c['sep']}; }}messagedialog.background, messagedialog .titlebar, messagedialog .dialog-vbox {{
+  background-image: none; background-color: {c['bg']}; color: {c['fg']}; text-shadow: none;
+}}
+messagedialog label {{ color: {c['fg']}; }}
+messagedialog.csd decoration {{ border-radius: 14px; box-shadow: 0 9px 26px {c['shadow']}, 0 0 0 1px {c['edge']}; }}
+messagedialog .titlebar {{ border-top-left-radius: 14px; border-top-right-radius: 14px; }}
+messagedialog.csd.background {{ border-bottom-left-radius: 14px; border-bottom-right-radius: 14px; }}
+messagedialog .dialog-action-area button {{
+  background-image: none; background-color: transparent; color: {c['fg']}; border-color: {c['sep']};
+  box-shadow: none; text-shadow: none; -gtk-icon-shadow: none;
+}}
+messagedialog .dialog-action-area button:hover {{ background-color: {c['hover']}; }}
+messagedialog .dialog-action-area button:active, messagedialog .dialog-action-area button:checked {{ background-color: {c['press']}; }}
+messagedialog .dialog-action-area button:focus {{ outline-color: {c['accent']}; }}
+messagedialog .dialog-action-area button.default, messagedialog .dialog-action-area button.suggested-action {{ color: {c['accent']}; }}
+messagedialog .dialog-action-area button.destructive-action {{ color: #ff453a; }}
+messagedialog.csd .dialog-action-area button:first-child {{ border-bottom-left-radius: 14px; }}
+messagedialog.csd .dialog-action-area button:last-child {{ border-bottom-right-radius: 14px; }}
 """
 
 
