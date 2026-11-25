@@ -9,7 +9,7 @@ Finish/Done/Skip first, then Next/Continue/Get Started, then Close/OK. Never
 Accept/Agree (that would accept a license on the user's behalf), Cancel,
 Quit or Exit. Up to ROUNDS presses, a second apart, until none is left.
 
-Usage: atspi-firstrun.py PID
+Usage: atspi-firstrun.py PID [WINDOW_TITLE]
 Prints one JSON object: {"pressed": [labels]}.
 """
 import json
@@ -43,7 +43,7 @@ def ancestors(pid):
     return seen
 
 
-def app_of(pid):
+def app_of(pid, title=""):
     desk = Atspi.get_desktop(0)
     mine = set(ancestors(pid))
     for i in range(desk.get_child_count()):
@@ -53,7 +53,17 @@ def app_of(pid):
                 return a
         except Exception:
             continue
-    return None
+    # A Flatpak's X11 window: its pid is the sandbox's. By exact frame title.
+    byname = []
+    for i in range(desk.get_child_count()):
+        a = desk.get_child_at_index(i)
+        try:
+            if title and a and any((a.get_child_at_index(k).get_name() or "") == title
+                                   for k in range(min(a.get_child_count(), 20))):
+                byname.append(a)
+        except Exception:
+            continue
+    return byname[0] if len(byname) == 1 else None
 
 
 def buttons(app):
@@ -90,10 +100,11 @@ def press(o):
 
 def main():
     pid = int(sys.argv[1])
+    title = sys.argv[2] if len(sys.argv) > 2 else ""
     Atspi.init()
     pressed, last, same = [], None, 0
     for _ in range(ROUNDS):
-        app = app_of(pid)
+        app = app_of(pid, title)
         if app is None:
             break
         try:

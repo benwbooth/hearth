@@ -760,7 +760,8 @@ def attempt_windows(attr, before, win, wait_menu, escaped=False):
         pid = x11_app_pid((best.get("window") or {}).get("pid") or 0)
         if pid:
             r = rig("run", "env", f"GI_TYPELIB_PATH={hearth_typelibs()}", hearth_python(),
-                    os.path.join(ROOT, "scripts", "atspi-firstrun.py"), str(pid), timeout=60)
+                    os.path.join(ROOT, "scripts", "atspi-firstrun.py"), str(pid),
+                    (best.get("window") or {}).get("title") or "", timeout=60)
             try:
                 pressed = json.loads(r.stdout.strip().splitlines()[-1]).get("pressed") or []
             except Exception:

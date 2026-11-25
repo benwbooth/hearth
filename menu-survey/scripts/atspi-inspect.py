@@ -90,6 +90,20 @@ def main():
                 break
         except Exception:
             continue
+    if app is None and title:
+        # An X11 window from a Flatpak: _NET_WM_PID is the pid inside the
+        # sandbox. The one app with a frame of exactly this title.
+        byname = []
+        for i in range(desk.get_child_count()):
+            a = desk.get_child_at_index(i)
+            try:
+                if a and any((a.get_child_at_index(k).get_name() or "") == title
+                             for k in range(min(a.get_child_count(), 20))):
+                    byname.append(a)
+            except Exception:
+                continue
+        if len(byname) == 1:
+            app = byname[0]
     if app is None:
         print(json.dumps(res))
         return
