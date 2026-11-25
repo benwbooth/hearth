@@ -64,6 +64,11 @@ def load_probes():
     return rows
 
 
+MENU_BUTTON_NAMES = {"menu", "main menu", "application menu", "app menu", "open menu", "primary menu",
+                     "more options", "options menu", "more actions", "...", "…", "⋮", "☰", "options",
+                     "settings", "help", "help & about", "help and about", "more", "tools", "preferences"}
+
+
 def gap_of(measured, toolkit, p):
     """Name the general mechanism missing for an app that isn't done.
     Shared names group every app a single fix would cover."""
@@ -136,8 +141,15 @@ def gap_of(measured, toolkit, p):
         return f"no-a11y:{tk}"
     if a.get("menubars") and a.get("menu_items"):
         return "atspi-menubar-not-read"
-    btns = [b for b in a.get("menu_buttons") or [] if b.get("popup") or b.get("role") == "push button menu"
-            or not (b.get("name") or "").strip()]
+    # Only a button that opens the app's menu ("Menu", "Main menu (F10)",
+    # "Help", "Settings", ☰, unnamed): content dropdowns ("Sort by", "Save
+    # Profile", a calendar's month) are no app menu.
+    def menuish(b):
+        n = (b.get("name") or "").strip().split("\n")[0]
+        n = re.sub(r"\s*\((?:F\d{1,2}|(?:Ctrl|Alt|Shift|Super)\s*\+[^)]*)\)$", "", n, flags=re.I).strip().lower()
+        pops = b.get("popup") or b.get("role") == "push button menu"
+        return (not n and pops) or (pops and n in MENU_BUTTON_NAMES)
+    btns = [b for b in a.get("menu_buttons") or [] if menuish(b)]
     if btns:
         return "menu-button-not-read"
     if toolkit in ("qt6-mixed", "qt6-quick", "qt5-quick"):

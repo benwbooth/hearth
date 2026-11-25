@@ -282,6 +282,22 @@ BURGER_NAMES = {"menu", "main menu", "application menu", "app menu", "open menu"
                 # Kirigami's global drawer: a side panel of the app's actions
                 # (read as a "drawer", see learn_drawer).
                 "open drawer", "show drawer"}
+# Words a button names the app's menu with, counted only when the button
+# says it opens a popup (HAS_POPUP, or the "push button menu" role): Qt's
+# "Main menu (F10)" and "Menu" tool buttons, GTK 4's "Settings"/"Help &
+# About" menu buttons. A content dropdown ("Sort by", "Save Profile") never
+# counts.
+POPUP_MENU_NAMES = {"menu", "main menu", "options", "settings", "help", "help & about", "help and about",
+                    "more", "tools", "preferences", "app menu", "application menu"}
+
+
+def button_menu_name(name):
+    """A button's name without its shortcut ("Settings\nCtrl + G",
+    "Main menu (F10)", "Menu Alt+M"), lowercased."""
+    import re
+    n = (name or "").strip().split("\n")[0].strip()
+    n = re.sub(r"\s*\((?:F\d{1,2}|(?:Ctrl|Alt|Shift|Super)\s*\+[^)]*)\)$", "", n, flags=re.I)
+    return split_shortcut(n)[0].strip().lower()
 
 
 def load_cache():
@@ -558,7 +574,14 @@ class AtspiMenu:
             return False
         name = (o.get_name() or "").strip().lower()
         if name not in BURGER_NAMES and not self.holds_items(o):
-            return False
+            if button_menu_name(name) not in POPUP_MENU_NAMES:
+                return False
+            try:
+                if not (o.get_state_set().contains(A.StateType.HAS_POPUP)
+                        or o.get_role_name() == "push button menu"):
+                    return False
+            except Exception:
+                return False
         if name in ("...", "…"):
             # Mostly a Browse… button (qt6ct's, a file field's): only one that
             # says it opens a menu counts.
