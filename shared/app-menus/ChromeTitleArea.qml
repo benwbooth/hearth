@@ -3,7 +3,8 @@ import QtQuick.Controls.Basic
 
 // The draggable part of a window's own title bar (toolbar), behaving as
 // arbor's title bars do (shared by Ben's Qt Quick apps; see ChromeButtons):
-// drag to move, double-click to maximize or restore, right-click for the
+// drag to move (a maximized window is restored first), double-click to
+// maximize or restore, right-click for the
 // window menu (Minimize, Maximize/Restore, Keep Above Others, Close).
 // Put it behind the bar's controls: they take their own clicks.
 //     ChromeTitleArea { anchors.fill: parent; window: win }
@@ -20,7 +21,13 @@ Item {
         target: null
         acceptedButtons: Qt.LeftButton
         grabPermissions: PointerHandler.CanTakeOverFromAnything
-        onActiveChanged: if (active) ta.window.startSystemMove()
+        // (Only a real drag activates it, so this never races the
+        // double-click. A maximized window is restored first, then moved.)
+        onActiveChanged: {
+            if (!active) return
+            if (ta.maximized) ta.window.showNormal()
+            ta.window.startSystemMove()
+        }
     }
     TapHandler {
         acceptedButtons: Qt.LeftButton
