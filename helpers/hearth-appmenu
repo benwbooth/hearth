@@ -878,7 +878,8 @@ def _module_key(s):
     s = s.lower().removesuffix(".desktop")
     if s.startswith(".") and s.endswith("-wrapped"):
         s = s[1:-len("-wrapped")]
-    return s
+    # A version in the class (Ardour's "Ardour-9.7.0").
+    return re.sub(r"[-_ ]v?\d+(\.\d+)+$", "", s)
 
 
 def module_for_pid(pid):
