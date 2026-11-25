@@ -200,6 +200,11 @@ any new app:
    docs, unusual source) and writes the same YAML; the validator and the
    rig test (send each key, watch for a change) gate it like any module.
 
+Built so far: `menu-survey/generators/gen-module.py --nixpkgs ATTR` fetches
+the app's source from nixpkgs and runs every toolkit parser on it (Tk;
+FLTK's FLUID files and C++ Fl_Menu_Item tables), keeping the one with the
+most shortcut items. It reproduces the hand-written xmaxima module.
+
 Each module's `provenance.generator` names the step and version that made
 it, so a new app version reruns the same extractor.
 
