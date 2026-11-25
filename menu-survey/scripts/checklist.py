@@ -103,6 +103,19 @@ def gap_of(measured, toolkit, p):
     shown = " ".join(a.get("texts") or []).lower()
     if "cannot connect to d-bus service" in shown or "was not provided by any .service files" in shown:
         return "blocked:needs-session-service"
+    # Refuses to run outside another desktop (Spectacle on Wayland: KWin).
+    if any(t in shown for t in ("requires kde plasma", "kwin compositor", "requires gnome",
+                                "only supported under gnome", "requires a kde")):
+        return "blocked:needs-other-desktop"
+    # Stopped at a login or account screen: the main window comes after
+    # signing in, which a throwaway home can't (Nheko, cloud sync clients).
+    # A small screen with no tabs or menus: a main window with a password
+    # field (PDFChain) or an optional sign-in step of a wizard isn't one.
+    roles = a.get("roles") or {}
+    small = (a.get("nodes") or 0) < 120 and not (roles.get("page tab list") or roles.get("menu item"))
+    if small and re.search(r"\b(sign ?in|log ?in|login|password|homeserver|enter the token|create (an )?account|"
+                           r"server (address|url)|connect to (your )?server|two-factor)\b", shown):
+        return "blocked:needs-account"
     # An exported menu bar that came empty only counts when the app shows
     # menus on AT-SPI (appmenu-gtk-module exports an empty one for every GTK
     # 3 window, dialogs and splash screens included).
