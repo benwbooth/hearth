@@ -40,16 +40,21 @@ Exact property/method names: the qmltypes under
 Docs: https://quickshell.org/docs/v0.3.2/types/
 
 ## Testing
-`scripts/test-session.sh start NAME`, then `run NAME` after each change
-(prints QML warnings), `ipc NAME call indicator-x toggle` to open a popup,
-`shot NAME out.png` for a 3840x1620 screenshot. `HEARTH_LAYOUT=panel` forces
-the classic panel. Test runs share the real session bus: set
-`HEARTH_APPMENU_REGISTRAR=0`, `HEARTH_SESSION_DRYRUN=1` and `HEARTH_POLKIT=0`
-(otherwise a test shell registers as the polkit agent of Ben's login
-session: the agent is per session, not per display), and give them
-their own `XDG_CONFIG_HOME`/`XDG_CACHE_HOME`.
-Use your own NAME so parallel sessions don't collide; `stop NAME` when done.
-The tray shows the real session's apps (same session bus).
+Never start Hyprland (Ben doesn't use it; a test Hyprland once leaked its
+display into the real session). `scripts/test-session.sh start NAME` starts a
+headless arbor (`ARBOR_BACKEND=headless`, its own HOME and private bus,
+nothing on the real screen), then `run NAME` after each change (prints QML
+warnings), `ipc NAME call indicator-x toggle` to open a popup, `msg NAME ...`
+for `arbor msg` on that instance, `shot NAME out.png` for a 3840x1620
+screenshot. `HEARTH_LAYOUT=panel` forces the classic panel. The script gives
+the shell its own `XDG_CONFIG_HOME`/`XDG_CACHE_HOME`/`XDG_STATE_HOME` under
+the session dir and sets `HEARTH_POLKIT=0`, `HEARTH_APPMENU_REGISTRAR=0`,
+`HEARTH_SESSION_DRYRUN=1` (test runs share the real session bus; a test shell
+must never become the polkit agent of Ben's login session: the agent is per
+session, not per display). The tray shows the real session's apps.
+Use your own NAME so parallel sessions don't collide; `stop NAME` when done
+(it kills each daemon's whole process group, the shell's helpers included).
+For a fully isolated run (private bus too) use `scripts/smoke-test.sh`.
 
 ## Git
 Commit and push every working piece right away. Only stage your own files

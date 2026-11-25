@@ -175,8 +175,9 @@ indicators for everything the Plasma tray did, Settings and Help windows.
 
 - `nix run` / `hearth`: run the installed shell. `hearth-ipc call launcher toggle` etc.
 - `nix develop`, then `quickshell -p shell`: run from the checkout; QML hot-reloads on save.
-- `scripts/test-session.sh start|run|shot|stop NAME`: headless arbor -> nested Hyprland
-  -> hearth, for screenshots while the real screen is locked.
+- `scripts/test-session.sh start|run|shot|ipc|msg|stop NAME`: hearth from the checkout
+  on a headless arbor (no Hyprland, nothing on the real screen), for screenshots
+  while the real screen is locked.
 - `scripts/smoke-test.sh`, `scripts/lock-handover-test.sh`: hearth on arbor's headless
   backend (`ARBOR_BACKEND=headless`, `scripts/headless-arbor.sh`), no host compositor;
   they need an arbor with that backend (devloop's, or `--arbor BIN`).
