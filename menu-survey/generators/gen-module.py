@@ -37,7 +37,10 @@ MOD = {"ctrl": "Ctrl", "control": "Ctrl", "ctl": "Ctrl", "alt": "Alt", "meta": "
 
 def norm_keys(s):
     """'Alt+b', 'Control-x', 'Ctrl+Shift+S', '<Control-s>' -> 'Alt+B' etc."""
-    s = s.strip().strip("{}\"'<>").replace("Key-", "")
+    s = s.strip().strip("{}\"'").replace("Key-", "")
+    if "><" in s or s.count("<") > 1:  # a key sequence (Netgen's <l><g>): not one chord
+        return ""
+    s = s.strip("<>")
     if not s:
         return ""
     parts = [p for p in re.split(r"[+-]", s) if p]
@@ -245,31 +248,96 @@ def fl_clean(label):
     return label.replace("&&", "\0").replace("&", "").replace("\0", "&").replace("@", "").strip()
 
 
-def fluid_menus(files):
-    """FLUID: `Submenu {} {label {&File} ...} { MenuItem {} {label {&Open...} ... shortcut 0x4006f} }`."""
+def fluid_blocks(text, i=0):
+    """FLUID's `Kind name {attrs} {children}` blocks from position i, nested:
+    [(kind, attrs, children)]. Stops at the closing brace of the caller."""
     out = []
+    n = len(text)
+
+    def brace(j):  # j at "{": index after its matching "}"
+        d = 0
+        while j < n:
+            c = text[j]
+            if c == "\\":
+                j += 2
+                continue
+            if c == "{":
+                d += 1
+            elif c == "}":
+                d -= 1
+                if d == 0:
+                    return j + 1
+            j += 1
+        return n
+
+    ws = re.compile(r"\s*")
+    word = re.compile(r"[^\s{}]+")
+    while i < n:
+        i = ws.match(text, i).end()
+        if i >= n:
+            break
+        if text[i] == "}":
+            return out, i + 1
+        m = word.match(text, i)
+        if not m:  # a stray "{": skip its group
+            i = brace(i)
+            continue
+        kind, i = m.group(0), ws.match(text, m.end()).end()
+        # name: a braced group ({} when empty, decl {int x;}) or a word
+        if i < n and text[i] == "{":
+            i = brace(i)
+        else:
+            m = word.match(text, i)
+            i = m.end() if m else i
+        i = ws.match(text, i).end()
+        attrs, kids = "", []
+        if i < n and text[i] == "{":
+            a1 = brace(i)
+            attrs, i = text[i + 1:a1 - 1], a1
+            j = ws.match(text, i).end()
+            if j < n and text[j] == "{":
+                kids, i = fluid_blocks(text, j + 1)
+        out.append((kind, attrs, kids))
+    return out, n
+
+
+def fluid_menus(files):
+    """FLUID: the Menu_Bar's Submenus as menus, their MenuItems (nested
+    submenus flattened as "Sub › Item") with `shortcut 0x...`."""
+    out = []
+
+    def label_of(attrs):
+        lab = re.search(r"label\s+(?:\{([^}]*)\}|\"([^\"]*)\"|(\S+))", attrs)
+        return fl_clean(next((g for g in lab.groups() if g), "")) if lab else ""
+
+    def items_of(kids, prefix=""):
+        res = []
+        for kind, attrs, sub in kids:
+            label = label_of(attrs)
+            if kind == "Submenu":
+                res += items_of(sub, f"{prefix}{label} › " if label else prefix)
+            elif kind == "MenuItem" and label:
+                sc = re.search(r"shortcut\s+(0x[0-9a-fA-F]+|\d+)", attrs)
+                res.append((prefix + label, fl_keys(int(sc.group(1), 0)) if sc else ""))
+                if re.search(r"\bdivider\b", attrs):
+                    res.append(None)
+        return res
+
+    def walk(blocks):
+        for kind, attrs, kids in blocks:
+            if kind in ("Fl_Menu_Bar", "Fl_Sys_Menu_Bar"):
+                for k2, a2, sub in kids:
+                    if k2 == "Submenu" and label_of(a2):
+                        out.append((label_of(a2), items_of(sub)))
+            else:
+                walk(kids)
+
     for fn in files:
         try:
             text = open(fn, errors="replace").read()
         except OSError:
             continue
-        # Walk Submenu/MenuItem blocks in order; a Submenu's items follow
-        # until the next Submenu at the same nesting (good enough for menu
-        # bars, which nest one level).
-        for m in re.finditer(r"\b(Submenu|MenuItem)\s+\S*\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}", text):
-            kind, body = m.groups()
-            lab = re.search(r"label\s+(?:\{([^}]*)\}|\"([^\"]*)\"|(\S+))", body)
-            label = fl_clean(next((g for g in lab.groups() if g), "")) if lab else ""
-            if kind == "Submenu":
-                if label:
-                    out.append((label, []))
-                continue
-            if not out or not label:
-                continue
-            sc = re.search(r"shortcut\s+(0x[0-9a-fA-F]+|\d+)", body)
-            out[-1][1].append((label, fl_keys(int(sc.group(1), 0)) if sc else ""))
-            if re.search(r"\bdivider\b", body):
-                out[-1][1].append(None)
+        walk(fluid_blocks(text)[0])
     return out
 
 
@@ -344,6 +412,34 @@ def sources(root, exts):
                 yield os.path.join(d, f)
 
 
+KEYLIKE = re.compile(r"^[A-Z][a-z]+(?:[A-Z][A-Za-z0-9]*)+$")
+
+
+def resolve_keys(menus, root):
+    """Labels that are message-catalog keys ("FileExit", Scid's
+    `menuText E FileExit "Exit" 1 ...`): the text after the key in the
+    source's English catalog (a file named english/en/C), else anywhere."""
+    keys = {l for t, its in menus for l in [t] + [i[0] for i in its if i] if KEYLIKE.match(l)}
+    if not keys:
+        return menus
+    found = {}
+    files = [f for f in sources(root, (".tcl", ".tk", ".py", ".txt", ".lang", ".msg", ".po", ".ini", ".json"))]
+    english = re.compile(r"(english|[/_.-]en([_.-]|$)|[/_.-]C\.)", re.I)
+    for f in sorted(files, key=lambda f: 0 if english.search(f) else 1):
+        if len(found) == len(keys):
+            break
+        try:
+            text = open(f, errors="replace").read()
+        except OSError:
+            continue
+        for k in keys - found.keys():
+            m = re.search(r"\b" + re.escape(k) + r"\b\s+[\"{]([^\"}\n]+)[\"}]", text)
+            if m:
+                found[k] = m.group(1).strip()
+    fix = lambda l: found.get(l, l)
+    return [(fix(t), [None if i is None else (fix(i[0]),) + tuple(i[1:]) for i in its]) for t, its in menus]
+
+
 def best(root):
     """The parser with the most shortcut items."""
     res = []
@@ -378,7 +474,7 @@ def emit(mid, app_ids, attr, parser, origin, menus):
             if i is None:
                 if keep and keep[-1] is not None:
                     keep.append(None)
-            elif i[1] or (len(i) > 2 and i[2]):
+            elif i[0].strip() and (i[1] or (len(i) > 2 and i[2])):
                 keep.append(i)
         while keep and keep[-1] is None:
             keep.pop()
@@ -391,7 +487,8 @@ def emit(mid, app_ids, attr, parser, origin, menus):
             else:
                 label = i[0].replace("...", "…")
                 if i[1]:
-                    out.append(f"      - {{ label: {yaml_str(label)}, shortcut: {i[1]}, do: {{ keys: {i[1]} }} }}")
+                    k = yaml_str(i[1])
+                    out.append(f"      - {{ label: {yaml_str(label)}, shortcut: {k}, do: {{ keys: {k} }} }}")
                 else:  # through the app's own menu bar, from the keyboard
                     out.append(f"      - {{ label: {yaml_str(label)}, do: {{ keys: \"{i[2]}\" }} }}")
     return "\n".join(out) + "\n"
@@ -414,6 +511,7 @@ def main():
     if not found:
         sys.exit("no menu table with shortcuts found")
     n, parser, menus, _ = found
+    menus = resolve_keys(menus, root)
     mid = a.id or a.nixpkgs or origin
     app_ids = [x for x in a.app_id.split(",") if x] or [mid]
     print(f"{parser}: {n} items in {len(menus)} menus", file=sys.stderr)
