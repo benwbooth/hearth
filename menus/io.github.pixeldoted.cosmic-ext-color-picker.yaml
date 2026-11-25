@@ -1,0 +1,28 @@
+# Color Picker draws its one-menu (View) menu bar itself (libcosmic, no
+# accessibility in this build), so hearth can't read it. This mirrors it
+# with the items that have a key binding (upstream src/app.rs header_start
+# and init keybinds). Its check marks aren't mirrored (keys can't read
+# state). Copy (Ctrl+C, copies the last edited color) is handled in
+# src/app.rs Message::Key, not in the menu; it goes under Edit. About has
+# no binding and needs AT-SPI.
+schema: hearth-menu-module/1
+id: io.github.pixeldoted.cosmic-ext-color-picker
+version: 1
+app:
+  match:
+    app_id: [io.github.pixeldoted.cosmic-ext-color-picker]
+    desktop: [io.github.pixeldoted.cosmic-ext-color-picker.desktop]
+    flatpak: [io.github.pixeldoted.cosmic-ext-color-picker]
+  versions: ">=1.1.0"
+  locales: [en]
+provenance:
+  generator: hand-written from upstream source (PixelDoted/cosmic-ext-color-picker 1.1.0-fix, 2026-11-24)
+  inputs: [source:src/app.rs]
+menus:
+  - title: Edit
+    items:
+      - { label: Copy Color, shortcut: Ctrl+C, do: { keys: Ctrl+C } }
+  - title: View
+    items:
+      - { label: Graphs, shortcut: Ctrl+G, do: { keys: Ctrl+G } }
+      - { label: Expanded, shortcut: Ctrl+E, do: { keys: Ctrl+E } }

@@ -1,0 +1,39 @@
+# Cedilla draws its File/Edit/View menu bar itself (libcosmic, no
+# accessibility in this build), so hearth can't read it. This mirrors it
+# with the items that have a key binding (upstream src/app/app_menu.rs,
+# src/key_binds.rs); every menu item has one. Toggle Preview (Ctrl+H) is a
+# key binding with a toolbar button, not a menu item; it goes under View.
+schema: hearth-menu-module/1
+id: dev.mariinkys.Cedilla
+version: 1
+app:
+  match:
+    app_id: [dev.mariinkys.Cedilla]
+    desktop: [dev.mariinkys.Cedilla.desktop]
+    flatpak: [dev.mariinkys.Cedilla]
+  versions: ">=0.1.14"
+  locales: [en]
+provenance:
+  generator: hand-written from upstream source (mariinkys/cedilla 0.1.14, 2026-11-24)
+  inputs: [source:src/key_binds.rs, source:src/app/app_menu.rs]
+menus:
+  - title: File
+    items:
+      - { label: New Vault File, shortcut: Ctrl+T, do: { keys: Ctrl+T } }
+      - { label: New Folder, shortcut: Ctrl+N, do: { keys: Ctrl+N } }
+      - { label: Open File, shortcut: Ctrl+O, do: { keys: Ctrl+O } }
+      - { label: Save File, shortcut: Ctrl+S, do: { keys: Ctrl+S } }
+      - separator
+      - { label: New File, shortcut: Ctrl+Shift+T, do: { keys: Ctrl+Shift+T } }
+  - title: Edit
+    items:
+      - { label: Undo, shortcut: Ctrl+Z, do: { keys: Ctrl+Z } }
+      - { label: Redo, shortcut: Ctrl+Shift+Z, do: { keys: Ctrl+Shift+Z } }
+      - { label: Paste Image, shortcut: Ctrl+P, do: { keys: Ctrl+P } }
+      - { label: Search, shortcut: Ctrl+F, do: { keys: Ctrl+F } }
+  - title: View
+    items:
+      - { label: Toggle Preview, shortcut: Ctrl+H, do: { keys: Ctrl+H } }
+      - separator
+      - { label: About, shortcut: Ctrl+I, do: { keys: Ctrl+I } }
+      - { label: Settings, shortcut: "Ctrl+,", do: { keys: "Ctrl+," } }

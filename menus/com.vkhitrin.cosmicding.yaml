@@ -1,0 +1,31 @@
+# cosmicding draws its File/View/Sort menu bar itself (libcosmic, no
+# accessibility in this build), so hearth can't read it. This mirrors it
+# with the items that have a key binding (upstream src/app/menu.rs,
+# src/app/key_bind.rs). Search (Ctrl+F) is a key binding without a menu
+# item; it goes under View. Export/Import Bookmarks, About and the Sort
+# options have no binding and need AT-SPI.
+schema: hearth-menu-module/1
+id: com.vkhitrin.cosmicding
+version: 1
+app:
+  match:
+    app_id: [com.vkhitrin.cosmicding]
+    desktop: [com.vkhitrin.cosmicding.desktop]
+    flatpak: [com.vkhitrin.cosmicding]
+  versions: ">=2025.11.1"
+  locales: [en]
+provenance:
+  generator: hand-written from upstream source (vkhitrin/cosmicding v2025.11.1, 2026-11-24)
+  inputs: [source:src/app/key_bind.rs, source:src/app/menu.rs]
+menus:
+  - title: File
+    items:
+      - { label: Add Account, shortcut: Ctrl+Shift+N, do: { keys: Ctrl+Shift+N } }
+      - { label: Add Bookmark, shortcut: Ctrl+N, do: { keys: Ctrl+N } }
+      - separator
+      - { label: Refresh Bookmarks, shortcut: Ctrl+R, do: { keys: Ctrl+R } }
+  - title: View
+    items:
+      - { label: Search, shortcut: Ctrl+F, do: { keys: Ctrl+F } }
+      - separator
+      - { label: Settings, shortcut: "Ctrl+,", do: { keys: "Ctrl+," } }

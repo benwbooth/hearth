@@ -1,0 +1,22 @@
+# StarryDex draws its one-menu (View) menu bar itself (libcosmic, no
+# accessibility in this build), so hearth can't read it. This mirrors it
+# (upstream src/app.rs view menu, src/key_binds.rs); both items have a
+# key binding.
+schema: hearth-menu-module/1
+id: dev.mariinkys.StarryDex
+version: 1
+app:
+  match:
+    app_id: [dev.mariinkys.StarryDex]
+    desktop: [dev.mariinkys.StarryDex.desktop]
+    flatpak: [dev.mariinkys.StarryDex]
+  versions: ">=0.4.0"
+  locales: [en]
+provenance:
+  generator: hand-written from upstream source (mariinkys/starrydex 0.4.0, 2026-11-24)
+  inputs: [source:src/key_binds.rs, source:src/app.rs]
+menus:
+  - title: View
+    items:
+      - { label: About, shortcut: Ctrl+I, do: { keys: Ctrl+I } }
+      - { label: Settings, shortcut: "Ctrl+,", do: { keys: "Ctrl+," } }

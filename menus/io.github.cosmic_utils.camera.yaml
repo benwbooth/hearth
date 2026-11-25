@@ -1,0 +1,55 @@
+# Camera (cosmic-ext-camera) is a libcosmic app with no menu bar and no
+# accessibility tree in this build, so hearth mirrors its default key
+# bindings (upstream src/app/keybind/action.rs default_keybind, grouped by
+# its shortcut categories). Bindings you changed in its Keyboard Shortcuts
+# page won't match. Left out: Zoom In (bound to Ctrl with a "+" character,
+# which can't be sent without Shift) and Reset All Settings (Ctrl+R, resets
+# everything with no confirmation).
+schema: hearth-menu-module/1
+id: io.github.cosmic_utils.camera
+version: 1
+app:
+  match:
+    app_id: [io.github.cosmic_utils.camera]
+    desktop: [io.github.cosmic_utils.camera.desktop]
+    flatpak: [io.github.cosmic_utils.camera]
+  versions: ">=1.11"
+  locales: [en]
+provenance:
+  generator: hand-written from upstream source (cosmic-utils/cosmic-ext-camera v1.11.0, 2026-11-24)
+  inputs: [source:src/app/keybind/action.rs, source:i18n/en/camera.ftl]
+menus:
+  - title: Capture
+    items:
+      - { label: Capture / Record / Play-Pause, shortcut: Space, do: { keys: Space } }
+      - { label: Photo During Recording, shortcut: Enter, do: { keys: Enter } }
+  - title: Camera
+    items:
+      - { label: Switch Camera, shortcut: S, do: { keys: s } }
+      - { label: Toggle Auto Focus, shortcut: A, do: { keys: a } }
+      - { label: Toggle Flash, shortcut: F, do: { keys: f } }
+      - separator
+      - { label: Tools Menu, shortcut: T, do: { keys: t } }
+      - { label: Exposure, shortcut: E, do: { keys: e } }
+      - { label: Color, shortcut: C, do: { keys: c } }
+      - { label: Motor Controls, shortcut: P, do: { keys: p } }
+      - { label: Format, shortcut: Ctrl+F, do: { keys: Ctrl+F } }
+      - { label: Filters, shortcut: L, do: { keys: l } }
+  - title: View
+    items:
+      - { label: Next Mode, shortcut: M, do: { keys: m } }
+      - { label: Previous Mode, shortcut: N, do: { keys: n } }
+      - { label: Hide Interface, shortcut: H, do: { keys: h } }
+      - separator
+      - { label: Zoom Out, shortcut: Ctrl+-, do: { keys: Ctrl+- } }
+      - { label: Reset Zoom, shortcut: Ctrl+0, do: { keys: Ctrl+0 } }
+      - { label: Toggle Fit / Fill, shortcut: V, do: { keys: v } }
+      - { label: Cycle Photo Aspect Ratio, shortcut: Ctrl+A, do: { keys: Ctrl+A } }
+  - title: App
+    items:
+      - { label: Open Gallery, shortcut: G, do: { keys: g } }
+      - { label: Settings…, shortcut: "Ctrl+,", do: { keys: "Ctrl+," } }
+      - { label: Keyboard Shortcuts, shortcut: "?", do: { keys: Shift+/ } }
+      - { label: About, shortcut: F1, do: { keys: F1 } }
+      - separator
+      - { label: Quit, shortcut: Ctrl+Q, do: { keys: Ctrl+Q } }
