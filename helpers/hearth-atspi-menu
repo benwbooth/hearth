@@ -703,7 +703,7 @@ class AtspiMenu:
         except Exception:
             return False
 
-    def search(self, A, root, test, web):
+    def search(self, A, root, test, web, skip=None):
         """Breadth-first search under `root` for test(o, role); `web`: also
         into web pages. Bounded in nodes and time: each call to a busy app
         can take a while."""
@@ -719,7 +719,7 @@ class AtspiMenu:
                 continue
             if d >= (30 if web else 14):
                 continue
-            if r in AtspiMenu.SKIP and not (web and r in (A.Role.DOCUMENT_WEB, A.Role.DOCUMENT_FRAME,
+            if r in (AtspiMenu.SKIP if skip is None else skip) and not (web and r in (A.Role.DOCUMENT_WEB, A.Role.DOCUMENT_FRAME,
                                                            A.Role.EMBEDDED, A.Role.SCROLL_PANE)):
                 continue
             try:
@@ -1072,6 +1072,12 @@ class AtspiMenu:
             return True
         # A page element, or a native one without an accessible action
         # (GTK 4's buttons have none): a click through arbor.
+        return self.real_click(o, native)
+
+    def real_click(self, o, native=None):
+        """A real left click on `o` through arbor (click-window)."""
+        if native is None:
+            native = self.document(o) is None
         if not self.window:
             return False
         try:
@@ -1349,6 +1355,26 @@ class AtspiMenu:
         if self.window:
             arbor("probe-window", "--id", str(self.window), "--seconds", "3" if on else "0")
 
+    @staticmethod
+    def inner_label(o):
+        """An unnamed row's text: its first label within two levels (GTK 3
+        popover rows: list item > filler > label "Preferences")."""
+        todo = [(o, 0)]
+        while todo:
+            x, d = todo.pop(0)
+            try:
+                for i in range(min(x.get_child_count(), 8)):
+                    c = x.get_child_at_index(i)
+                    if c is None:
+                        continue
+                    if c.get_role() == Atspi.Role.LABEL and (c.get_name() or "").strip():
+                        return c.get_name().strip()
+                    if d < 2:
+                        todo.append((c, d + 1))
+            except Exception:
+                continue
+        return ""
+
     def visible_actions(self):
         """Named things the user can press that are showing in the window:
         {label: accessible}."""
@@ -1365,6 +1391,8 @@ class AtspiMenu:
             if r in roles and o is not self.trigger:
                 try:
                     name = (o.get_name() or "").strip()
+                    if not name and r == A.Role.LIST_ITEM:
+                        name = self.inner_label(o)
                     # A GTK 4 menu button is named after everything in its
                     # popover ("Zoom out\nCtrl + Minus 100% Zoom in..."):
                     # its entries are below it, not it.
@@ -1380,7 +1408,8 @@ class AtspiMenu:
         except Exception:
             pass
         # Deep: a GTK 4 popover's entries sit under its menu button, past 14.
-        self.search(A, self.frame, test, web=True)
+        # Into lists too: a GTK 3 popover's rows are a list box (Catfish's ☰).
+        self.search(A, self.frame, test, web=True, skip=AtspiMenu.SKIP - {A.Role.LIST, A.Role.LIST_BOX})
         return found
 
     def learn_drawer(self, before):
@@ -1397,17 +1426,27 @@ class AtspiMenu:
         self._store_drawer(new)
 
     def drawer_open_and_read(self, before):
-        if not self.press(self.trigger):
-            return
-        new = {}
-        for _ in range(12):
-            time.sleep(0.1)
-            new = {k: v for k, v in self.visible_actions().items() if k not in before}
-            if new:
-                time.sleep(0.25)  # the panel's slide-in: let it finish
+        new, clicked = {}, False
+        for attempt in (self.press, self.real_click):
+            # GTK 3's menu buttons take the accessible press, report success
+            # and open nothing (a GtkMenu/popover needs a real input event):
+            # then a real click through arbor.
+            if not attempt(self.trigger):
+                continue
+            clicked = attempt == self.real_click
+            for _ in range(12):
+                time.sleep(0.1)
                 new = {k: v for k, v in self.visible_actions().items() if k not in before}
+                if new:
+                    time.sleep(0.25)  # the panel's slide-in: let it finish
+                    new = {k: v for k, v in self.visible_actions().items() if k not in before}
+                    break
+            if new:
                 break
-        self.press(self.trigger)  # close it again
+        if new:
+            # Close it again the way it opened (a popover closes on Escape
+            # or a second click; the accessible press may not reach it).
+            (self.real_click if clicked else self.press)(self.trigger)
         return new
 
     def _store_drawer(self, new):
