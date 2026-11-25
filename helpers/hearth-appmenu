@@ -1735,12 +1735,72 @@ class AtspiWorker:
         return True
 
 
+class ScreenReader:
+    """The a11y bus's ScreenReaderEnabled, on only while it's needed (Ben,
+    2026-11-25: "turn it on as needed"). EFL apps (Terminology, Ephoto)
+    build their AT-SPI tree only with it (and ELM_ATSPI_MODE=1, set by the
+    session), and pick it up while running. Chromium, Electron and Firefox
+    keep full trees while it's on, so it goes off again once no EFL app
+    runs. Left alone when it was already on (a real screen reader)."""
+
+    pids = set()
+    ours = False
+
+    @classmethod
+    def _iface(cls):
+        o = bus.get_object("org.a11y.Bus", "/org/a11y/bus")
+        return dbus.Interface(o, "org.freedesktop.DBus.Properties")
+
+    @staticmethod
+    def needs(pid):
+        try:
+            with open(f"/proc/{int(pid)}/maps") as f:
+                return "/libelementary" in f.read()
+        except (OSError, ValueError):
+            return False
+
+    @classmethod
+    def need(cls, pid):
+        """True when this just turned it on (the app registers a moment later)."""
+        if not pid or not cls.needs(pid):
+            return False
+        cls.pids.add(int(pid))
+        if cls.ours:
+            return False
+        try:
+            p = cls._iface()
+            if bool(p.Get("org.a11y.Status", "ScreenReaderEnabled")):
+                return False  # a real screen reader: not ours to switch
+            p.Set("org.a11y.Status", "ScreenReaderEnabled", dbus.Boolean(True))
+        except dbus.DBusException as e:
+            err(e)
+            return False
+        cls.ours = True
+        GLib.timeout_add_seconds(15, cls.check)
+        return True
+
+    @classmethod
+    def check(cls):
+        cls.pids = {p for p in cls.pids if os.path.exists(f"/proc/{p}")}
+        if cls.pids:
+            return True
+        try:
+            cls._iface().Set("org.a11y.Status", "ScreenReaderEnabled", dbus.Boolean(False))
+        except dbus.DBusException as e:
+            err(e)
+        cls.ours = False
+        return False
+
+
 class AtspiMenu:
     """The focused window's menu through hearth-atspi-menu."""
 
     def __init__(self, key, title, pid, window=0):
         self.key, self.title, self.pid, self.window, self.alive = key, title, pid, window, True
         self.tray = None  # the app's tray icon menu, while AT-SPI has none
+        if ScreenReader.need(pid):
+            # EFL registers on the bus a moment after the switch: look again.
+            GLib.timeout_add(2500, lambda: self.alive and AtspiWorker.send(self.watch_cmd()) and False)
         if not AtspiWorker.send(self.watch_cmd()):
             out({"type": "none", "key": key})
 

@@ -59,6 +59,9 @@ environment {
     // com.canonical.AppMenu.Registrar name).
     // gail and atk-bridge: GTK 2 apps on AT-SPI (GTK 3 skips both names).
     GTK_MODULES "appmenu-gtk-module:gail:atk-bridge"
+    // EFL apps (Terminology, Ephoto) on AT-SPI: their bridge also needs the
+    // bus's ScreenReaderEnabled, which hearth turns on only while one runs.
+    ELM_ATSPI_MODE "1"
     // Global menu for Java Swing apps (README "Global menu"): every JVM
     // loads the Java ATK bridge hearth ships (nix/java-atk-wrapper.nix),
     // which gives Swing windows an AT-SPI tree hearth reads. Flatpaks get
