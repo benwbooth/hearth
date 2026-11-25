@@ -19,7 +19,8 @@
 #
 # The rest lives with the session and the apps:
 # - arbor/config.kdl (hearth's session config): GTK_MODULES (appmenu-gtk-
-#   module, for plain GtkMenuBars) and JAVA_TOOL_OPTIONS (the Java bridge).
+#   module, for plain GtkMenuBars; gail and atk-bridge, GTK 2 apps on
+#   AT-SPI) and JAVA_TOOL_OPTIONS (the Java bridge).
 # - Electron apps whose menus aren't exported need
 #   `hearth.lib.globalMenu.electronFlags` in their wrappers: Electron only
 #   builds its accessibility tree with it (or with a screen reader).

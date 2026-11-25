@@ -280,6 +280,9 @@
         # The same for GTK 2 apps (same module name, GTK 2's own folder).
         mkdir -p $out/lib/gtk-2.0/modules
         ln -s ${appmenu-gtk2-module}/lib/gtk-2.0/modules/libappmenu-gtk-module.so $out/lib/gtk-2.0/modules/
+        # GTK 2 has no built-in accessibility: GTK_MODULES' gail (in each
+        # app's own GTK 2) and atk-bridge (here) put its windows on AT-SPI.
+        ln -s ${pkgs.at-spi2-core}/lib/gtk-2.0/modules/libatk-bridge.so $out/lib/gtk-2.0/modules/
         # JAVA_TOOL_OPTIONS (arbor/config.kdl) loads the Java accessibility
         # bridge from /run/current-system/sw/lib/java-atk-wrapper.
         ln -s ${java-atk-wrapper}/lib/java-atk-wrapper $out/lib/java-atk-wrapper

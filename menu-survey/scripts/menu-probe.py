@@ -146,7 +146,7 @@ def inspect(win):
 OUT = os.path.join(ROOT, "data", f"probe{WORKER}.jsonl")
 SHOTS = os.path.join(ROOT, "data", "shots")
 SESSION_ENV = {
-    "GTK_MODULES": "appmenu-gtk-module",
+    "GTK_MODULES": "appmenu-gtk-module:gail:atk-bridge",
     "GTK_PATH": "/run/current-system/sw/lib/gtk-3.0",
     "QT_QPA_PLATFORM": "wayland;xcb",
     "ELECTRON_OZONE_PLATFORM_HINT": "auto",

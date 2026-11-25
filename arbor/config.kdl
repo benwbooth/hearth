@@ -57,7 +57,8 @@ environment {
     // GTK_PATH's /run/current-system/sw/lib/gtk-3.0. It only hides the
     // in-window menu bar while hearth's menu bar runs (it watches the
     // com.canonical.AppMenu.Registrar name).
-    GTK_MODULES "appmenu-gtk-module"
+    // gail and atk-bridge: GTK 2 apps on AT-SPI (GTK 3 skips both names).
+    GTK_MODULES "appmenu-gtk-module:gail:atk-bridge"
     // Global menu for Java Swing apps (README "Global menu"): every JVM
     // loads the Java ATK bridge hearth ships (nix/java-atk-wrapper.nix),
     // which gives Swing windows an AT-SPI tree hearth reads. Flatpaks get
