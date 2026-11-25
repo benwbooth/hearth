@@ -67,7 +67,15 @@ Singleton {
             sig.push(e.id + "\u0001" + e.name + "\u0001" + (e.icon || "") + "\u0001" + (e.categories || []).join(";"));
         }
         const s = sig.sort().join("\u0002");
-        if (s === appsSig) return;
+        if (s === appsSig) {
+            // Same apps, but Quickshell made new objects for them (the old
+            // ones are deleted): point each entry at its new object, in
+            // place, so nothing downstream rebuilds.
+            const byId = {};
+            for (const e of keep) byId[e.id] = e;
+            for (const a of apps) if (byId[a.key]) a.entry = byId[a.key];
+            return;
+        }
         appsSig = s;
         const out = keep.map(e => ({ key: e.id, entry: e, name: e.name, icon: e.icon || "application-x-executable", section: sectionOf(e).id }));
         apps = out.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
@@ -232,12 +240,12 @@ Singleton {
         if (q) {
             const hits = [];
             for (const a of apps) {
-                const e = a.entry;
+                const e = a.entry || {};
                 let s = Spotlight.score(a.name, q);
-                if (!s) s = Math.max(Spotlight.score(e.genericName, q) * 0.7,
+                if (!s) s = Math.max(Spotlight.score(e.genericName || "", q) * 0.7,
                                      (e.keywords || []).some(k => k.toLowerCase().startsWith(q)) ? 45 : 0,
-                                     Spotlight.score(e.id.replace(/\.desktop$/, "").split(".").pop(), q) * 0.8);
-                if (s > 0) hits.push({ a: a, s: s + Spotlight.boost("app:" + e.id) });
+                                     Spotlight.score(a.key.replace(/\.desktop$/, "").split(".").pop(), q) * 0.8);
+                if (s > 0) hits.push({ a: a, s: s + Spotlight.boost("app:" + a.key) });
             }
             hits.sort((x, y) => y.s - x.s);
             return [{ id: "", title: "", depth: 0, collapsed: false, items: hits.map(h => h.a), custom: false }];
