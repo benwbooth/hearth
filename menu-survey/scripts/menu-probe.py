@@ -1147,7 +1147,8 @@ def probe_appimage(attr):
         # The survey's appimage-run (appimage-run.nix: unstable's glibc and
         # the libraries AppImages expect from the host), else the system's.
         ar = os.path.expanduser("~/.cache/hearth-menu-survey/roots/appimage-run/bin/appimage-run")
-        argv = sandboxed([ar if os.path.exists(ar) else "/run/current-system/sw/bin/appimage-run", fn])
+        # Its store path: the sandbox hides your home, where the GC root is.
+        argv = sandboxed([os.path.realpath(ar) if os.path.exists(ar) else "/run/current-system/sw/bin/appimage-run", fn])
         rows = [attempt(attr, argv, "session", {}, [])]
         r0 = rows[0]
         r0.update(hearth=HEARTH_PKG or "installed", appimage=url, sandboxed=True)
