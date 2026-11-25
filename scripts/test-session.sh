@@ -111,7 +111,10 @@ EOF
     [[ -f ~/.config/uwsm/env-hyprland ]] && source ~/.config/uwsm/env-hyprland
   fi
   before=$(ls "$XDG_RUNTIME_DIR/hypr" 2>/dev/null || true)
-  (cd "$dir" && WAYLAND_DISPLAY=$sock daemon "$dir/hypr.pid" "$dir/hypr.log" \
+  # HYPRLAND_NO_SD_VARS: a test Hyprland otherwise exports its WAYLAND_DISPLAY
+  # and instance signature to the user manager and D-Bus, so apps the real
+  # session started afterwards opened on the test compositor (2026-11-24).
+  (cd "$dir" && WAYLAND_DISPLAY=$sock HYPRLAND_NO_SD_VARS=1 HYPRLAND_NO_SD_NOTIFY=1 daemon "$dir/hypr.pid" "$dir/hypr.log" \
     "$(tool hyprland)/bin/Hyprland" --config "$dir/hyprland.lua")
   for _ in $(seq 100); do
     sig=$(comm -13 <(echo "$before" | sort) <(ls "$XDG_RUNTIME_DIR/hypr" 2>/dev/null | sort) | head -1)
