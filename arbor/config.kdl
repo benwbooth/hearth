@@ -148,15 +148,10 @@ window-rule {
     }
 }
 // Chromium and Electron draw their menus opaque (they flatten GTK's
-// translucent menu colour onto the window's). hearth-color-scheme gives them
-// the glass tint's colour, and these popups are drawn at the tint's opacity,
-// so the blur shows through as much as behind hearth's Qt menus.
-window-rule {
-    match app-id=r#"(?i)^(com\.anthropic\.claude|claude|brave-browser.*|chromium.*|google-chrome.*|code|code-url-handler|electron.*|bluebubbles|spotify|discord|slack|signal|obsidian|vesktop)$"#
-    popups {
-        opacity 0.74
-    }
-}
+// translucent menu colour onto the window's): hearth-color-scheme writes a
+// rule drawing their menu colour see-through (text and highlights stay
+// solid), following light/dark.
+include optional=true "~/.config/hearth/arbor-popups.kdl"
 // Blur and shadows for menus and tooltips when real glass is off (written
 // by hearth, services/RealGlass.qml; missing while real glass is on).
 include optional=true "~/.config/hearth/arbor-glass-fallback.kdl"

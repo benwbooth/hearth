@@ -209,8 +209,8 @@ def menu_css(gtk4):
     top highlight). Plain `menu` is solid: Chromium/Electron read their menu
     colour from `window.background menu` (not a popup) and flatten a
     translucent one onto the window colour. It is the tint's own colour
-    instead, and arbor draws those apps' popups at the tint's 0.74 opacity
-    (arbor/config.kdl), which gives the same glass."""
+    instead, and arbor draws that colour see-through at the tint's 0.74
+    opacity (apply_arbor_popups), which gives the same glass."""
     if DARK:
         c = dict(bg="#2b2d30", glass="rgba(38, 40, 43, 0.74)", chromium="#26282b",
                  highlight="rgba(255, 255, 255, 0.06)", fg="#f5f5f7", accent="#0a84ff", dim="rgba(255, 255, 255, 0.55)",
@@ -297,6 +297,42 @@ def apply_menu_css():
             changed.append(ver + "/gtk.css")
 
 
+# Apps that draw their menus opaque (Chromium, Electron): arbor draws their
+# popups' background colour (the plain `menu` colour above, what Chromium
+# reads) see-through at the glass tint's opacity, keeping text and highlights
+# solid, so they compose to the same glass as GTK's and hearth's Qt menus.
+CHROMIUM_APPS = (r"(?i)^(com\.anthropic\.claude|claude|brave-browser.*|chromium.*|google-chrome.*"
+                 r"|code|code-url-handler|electron.*|bluebubbles|spotify|discord|slack|signal"
+                 r"|obsidian|vesktop)$")
+
+
+def apply_arbor_popups():
+    """~/.config/hearth/arbor-popups.kdl (included by hearth's arbor config):
+    the see-through colour follows light/dark."""
+    key = "#26282b" if DARK else "#f9f9fa"
+    text = f"""// Written by hearth-color-scheme (light/dark); edits here are replaced.
+// Chromium/Electron menus: their background colour see-through over arbor's
+// popup blur, text and highlights solid (hearth's menu glass).
+window-rule {{
+    match app-id=r#"{CHROMIUM_APPS}"#
+    popups {{
+        see-through-color "{key}"
+        see-through-opacity 0.74
+    }}
+}}
+"""
+    path = os.path.join(CONFIG, "hearth", "arbor-popups.kdl")
+    try:
+        with open(path) as f:
+            if f.read() == text:
+                return
+    except FileNotFoundError:
+        pass
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    write_atomic(path, text)
+    changed.append("arbor-popups.kdl")
+
+
 def apply_gsettings():
     """GSettings keys GTK and the GTK portal read, written straight to dconf
     (as services/Mouse.qml does): no schemas needed, which hearth's
@@ -347,5 +383,6 @@ if apply_kdeglobals():
     notify_kde()
 apply_settings_ini()
 apply_menu_css()
+apply_arbor_popups()
 apply_gsettings()
 print(json.dumps({"mode": MODE, "changed": changed}))
