@@ -293,12 +293,19 @@ MouseArea {
             interval: task.dock ? 150 : 450
             function begin() {
                 interval = !task.dock ? 450
-                    : (ShellState.dockPreviews > 0 || Date.now() < ShellState.dockPreviewWarmUntil) ? 0 : 150;
+                    : (ShellState.dockPreviews > 0 || Date.now() < ShellState.dockPreviewWarmUntil) ? 30 : 150;
                 restart();
             }
-            onTriggered: preview.visible = ((task.pointed && task.hostHovered) || previewHover.hovered)
-                                           && !(task.dock && !task.running)
-                                           && !menu.open && !task.dragging && !task.pressed
+            onTriggered: {
+                const show = ((task.pointed && task.hostHovered) || previewHover.hovered)
+                             && !(task.dock && !task.running)
+                             && !menu.open && !task.dragging && !task.pressed;
+                // Placed against the icon where it is now (it moves as the
+                // Dock magnifies): opened at once, it showed for a frame at
+                // the Dock window's lower-left corner first.
+                if (show && !preview.visible) preview.anchor.updateAnchor();
+                preview.visible = show;
+            }
         }
         Timer {
             id: previewHide
