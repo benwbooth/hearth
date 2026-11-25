@@ -57,6 +57,12 @@ tree, buttons, check boxes, settings panel). ScreenReaderEnabled is
 session-wide: it would also make Chromium, Electron and Firefox keep full
 accessibility trees (CPU and memory in every such app). Waiting on Ben.
 
+Generators in bulk (2026-11-25): gen-module.py over the 218 unsolved nixpkgs
+apps without a tree gave modules for Terminology, Gmsh, Scid, Xcas (in
+menus/); most others have no menu table with keys. Avalonia apps' access-key
+modules (MSBuild Log Viewer, Libation) wait on a test: Avalonia draws an
+empty window in the rig, so its Alt+letter navigation isn't verified.
+
 AppImages: Tauri apps check that their executable is under
 "$TMPDIR/.mount_" (where the FUSE runtime mounts) whenever APPIMAGE/APPDIR
 is set, and panic under appimage-run. Running appimage-run with
