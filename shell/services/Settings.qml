@@ -19,7 +19,7 @@ Singleton {
         layout: "mac",                  // "mac" (top bar + dock) | "panel" (classic bottom panel)
         appearance: {
             mode: "dark",               // "dark" | "light" | "auto" (light 7:00-19:00)
-            accent: "#3daee9",
+            accent: "#007aff",          // macOS blue (drawn #0a84ff in dark mode, as macOS does)
             glass: 0.55,                // 0 = opaque .. 1 = most transparent
             reduceTransparency: false,
             realGlass: true,            // arbor: the compositor draws refracting liquid glass under panes

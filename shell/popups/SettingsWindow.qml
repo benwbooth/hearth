@@ -257,7 +257,7 @@ Scope {
                     Row {
                         spacing: 8
                         Repeater {
-                            model: ["#3daee9", "#007aff", "#a550a7", "#f74f9e", "#da4453", "#f67400", "#fdbc4b", "#27ae60", "#8e8e93"]
+                            model: ["#007aff", "#3daee9", "#a550a7", "#f74f9e", "#da4453", "#f67400", "#fdbc4b", "#27ae60", "#8e8e93"]
                             MouseArea {
                                 id: sw
                                 required property var modelData

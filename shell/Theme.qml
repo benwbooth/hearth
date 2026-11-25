@@ -24,7 +24,12 @@ Singleton {
     readonly property color border: dark ? "#3f444a" : "#c9ced3"
     readonly property color fg: dark ? "#fcfcfc" : "#232629"
     readonly property color fgDim: dark ? "#a1a9b1" : "#6e7882"
-    readonly property color accent: ap.accent || "#3daee9"
+    // macOS's system blue is a shade lighter in dark mode (#0a84ff): the
+    // same blue the apps' menus use (shared/app-menus/MacMenuStyle.qml).
+    readonly property color accent: {
+        const a = String(ap.accent || "#007aff").toLowerCase()
+        return a === "#007aff" && dark ? "#0a84ff" : a
+    }
     readonly property color accentDim: Qt.rgba(accent.r, accent.g, accent.b, dark ? 0.35 : 0.25)
     readonly property color accentText: "#ffffff"
     readonly property color hover: dark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.07)
