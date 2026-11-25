@@ -85,6 +85,13 @@ keyboard menu commands); the module covers the FLTK/NTK builds
 Still impossible: GNOME Settings (refuses to start outside GNOME), KDE System Settings and Info Center (Qt Quick in a
 QQuickWidget: wrong positions, no press action; both removed).
 
+Open (2026-11-25): GTK 3 apps whose ☰ is a classic GtkMenu (Catfish, Helvum's
+GTK 4 button differs) don't open it in the rig: the accessible press and
+arbor's synthetic click leave the button pressed but no popup maps. A
+GtkMenu on Wayland needs a grab with a real input serial; whether arbor
+grants it for synthetic input is the next thing to check (arbor side). These
+show as "partial" (the ☰ found, unread).
+
 ## Proposed impossible (for Ben's triage, 2026-11-25)
 
 Groups no general fix reaches, with why. Not decided: each needs your call.
