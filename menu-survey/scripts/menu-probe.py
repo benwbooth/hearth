@@ -254,6 +254,11 @@ def rig_up():
     r = rig("busctl", "set-property", "org.a11y.Bus", "/org/a11y/bus", "org.a11y.Status", "IsEnabled", "b", "true")
     if r.returncode:
         sys.exit("rig has no a11y bus: " + (r.stderr or r.stdout))
+    if os.environ.get("MENU_PROBE_SCREENREADER"):
+        # Experiment: the bus says a screen reader runs (Electron, Chromium
+        # and EFL build their trees only then).
+        rig("busctl", "set-property", "org.a11y.Bus", "/org/a11y/bus", "org.a11y.Status",
+            "ScreenReaderEnabled", "b", "true")
     with open(os.path.join(RIGDIR, "core.pids"), "w") as f:
         f.write(" ".join(core_pids()))
 
