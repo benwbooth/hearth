@@ -7,7 +7,9 @@
 //          { title, say, url (opened once when shown), address, heading,
 //            rows (StepPicture: drawn, never a screenshot) }
 //   fields: { optionName: plain-language hint shown under that question }
-//   signin: { address, heading, allow } the browser sign-in page (OAuth)
+//   signin: { address, heading, allow, pages } the browser sign-in (OAuth);
+//          pages: [{ title, say, address, heading, rows }] in order, stepped
+//          through in the wizard while rclone waits
 .pragma library
 
 var guides = {
@@ -503,19 +505,161 @@ var guides = {
  },
  "onedrive": {
   "title": "Microsoft OneDrive",
-  "need": "Your Microsoft account (personal, work or school). You'll sign in in your browser and then pick which drive to use.",
-  "steps": [],
+  "need": "Your Microsoft account (personal, work or school). You'll sign in in your browser, then choose which drive to use: your own OneDrive, or a SharePoint site's library.",
+  "steps": [
+   {
+    "title": "Only for SharePoint: copy the site's address",
+    "say": "Skip this if you just want your own OneDrive. For a SharePoint site, open the site in your browser and copy its address from the address bar; you'll paste it after signing in.",
+    "address": "example.sharepoint.com/sites/mysite",
+    "heading": "mysite",
+    "rows": [
+     {
+      "kind": "field",
+      "label": "Address bar",
+      "value": "https://example.sharepoint.com/sites/mysite",
+      "hot": true
+     },
+     {
+      "kind": "text",
+      "label": "Documents",
+      "value": "Shared library of the site"
+     }
+    ]
+   }
+  ],
   "fields": {
    "client_id": "Leave empty to use rclone's built-in key.",
    "client_secret": "Leave empty.",
-   "region": "Choose \"global\" (Microsoft Cloud Global) unless your organisation uses the US Government or China cloud.",
+   "region": "Choose \"global\" (Microsoft Cloud Global) unless your organisation uses the US Government cloud (us) or the China cloud run by 21Vianet (cn). \"de\" is the old Germany cloud and no longer used.",
    "tenant": "Leave empty. Only needed by IT admins using an app without signing in.",
-   "drive_type": "Filled in for you after you sign in and choose your drive."
+   "drive_type": "Filled in for you after you sign in and choose your drive.",
+   "config_type": "Choose \"onedrive\" (OneDrive Personal or Business) for your own files. For a SharePoint site, choose \"url\" and paste the site's address, or \"search\" to look it up by name. The other choices are for experts who know a drive or site ID.",
+   "config_driveid": "Pick the drive to use. For your own files that's usually the one called OneDrive (Business accounts may also list a Personal Vault or other libraries).",
+   "config_driveid_fixed": "Only if you chose to type a drive ID: paste the ID, e.g. b!abc123... Most people never need this.",
+   "config_siteid": "Only if you chose to type a site ID: paste the SharePoint site's ID. Most people never need this.",
+   "config_site_url": "The SharePoint site's name or address, e.g. mysite or https://example.sharepoint.com/sites/mysite.",
+   "config_sharepoint_url": "The part of the site's address after the server name, e.g. /teams/hr or /sites/mysite.",
+   "config_search_term": "A word from the SharePoint site's name, e.g. Marketing. You'll then pick the site from a list.",
+   "config_site": "Pick the SharePoint site you want from the list.",
+   "config_drive_ok": "Check the drive name and type shown are the ones you meant, then say yes. Say no to choose again."
   },
   "signin": {
    "address": "login.microsoftonline.com",
    "heading": "Let this app access your info?",
-   "allow": "Accept"
+   "allow": "Accept",
+   "pages": [
+    {
+     "title": "Sign in",
+     "say": "Type the email address of your Microsoft account (for a work or school account, your work email) and click Next.",
+     "address": "login.microsoftonline.com",
+     "heading": "Sign in",
+     "rows": [
+      {
+       "kind": "field",
+       "label": "Email or phone",
+       "value": "you@example.com",
+       "hot": true
+      },
+      {
+       "kind": "button",
+       "label": "Next",
+       "value": "",
+       "hot": true
+      }
+     ]
+    },
+    {
+     "title": "Enter your password",
+     "say": "Type your password and click Sign in. If Microsoft offers a code, a passkey or the Authenticator app instead, use that; personal accounts may move to login.live.com here.",
+     "address": "login.live.com",
+     "heading": "Enter password",
+     "rows": [
+      {
+       "kind": "field",
+       "label": "Password",
+       "value": "••••••••",
+       "hot": true
+      },
+      {
+       "kind": "link",
+       "label": "Forgot your password?",
+       "value": ""
+      },
+      {
+       "kind": "button",
+       "label": "Sign in",
+       "value": "",
+       "hot": true
+      }
+     ]
+    },
+    {
+     "title": "Stay signed in?",
+     "say": "Microsoft may ask whether to stay signed in in this browser. Either answer is fine; it doesn't affect the drive.",
+     "address": "login.live.com",
+     "heading": "Stay signed in?",
+     "rows": [
+      {
+       "kind": "button",
+       "label": "No",
+       "value": ""
+      },
+      {
+       "kind": "button",
+       "label": "Yes",
+       "value": "",
+       "hot": true
+      }
+     ]
+    },
+    {
+     "title": "Allow access",
+     "say": "Microsoft lists what rclone (the tool hearth uses for cloud drives) may do: read and change your files and stay connected. Click Accept. A work account may instead say an administrator must approve; then ask your IT team.",
+     "address": "login.live.com",
+     "heading": "Let this app access your info?",
+     "rows": [
+      {
+       "kind": "text",
+       "label": "rclone",
+       "value": "needs your permission to:"
+      },
+      {
+       "kind": "text",
+       "label": "Access your files",
+       "value": ""
+      },
+      {
+       "kind": "text",
+       "label": "Maintain access to data you have given it access to",
+       "value": ""
+      },
+      {
+       "kind": "button",
+       "label": "No",
+       "value": ""
+      },
+      {
+       "kind": "button",
+       "label": "Accept",
+       "value": "",
+       "hot": true
+      }
+     ]
+    },
+    {
+     "title": "Done: come back here",
+     "say": "The browser shows a short Success! page from rclone. You can close that tab; this window carries on by itself.",
+     "address": "127.0.0.1:53682",
+     "heading": "Success!",
+     "rows": [
+      {
+       "kind": "text",
+       "label": "All done. Please go back to rclone.",
+       "value": ""
+      }
+     ]
+    }
+   ]
   }
  },
  "dropbox": {
@@ -529,13 +673,123 @@ var guides = {
   "signin": {
    "address": "www.dropbox.com/oauth2/authorize",
    "heading": "rclone would like to access the files and folders in your Dropbox",
-   "allow": "Allow"
+   "allow": "Allow",
+   "pages": [
+    {
+     "title": "Sign in",
+     "say": "Type your Dropbox email and click Continue. If you made your Dropbox account with Google or Apple, use that button instead.",
+     "address": "www.dropbox.com/oauth2/authorize",
+     "heading": "Sign in",
+     "rows": [
+      {
+       "kind": "button",
+       "label": "Continue with Google",
+       "value": ""
+      },
+      {
+       "kind": "button",
+       "label": "Continue with Apple",
+       "value": ""
+      },
+      {
+       "kind": "field",
+       "label": "Email",
+       "value": "you@example.com",
+       "hot": true
+      },
+      {
+       "kind": "button",
+       "label": "Continue",
+       "value": "",
+       "hot": true
+      }
+     ]
+    },
+    {
+     "title": "Enter your password",
+     "say": "Type your Dropbox password and continue. If you use two-step verification, Dropbox then asks for the code from your phone.",
+     "address": "www.dropbox.com/oauth2/authorize",
+     "heading": "Enter your password",
+     "rows": [
+      {
+       "kind": "field",
+       "label": "Password",
+       "value": "••••••••",
+       "hot": true
+      },
+      {
+       "kind": "button",
+       "label": "Continue",
+       "value": "",
+       "hot": true
+      }
+     ]
+    },
+    {
+     "title": "Allow access",
+     "say": "Dropbox shows what rclone (the tool hearth uses for cloud drives) wants to do with your files. Click Allow.",
+     "address": "www.dropbox.com/oauth2/authorize",
+     "heading": "rclone would like to access the files and folders in your Dropbox",
+     "rows": [
+      {
+       "kind": "button",
+       "label": "Cancel",
+       "value": ""
+      },
+      {
+       "kind": "button",
+       "label": "Allow",
+       "value": "",
+       "hot": true
+      }
+     ]
+    },
+    {
+     "title": "Done: come back here",
+     "say": "The browser shows a short Success! page from rclone. You can close that tab; this window carries on by itself.",
+     "address": "127.0.0.1:53682",
+     "heading": "Success!",
+     "rows": [
+      {
+       "kind": "text",
+       "label": "All done. Please go back to rclone.",
+       "value": ""
+      }
+     ]
+    }
+   ]
   }
  },
  "box": {
   "title": "Box",
   "need": "Your Box account. You'll sign in in your browser. If your company signs in to Box with single sign-on, first set a Box password under Settings, Account, Authentication.",
-  "steps": [],
+  "steps": [
+   {
+    "title": "Only with company single sign-on: set a Box password",
+    "say": "Skip this if you sign in to Box with an email and password. If your company signs you in through its own sign-on page, open Account Settings, find Authentication and set a Box password, so you can sign in on Box's own page.",
+    "url": "https://app.box.com/account",
+    "address": "app.box.com/account",
+    "heading": "Account Settings",
+    "rows": [
+     {
+      "kind": "text",
+      "label": "Account",
+      "value": ""
+     },
+     {
+      "kind": "text",
+      "label": "Authentication",
+      "value": ""
+     },
+     {
+      "kind": "button",
+      "label": "Set Password",
+      "value": "",
+      "hot": true
+     }
+    ]
+   }
+  ],
   "fields": {
    "client_id": "Leave empty to use rclone's built-in key.",
    "client_secret": "Leave empty.",
@@ -547,12 +801,72 @@ var guides = {
   "signin": {
    "address": "account.box.com",
    "heading": "Grant access to Box",
-   "allow": "Grant access to Box"
+   "allow": "Grant access to Box",
+   "pages": [
+    {
+     "title": "Log in",
+     "say": "Type the email and password of your Box account and click Authorize.",
+     "address": "account.box.com/api/oauth2/authorize",
+     "heading": "Log in to grant access to Box",
+     "rows": [
+      {
+       "kind": "field",
+       "label": "Email Address",
+       "value": "you@example.com",
+       "hot": true
+      },
+      {
+       "kind": "field",
+       "label": "Password",
+       "value": "••••••••",
+       "hot": true
+      },
+      {
+       "kind": "button",
+       "label": "Authorize",
+       "value": "",
+       "hot": true
+      }
+     ]
+    },
+    {
+     "title": "Grant access",
+     "say": "Box lists what rclone (the tool hearth uses for cloud drives) may do: read and write your files and folders. Click Grant access to Box.",
+     "address": "account.box.com/api/oauth2/authorize",
+     "heading": "Grant access to Box",
+     "rows": [
+      {
+       "kind": "text",
+       "label": "rclone would like to:",
+       "value": "Read and write all files and folders stored in Box"
+      },
+      {
+       "kind": "button",
+       "label": "Grant access to Box",
+       "value": "",
+       "hot": true
+      }
+     ]
+    },
+    {
+     "title": "Done: come back here",
+     "say": "The browser shows a short Success! page from rclone. You can close that tab; this window carries on by itself.",
+     "address": "127.0.0.1:53682",
+     "heading": "Success!",
+     "rows": [
+      {
+       "kind": "text",
+       "label": "All done. Please go back to rclone.",
+       "value": ""
+      }
+     ]
+    }
+   ]
   }
  },
  "pcloud": {
   "title": "pCloud",
-  "need": "Your pCloud account. You'll sign in in your browser and allow rclone.",
+  "need": "Your pCloud account. You'll sign in in your browser and allow rclone. US and EU accounts both work; rclone notices which one yours is by itself.",
   "steps": [],
   "fields": {
    "client_id": "Leave empty to use rclone's built-in key.",
@@ -561,7 +875,67 @@ var guides = {
   "signin": {
    "address": "my.pcloud.com/oauth2/authorize",
    "heading": "rclone wants to access your pCloud",
-   "allow": "Allow"
+   "allow": "Allow",
+   "pages": [
+    {
+     "title": "Log in",
+     "say": "Type your pCloud email and password and click Log in. If you made the account with Google, Facebook or Apple, use that button instead.",
+     "address": "my.pcloud.com/oauth2/authorize",
+     "heading": "Log in",
+     "rows": [
+      {
+       "kind": "field",
+       "label": "Email",
+       "value": "you@example.com",
+       "hot": true
+      },
+      {
+       "kind": "field",
+       "label": "Password",
+       "value": "••••••••",
+       "hot": true
+      },
+      {
+       "kind": "button",
+       "label": "Log in",
+       "value": "",
+       "hot": true
+      }
+     ]
+    },
+    {
+     "title": "Allow access",
+     "say": "pCloud asks whether rclone (the tool hearth uses for cloud drives) may use your pCloud. Click Allow.",
+     "address": "my.pcloud.com/oauth2/authorize",
+     "heading": "rclone wants to access your pCloud",
+     "rows": [
+      {
+       "kind": "button",
+       "label": "Deny",
+       "value": ""
+      },
+      {
+       "kind": "button",
+       "label": "Allow",
+       "value": "",
+       "hot": true
+      }
+     ]
+    },
+    {
+     "title": "Done: come back here",
+     "say": "The browser shows a short Success! page from rclone. You can close that tab; this window carries on by itself.",
+     "address": "127.0.0.1:53682",
+     "heading": "Success!",
+     "rows": [
+      {
+       "kind": "text",
+       "label": "All done. Please go back to rclone.",
+       "value": ""
+      }
+     ]
+    }
+   ]
   }
  },
  "yandex": {
@@ -575,22 +949,183 @@ var guides = {
   "signin": {
    "address": "oauth.yandex.com",
    "heading": "rclone requests access to your data",
-   "allow": "Allow"
+   "allow": "Allow",
+   "pages": [
+    {
+     "title": "Log in with Yandex ID",
+     "say": "Type your Yandex login, email or phone number, then your password (Yandex may send you a code instead).",
+     "address": "passport.yandex.com/auth",
+     "heading": "Log in with Yandex ID",
+     "rows": [
+      {
+       "kind": "field",
+       "label": "Login, email or phone",
+       "value": "you@example.com",
+       "hot": true
+      },
+      {
+       "kind": "field",
+       "label": "Password",
+       "value": "••••••••",
+       "hot": true
+      },
+      {
+       "kind": "button",
+       "label": "Log in",
+       "value": "",
+       "hot": true
+      }
+     ]
+    },
+    {
+     "title": "Allow access",
+     "say": "Yandex lists what rclone (the tool hearth uses for cloud drives) may do with Yandex Disk. Click Allow.",
+     "address": "oauth.yandex.com/authorize",
+     "heading": "rclone requests access to your data",
+     "rows": [
+      {
+       "kind": "text",
+       "label": "Yandex Disk",
+       "value": "Access to read and write files"
+      },
+      {
+       "kind": "button",
+       "label": "Allow",
+       "value": "",
+       "hot": true
+      }
+     ]
+    },
+    {
+     "title": "Done: come back here",
+     "say": "The browser shows a short Success! page from rclone. You can close that tab; this window carries on by itself.",
+     "address": "127.0.0.1:53682",
+     "heading": "Success!",
+     "rows": [
+      {
+       "kind": "text",
+       "label": "All done. Please go back to rclone.",
+       "value": ""
+      }
+     ]
+    }
+   ]
   }
  },
  "zoho": {
   "title": "Zoho WorkDrive",
-  "need": "Your Zoho WorkDrive account. You'll sign in in your browser, then choose your team and workspace.",
-  "steps": [],
+  "need": "Your Zoho WorkDrive account and the region it lives in. You'll sign in in your browser, then choose your team and workspace.",
+  "steps": [
+   {
+    "title": "Check your Zoho region",
+    "say": "Open Zoho WorkDrive the way you normally do and look at the address bar: the ending after \"zoho.\" is your region, e.g. zoho.eu means \"eu\", zoho.com means \"com\", zoho.in means \"in\". You'll pick it in the next questions.",
+    "address": "workdrive.zoho.eu/home",
+    "heading": "WorkDrive",
+    "rows": [
+     {
+      "kind": "field",
+      "label": "Address bar",
+      "value": "https://workdrive.zoho.eu/..."
+     },
+     {
+      "kind": "text",
+      "label": "Region",
+      "value": "eu (the part after zoho.)"
+     }
+    ]
+   }
+  ],
   "fields": {
    "client_id": "Leave empty to use rclone's built-in key.",
    "client_secret": "Leave empty.",
-   "region": "Pick the region your Zoho account lives in. If unsure, look at the address you use for Zoho: zoho.com means \"com\", zoho.eu means \"eu\", and so on."
+   "region": "The region from your Zoho address: com (zoho.com), eu (zoho.eu), in (zoho.in), jp (zoho.jp), com.cn (zoho.com.cn) or com.au (zoho.com.au). A wrong region makes sign-in fail.",
+   "config_team_drive_id": "Pick your team (your organisation's name in WorkDrive).",
+   "config_workspace": "Pick the workspace (team folder) to open, or your own private space (often called My Folders).",
+   "config_change_root": "Only asked when setting up again: say yes to choose a different workspace, no to keep the current one."
   },
   "signin": {
    "address": "accounts.zoho.com",
    "heading": "rclone would like to access the following data",
-   "allow": "Accept"
+   "allow": "Accept",
+   "pages": [
+    {
+     "title": "Sign in",
+     "say": "Type your Zoho email address (or mobile number) and click Next. If Zoho says your account is in another data center, go back and pick that region.",
+     "address": "accounts.zoho.com/signin",
+     "heading": "Sign in",
+     "rows": [
+      {
+       "kind": "field",
+       "label": "Email address or mobile number",
+       "value": "you@example.com",
+       "hot": true
+      },
+      {
+       "kind": "button",
+       "label": "Next",
+       "value": "",
+       "hot": true
+      }
+     ]
+    },
+    {
+     "title": "Enter your password",
+     "say": "Type your Zoho password and click Sign in. If you use two-step sign-in, Zoho then asks for your code or a confirmation in the Zoho OneAuth app.",
+     "address": "accounts.zoho.com/signin",
+     "heading": "Enter password",
+     "rows": [
+      {
+       "kind": "field",
+       "label": "Password",
+       "value": "••••••••",
+       "hot": true
+      },
+      {
+       "kind": "button",
+       "label": "Sign in",
+       "value": "",
+       "hot": true
+      }
+     ]
+    },
+    {
+     "title": "Allow access",
+     "say": "Zoho lists what rclone (the tool hearth uses for cloud drives) wants to reach in WorkDrive. Click Accept.",
+     "address": "accounts.zoho.com/oauth/v2/auth",
+     "heading": "rclone would like to access the following data",
+     "rows": [
+      {
+       "kind": "text",
+       "label": "WorkDrive",
+       "value": "Files, team folders and workspaces"
+      },
+      {
+       "kind": "button",
+       "label": "Reject",
+       "value": ""
+      },
+      {
+       "kind": "button",
+       "label": "Accept",
+       "value": "",
+       "hot": true
+      }
+     ]
+    },
+    {
+     "title": "Done: come back here",
+     "say": "The browser shows a short Success! page from rclone. You can close that tab; this window carries on by itself.",
+     "address": "localhost:53682",
+     "heading": "Success!",
+     "rows": [
+      {
+       "kind": "text",
+       "label": "All done. Please go back to rclone.",
+       "value": ""
+      }
+     ]
+    }
+   ]
   }
  },
  "putio": {
@@ -604,12 +1139,67 @@ var guides = {
   "signin": {
    "address": "app.put.io",
    "heading": "Authorize rclone",
-   "allow": "Allow"
+   "allow": "Allow",
+   "pages": [
+    {
+     "title": "Sign in",
+     "say": "Type your put.io user name or email and password and sign in.",
+     "address": "app.put.io",
+     "heading": "Sign in",
+     "rows": [
+      {
+       "kind": "field",
+       "label": "Username or email",
+       "value": "you@example.com",
+       "hot": true
+      },
+      {
+       "kind": "field",
+       "label": "Password",
+       "value": "••••••••",
+       "hot": true
+      },
+      {
+       "kind": "button",
+       "label": "Sign in",
+       "value": "",
+       "hot": true
+      }
+     ]
+    },
+    {
+     "title": "Allow access",
+     "say": "put.io asks whether rclone (the tool hearth uses for cloud drives) may use your account. Allow it.",
+     "address": "app.put.io",
+     "heading": "Authorize rclone",
+     "rows": [
+      {
+       "kind": "button",
+       "label": "Allow",
+       "value": "",
+       "hot": true
+      }
+     ]
+    },
+    {
+     "title": "Done: come back here",
+     "say": "The browser shows a short Success! page from rclone. You can close that tab; this window carries on by itself.",
+     "address": "localhost:53682",
+     "heading": "Success!",
+     "rows": [
+      {
+       "kind": "text",
+       "label": "All done. Please go back to rclone.",
+       "value": ""
+      }
+     ]
+    }
+   ]
   }
  },
  "hidrive": {
   "title": "STRATO HiDrive",
-  "need": "Your HiDrive account. You'll sign in in your browser and allow rclone.",
+  "need": "Your HiDrive user name and password. You'll sign in in your browser and allow rclone. The user name is the one you picked for HiDrive, not your STRATO customer number.",
   "steps": [],
   "fields": {
    "client_id": "Leave empty to use rclone's built-in key.",
@@ -619,7 +1209,62 @@ var guides = {
   "signin": {
    "address": "my.hidrive.com",
    "heading": "Authorize rclone",
-   "allow": "Allow"
+   "allow": "Allow",
+   "pages": [
+    {
+     "title": "Log in",
+     "say": "Type your HiDrive user name and password and log in.",
+     "address": "my.hidrive.com/client/authorize",
+     "heading": "HiDrive login",
+     "rows": [
+      {
+       "kind": "field",
+       "label": "User name",
+       "value": "you",
+       "hot": true
+      },
+      {
+       "kind": "field",
+       "label": "Password",
+       "value": "••••••••",
+       "hot": true
+      },
+      {
+       "kind": "button",
+       "label": "Log in",
+       "value": "",
+       "hot": true
+      }
+     ]
+    },
+    {
+     "title": "Allow access",
+     "say": "HiDrive lists what rclone (the tool hearth uses for cloud drives) may do with your files. Allow it.",
+     "address": "my.hidrive.com/client/authorize",
+     "heading": "Authorize rclone",
+     "rows": [
+      {
+       "kind": "button",
+       "label": "Allow",
+       "value": "",
+       "hot": true
+      }
+     ]
+    },
+    {
+     "title": "Done: come back here",
+     "say": "The browser shows a short Success! page from rclone. You can close that tab; this window carries on by itself.",
+     "address": "127.0.0.1:53682",
+     "heading": "Success!",
+     "rows": [
+      {
+       "kind": "text",
+       "label": "All done. Please go back to rclone.",
+       "value": ""
+      }
+     ]
+    }
+   ]
   }
  },
  "jottacloud": {
@@ -672,12 +1317,67 @@ var guides = {
   "signin": {
    "address": "www.premiumize.me",
    "heading": "Authorize rclone",
-   "allow": "Allow"
+   "allow": "Allow",
+   "pages": [
+    {
+     "title": "Log in",
+     "say": "Sign in to premiumize.me with your email (or customer ID) and password.",
+     "address": "www.premiumize.me/login",
+     "heading": "Login",
+     "rows": [
+      {
+       "kind": "field",
+       "label": "Email or customer ID",
+       "value": "you@example.com",
+       "hot": true
+      },
+      {
+       "kind": "field",
+       "label": "Password",
+       "value": "••••••••",
+       "hot": true
+      },
+      {
+       "kind": "button",
+       "label": "Login",
+       "value": "",
+       "hot": true
+      }
+     ]
+    },
+    {
+     "title": "Allow access",
+     "say": "premiumize.me asks whether rclone (the tool hearth uses for cloud drives) may use your account. Allow it.",
+     "address": "www.premiumize.me/authorize",
+     "heading": "Authorize rclone",
+     "rows": [
+      {
+       "kind": "button",
+       "label": "Allow",
+       "value": "",
+       "hot": true
+      }
+     ]
+    },
+    {
+     "title": "Done: come back here",
+     "say": "The browser shows a short Success! page from rclone. You can close that tab; this window carries on by itself.",
+     "address": "127.0.0.1:53682",
+     "heading": "Success!",
+     "rows": [
+      {
+       "kind": "text",
+       "label": "All done. Please go back to rclone.",
+       "value": ""
+      }
+     ]
+    }
+   ]
   }
  },
  "sharefile": {
   "title": "Citrix ShareFile",
-  "need": "Your ShareFile account. You'll sign in in your browser and allow rclone.",
+  "need": "Your ShareFile account (usually from work). You'll sign in in your browser and allow rclone. If your company signs you in through its own sign-on page, that page appears during sign-in.",
   "steps": [],
   "fields": {
    "client_id": "Leave empty to use rclone's built-in key.",
@@ -687,7 +1387,81 @@ var guides = {
   "signin": {
    "address": "secure.sharefile.com",
    "heading": "Sign in to ShareFile",
-   "allow": "Allow"
+   "allow": "Allow",
+   "pages": [
+    {
+     "title": "Sign in",
+     "say": "Type your ShareFile email and continue. If you belong to several ShareFile accounts, pick your company's (e.g. example.sharefile.com).",
+     "address": "secure.sharefile.com",
+     "heading": "Sign in to ShareFile",
+     "rows": [
+      {
+       "kind": "field",
+       "label": "Email",
+       "value": "you@example.com",
+       "hot": true
+      },
+      {
+       "kind": "button",
+       "label": "Continue",
+       "value": "",
+       "hot": true
+      }
+     ]
+    },
+    {
+     "title": "Enter your password",
+     "say": "Type your ShareFile password and sign in, or finish your company's own sign-on page if it appears instead.",
+     "address": "example.sharefile.com",
+     "heading": "Sign in",
+     "rows": [
+      {
+       "kind": "field",
+       "label": "Password",
+       "value": "••••••••",
+       "hot": true
+      },
+      {
+       "kind": "button",
+       "label": "Sign In",
+       "value": "",
+       "hot": true
+      }
+     ]
+    },
+    {
+     "title": "Allow access",
+     "say": "ShareFile asks whether rclone (the tool hearth uses for cloud drives) may reach your files. Allow it.",
+     "address": "example.sharefile.com/oauth/authorize",
+     "heading": "Allow rclone to access your account?",
+     "rows": [
+      {
+       "kind": "button",
+       "label": "Deny",
+       "value": ""
+      },
+      {
+       "kind": "button",
+       "label": "Allow",
+       "value": "",
+       "hot": true
+      }
+     ]
+    },
+    {
+     "title": "Done: come back here",
+     "say": "The browser shows a short Success! page from rclone. You can close that tab; this window carries on by itself.",
+     "address": "127.0.0.1:53682",
+     "heading": "Success!",
+     "rows": [
+      {
+       "kind": "text",
+       "label": "All done. Please go back to rclone.",
+       "value": ""
+      }
+     ]
+    }
+   ]
   }
  },
  "huaweidrive": {
@@ -1327,12 +2101,41 @@ var guides = {
  "sugarsync": {
   "title": "SugarSync",
   "need": "A SugarSync account. Nothing to do on the website; you'll sign in with your email and password while setting up.",
-  "steps": [],
+  "steps": [
+   {
+    "title": "Check you can sign in",
+    "say": "Make sure you know the email and password of your SugarSync account; you'll type them in the next questions. If you've forgotten the password, reset it here first.",
+    "url": "https://app.sugarsync.com/",
+    "address": "app.sugarsync.com",
+    "heading": "Sign in to SugarSync",
+    "rows": [
+     {
+      "kind": "field",
+      "label": "Email",
+      "value": "you@example.com"
+     },
+     {
+      "kind": "field",
+      "label": "Password",
+      "value": "••••••••"
+     },
+     {
+      "kind": "link",
+      "label": "Forgot your password?",
+      "value": "",
+      "hot": true
+     }
+    ]
+   }
+  ],
   "fields": {
    "app_id": "Leave empty to use rclone's own app ID.",
    "access_key_id": "Leave empty to use rclone's own key.",
    "private_access_key": "Leave empty to use rclone's own key.",
-   "hard_delete": "Leave off to move deleted files to SugarSync's deleted files. Turn on to delete them for good."
+   "hard_delete": "Leave off to move deleted files to SugarSync's deleted files. Turn on to delete them for good.",
+   "config_username": "The email address you sign in to SugarSync with, e.g. you@example.com.",
+   "config_password": "Your SugarSync password. It is used once to sign in and not stored.",
+   "config_refresh": "Only asked when setting up again: say yes to sign in again, no to keep the current sign-in."
   }
  },
  "filefabric": {
@@ -1894,7 +2697,32 @@ var guides = {
  "seafile": {
   "title": "Seafile",
   "need": "Your Seafile server's address, your email and password, and a two-step sign-in code if you use one.",
-  "steps": [],
+  "steps": [
+   {
+    "title": "Find your server address and two-step setting",
+    "say": "Sign in to Seafile in your browser and copy the start of the address, e.g. https://seafile.example.com/. Then open your avatar menu › Settings and look for Two-Factor Authentication: if it is on, have your authenticator app ready for a code.",
+    "address": "seafile.example.com/profile/",
+    "heading": "Settings",
+    "rows": [
+     {
+      "kind": "field",
+      "label": "Address bar",
+      "value": "https://seafile.example.com/",
+      "hot": true
+     },
+     {
+      "kind": "text",
+      "label": "Two-Factor Authentication",
+      "value": "Enabled"
+     },
+     {
+      "kind": "text",
+      "label": "Your server",
+      "value": "the part before /profile/"
+     }
+    ]
+   }
+  ],
   "fields": {
    "url": "The address you open Seafile at in your browser, e.g. https://cloud.seafile.com/ or https://seafile.example.com/.",
    "user": "Your Seafile sign-in name, usually your email address, e.g. you@example.com.",
@@ -1902,7 +2730,10 @@ var guides = {
    "2fa": "Set to true only if your account uses two-step sign-in; you'll then be asked for the current code at the end. Otherwise leave it false.",
    "library": "Leave empty to see all your (non-encrypted) libraries. Type one library's name, e.g. My Library, to open just that one; do this for an encrypted library.",
    "library_key": "Only for an encrypted library: that library's own password. Otherwise leave it empty.",
-   "auth_token": "Leave empty; it is filled in for you after signing in."
+   "auth_token": "Leave empty; it is filled in for you after signing in.",
+   "config_password": "Only asked with two-step sign-in: your Seafile password. It is used once and not saved.",
+   "config_2fa": "The 6-digit code your authenticator app shows right now for Seafile, e.g. 123456.",
+   "config_retry": "Sign-in failed (often an expired code). Say yes to try again with a fresh code."
   }
  },
  "iclouddrive": {
@@ -1959,17 +2790,88 @@ var guides = {
  "filescom": {
   "title": "Files.com",
   "need": "Your Files.com site name, your user name and password.",
-  "steps": [],
+  "steps": [
+   {
+    "title": "Find your site name",
+    "say": "Your Files.com address looks like mysite.files.com; the first part (mysite) is your site name. If your company uses its own address, such as files.example.com, use that whole address instead.",
+    "address": "mysite.files.com",
+    "heading": "Files.com",
+    "rows": [
+     {
+      "kind": "field",
+      "label": "Address bar",
+      "value": "https://mysite.files.com/",
+      "hot": true
+     },
+     {
+      "kind": "text",
+      "label": "Site name",
+      "value": "mysite"
+     }
+    ]
+   },
+   {
+    "title": "Only with single sign-on or two-step sign-in: get an API key",
+    "say": "Skip this if you sign in with just a user name and password. Otherwise those won't work here: create an API key in Files.com (in your account settings, or ask your Files.com administrator) and copy it. You'll paste it under the advanced settings and leave the password empty.",
+    "address": "mysite.files.com",
+    "heading": "API Keys",
+    "rows": [
+     {
+      "kind": "button",
+      "label": "Create API key",
+      "value": "",
+      "hot": true
+     },
+     {
+      "kind": "field",
+      "label": "Name",
+      "value": "hearth"
+     },
+     {
+      "kind": "text",
+      "label": "Key",
+      "value": "••••••••••••"
+     }
+    ]
+   }
+  ],
   "fields": {
-   "site": "The first part of your Files.com web address, e.g. mysite for mysite.files.com, or your own address like files.example.com.",
-   "username": "The user name you sign in to Files.com with.",
-   "password": "Your Files.com password."
+   "site": "Your site name, e.g. mysite for mysite.files.com, or your own address like files.example.com.",
+   "username": "The user name you sign in to Files.com with. Leave empty if you use an API key.",
+   "password": "Your Files.com password. Leave empty if you use an API key.",
+   "api_key": "Only if you made an API key (single sign-on or two-step sign-in): paste it here. Otherwise leave empty."
   }
  },
  "opendrive": {
   "title": "OpenDrive",
   "need": "Your OpenDrive user name and password.",
-  "steps": [],
+  "steps": [
+   {
+    "title": "Check you can sign in",
+    "say": "Make sure you know your OpenDrive user name (or email) and password; you'll type them next. If you've forgotten the password, reset it here first.",
+    "url": "https://www.opendrive.com/login",
+    "address": "www.opendrive.com/login",
+    "heading": "Log in",
+    "rows": [
+     {
+      "kind": "field",
+      "label": "Username or email",
+      "value": "you@example.com"
+     },
+     {
+      "kind": "field",
+      "label": "Password",
+      "value": "••••••••"
+     },
+     {
+      "kind": "link",
+      "label": "Forgot password?",
+      "value": "",
+      "hot": true
+     }
+    ]
+   }
+  ],
   "fields": {
    "username": "The user name or email you sign in to OpenDrive with, e.g. you@example.com.",
    "password": "Your OpenDrive password."
@@ -1978,33 +2880,129 @@ var guides = {
  "internxt": {
   "title": "Internxt Drive",
   "need": "Your Internxt email and password (and your two-step code if you use one). Some Internxt plans may not work.",
-  "steps": [],
+  "steps": [
+   {
+    "title": "Check you can sign in",
+    "say": "Make sure you can sign in to Internxt Drive on the website with your email and password. If you use two-step sign-in, keep your authenticator app at hand: you'll be asked for a code while setting up.",
+    "url": "https://drive.internxt.com/login",
+    "address": "drive.internxt.com/login",
+    "heading": "Log in",
+    "rows": [
+     {
+      "kind": "field",
+      "label": "Email",
+      "value": "you@example.com"
+     },
+     {
+      "kind": "field",
+      "label": "Password",
+      "value": "••••••••"
+     },
+     {
+      "kind": "button",
+      "label": "Log in",
+      "value": "",
+      "hot": true
+     }
+    ]
+   }
+  ],
   "fields": {
    "email": "The email address of your Internxt account, e.g. you@example.com.",
-   "pass": "Your Internxt password. If your account uses two-step sign-in you'll be asked for the code while signing in."
+   "pass": "Your Internxt password. If your account uses two-step sign-in you'll be asked for the code while signing in.",
+   "config_2fa": "The 6-digit code your authenticator app shows right now for Internxt, e.g. 123456."
   }
  },
  "pikpak": {
   "title": "PikPak",
   "need": "Your PikPak user name and password.",
-  "steps": [],
+  "steps": [
+   {
+    "title": "Make sure your account has a password",
+    "say": "rclone signs in with a user name or email and a password. If you made your PikPak account with Google or a phone number and never set a password, set one in the PikPak app or website first.",
+    "url": "https://mypikpak.com/drive/",
+    "address": "mypikpak.com/drive",
+    "heading": "Sign in",
+    "rows": [
+     {
+      "kind": "field",
+      "label": "Email",
+      "value": "you@example.com"
+     },
+     {
+      "kind": "field",
+      "label": "Password",
+      "value": "••••••••",
+      "hot": true
+     },
+     {
+      "kind": "button",
+      "label": "Sign in",
+      "value": "",
+      "hot": true
+     }
+    ]
+   }
+  ],
   "fields": {
    "user": "The user name or email you sign in to PikPak with, e.g. you@example.com.",
-   "pass": "Your PikPak password."
+   "pass": "Your PikPak password.",
+   "consent_to_authorize": "Only asked when setting up again: say yes to sign in again for a new login."
   }
  },
  "doi": {
   "title": "DOI dataset",
   "need": "The DOI of a published research dataset (read-only).",
-  "steps": [],
+  "steps": [
+   {
+    "title": "Copy the dataset's DOI",
+    "say": "Open the dataset's page (for example on Zenodo, Dataverse or Figshare) and copy its DOI, a code like 10.5281/zenodo.5876941. The drive will be read-only.",
+    "address": "zenodo.org/records/5876941",
+    "heading": "Example dataset",
+    "rows": [
+     {
+      "kind": "text",
+      "label": "Files",
+      "value": "3 files"
+     },
+     {
+      "kind": "field",
+      "label": "DOI",
+      "value": "10.5281/zenodo.5876941",
+      "hot": true
+     }
+    ]
+   }
+  ],
   "fields": {
-   "doi": "The dataset's DOI or its doi.org link, e.g. 10.5281/zenodo.5876941 or https://doi.org/10.5281/zenodo.5876941."
+   "doi": "The dataset's DOI or its doi.org link, e.g. 10.5281/zenodo.5876941 or https://doi.org/10.5281/zenodo.5876941.",
+   "provider": "Leave empty: rclone works out the kind of repository (Zenodo, Dataverse and so on) by itself. Pick one only if that fails."
   }
  },
  "hdfs": {
   "title": "Hadoop (HDFS)",
   "need": "The address and port of your Hadoop name node; ask whoever runs the cluster.",
-  "steps": [],
+  "steps": [
+   {
+    "title": "Find the name node's address",
+    "say": "Ask whoever runs the Hadoop cluster for the name node's address and port. If you can open the name node's web page (usually on port 9870), its Overview heading shows it, e.g. namenode.example.com:8020.",
+    "address": "namenode.example.com:9870",
+    "heading": "Overview 'namenode.example.com:8020' (active)",
+    "rows": [
+     {
+      "kind": "text",
+      "label": "Started",
+      "value": "..."
+     },
+     {
+      "kind": "field",
+      "label": "Address and port",
+      "value": "namenode.example.com:8020",
+      "hot": true
+     }
+    ]
+   }
+  ],
   "fields": {
    "namenode": "The name node's address and port, e.g. namenode.example.com:8020. For several, separate them with commas.",
    "username": "The Hadoop user to act as, e.g. root. Leave empty to use your computer's user name."
@@ -2048,8 +3046,52 @@ var guides = {
  },
  "sftp": {
   "title": "SFTP (SSH server)",
-  "need": "The server's address, your user name, and either a password or an SSH key.",
-  "steps": [],
+  "need": "The server's address, your user name on it, and either a password or an SSH key. The server must have SSH turned on.",
+  "steps": [
+   {
+    "title": "Make sure SSH is turned on",
+    "say": "SFTP works over SSH, which must be on for the computer you connect to. On a Mac: System Settings › General › Sharing › Remote Login. On a NAS: its control panel's SSH or SFTP setting (Synology: Control Panel › File Services › FTP › SFTP). On Linux: the openssh server must be installed and running.",
+    "address": "System Settings › General › Sharing",
+    "heading": "Sharing",
+    "rows": [
+     {
+      "kind": "text",
+      "label": "File Sharing",
+      "value": "Off"
+     },
+     {
+      "kind": "choice",
+      "label": "Remote Login",
+      "value": "On",
+      "hot": true
+     },
+     {
+      "kind": "text",
+      "label": "Allow access for",
+      "value": "Only these users: you"
+     }
+    ]
+   },
+   {
+    "title": "Find the address and user name",
+    "say": "On a Linux server, run hostname -I to see its address, e.g. 192.168.1.10; on a Mac, the Remote Login info button shows \"ssh you@192.168.1.10\". The name before @ is your user name.",
+    "address": "System Settings › General › Sharing › Remote Login",
+    "heading": "Remote Login",
+    "rows": [
+     {
+      "kind": "text",
+      "label": "To log in to this computer remotely, type:",
+      "value": ""
+     },
+     {
+      "kind": "field",
+      "label": "Command",
+      "value": "ssh you@192.168.1.10",
+      "hot": true
+     }
+    ]
+   }
+  ],
   "fields": {
    "host": "The server's name or IP address, e.g. example.com or 192.168.1.10.",
    "user": "Your user name on the server, e.g. alice. Leave empty to use your user name on this computer.",
@@ -2069,7 +3111,38 @@ var guides = {
  "ftp": {
   "title": "FTP server",
   "need": "The server's address, your user name and password.",
-  "steps": [],
+  "steps": [
+   {
+    "title": "Find your FTP details",
+    "say": "Your web host or NAS shows the FTP server address, user name and password in its control panel, often under FTP Accounts. Check whether it supports FTPS (FTP over TLS): if so, turn on explicit TLS in the next questions so your password isn't sent in the clear.",
+    "address": "panel.example.com/ftp",
+    "heading": "FTP Accounts",
+    "rows": [
+     {
+      "kind": "field",
+      "label": "Server",
+      "value": "ftp.example.com",
+      "hot": true
+     },
+     {
+      "kind": "field",
+      "label": "User name",
+      "value": "you@example.com",
+      "hot": true
+     },
+     {
+      "kind": "text",
+      "label": "Port",
+      "value": "21"
+     },
+     {
+      "kind": "text",
+      "label": "Encryption",
+      "value": "FTPS (explicit TLS) supported"
+     }
+    ]
+   }
+  ],
   "fields": {
    "host": "The server's name or IP address, e.g. ftp.example.com.",
    "user": "Your FTP user name. Leave empty to use your user name on this computer; use anonymous for public servers.",
@@ -2081,13 +3154,57 @@ var guides = {
  },
  "smb": {
   "title": "Windows share (SMB)",
-  "need": "The name or address of the computer or NAS sharing the files, and your user name and password on it.",
-  "steps": [],
+  "need": "The name or address of the computer or NAS sharing the files, the name of the shared folder, and your user name and password on it.",
+  "steps": [
+   {
+    "title": "Find the computer's name or address",
+    "say": "On a Windows PC, open Settings › System › About: the Device name (e.g. DESKTOP-1234) or its IP address works. On a NAS, the address is shown in its control panel or your router's device list, e.g. 192.168.1.10.",
+    "address": "Settings › System › About",
+    "heading": "About",
+    "rows": [
+     {
+      "kind": "field",
+      "label": "Device name",
+      "value": "DESKTOP-1234",
+      "hot": true
+     },
+     {
+      "kind": "text",
+      "label": "Processor",
+      "value": "..."
+     }
+    ]
+   },
+   {
+    "title": "Find the share name",
+    "say": "On Windows, right-click the shared folder, choose Properties and open the Sharing tab: the Network Path ends in the share name, e.g. \\\\DESKTOP-1234\\Photos means Photos. On a NAS, it's the shared folder's name. You'll open it as the first folder of this drive.",
+    "address": "Photos Properties › Sharing",
+    "heading": "Network File and Folder Sharing",
+    "rows": [
+     {
+      "kind": "text",
+      "label": "Photos",
+      "value": "Shared"
+     },
+     {
+      "kind": "field",
+      "label": "Network Path",
+      "value": "\\\\DESKTOP-1234\\Photos",
+      "hot": true
+     },
+     {
+      "kind": "button",
+      "label": "Share...",
+      "value": ""
+     }
+    ]
+   }
+  ],
   "fields": {
    "host": "The name or IP address of the computer or NAS, e.g. nas.local or 192.168.1.20.",
-   "user": "Your user name on that computer or NAS. Leave empty to use your user name on this computer.",
+   "user": "Your user name on that computer or NAS. For a Windows PC signed in with a Microsoft account, use that account's email, e.g. you@example.com. Leave empty to use your user name on this computer.",
    "port": "Leave empty for the usual port 445.",
-   "pass": "Your password on that computer or NAS.",
+   "pass": "Your password on that computer or NAS (for a Microsoft account, its password, not the PIN).",
    "domain": "Leave as WORKGROUP for home networks. At work, your company's Windows domain name, e.g. CORP.",
    "spn": "Leave empty unless your administrator gives you a value, e.g. cifs/remotehost:1020.",
    "use_kerberos": "Leave false. Only for company networks where your administrator says to use Kerberos sign-in."
@@ -2096,7 +3213,37 @@ var guides = {
  "http": {
   "title": "Web folder (HTTP, read-only)",
   "need": "The web address of a page that lists files for download.",
-  "steps": [],
+  "steps": [
+   {
+    "title": "Check the address shows a file list",
+    "say": "Open the address in your browser. It should show a plain list of files and folders you can click, often headed \"Index of\". This drive only reads from it; it can't upload.",
+    "address": "example.com/files/",
+    "heading": "Index of /files/",
+    "rows": [
+     {
+      "kind": "link",
+      "label": "Parent Directory",
+      "value": ""
+     },
+     {
+      "kind": "link",
+      "label": "photos/",
+      "value": "",
+      "hot": true
+     },
+     {
+      "kind": "link",
+      "label": "notes.txt",
+      "value": ""
+     },
+     {
+      "kind": "link",
+      "label": "video.mp4",
+      "value": ""
+     }
+    ]
+   }
+  ],
   "fields": {
    "url": "The address of the file listing, e.g. https://example.com/files/. If it needs a sign-in, write https://user:password@example.com/files/.",
    "no_escape": "Leave false. Set to true only if file names with special characters fail to open."
@@ -2105,7 +3252,12 @@ var guides = {
  "alias": {
   "title": "Shortcut (alias)",
   "need": "The drive and folder you want a short name for.",
-  "steps": [],
+  "steps": [
+   {
+    "title": "Set up the drive this builds on first",
+    "say": "A shortcut is just a short name for a folder on another drive, so that drive must already be set up in Cloud Drives. Example: if you have a drive called mydrive, the shortcut work could point to mydrive:Documents/Work."
+   }
+  ],
   "fields": {
    "remote": "Another drive you already set up in this app, written as its name, a colon and an optional folder, e.g. mydrive:folder. A folder on this computer like /home/you/Documents also works."
   }
@@ -2125,7 +3277,12 @@ var guides = {
  "crypt": {
   "title": "Encrypted folder (crypt)",
   "need": "A drive you already set up, a folder on it for the encrypted files, and a password you will never lose.",
-  "steps": [],
+  "steps": [
+   {
+    "title": "Set up the drive this builds on first",
+    "say": "Encryption works on top of another drive: set that one up first, then pick a new, empty folder on it to hold the scrambled files. Example: on a drive called mydrive, use mydrive:secret. Open this new drive (not mydrive) to see your files; on mydrive itself they look like random names."
+   }
+  ],
   "fields": {
    "remote": "Another drive you already set up in this app, written as its name, a colon and an optional folder, e.g. mydrive:folder. Use a new, empty folder, e.g. mydrive:secret, rather than the whole drive.",
    "filename_encryption": "How file names are hidden. Standard (recommended) scrambles them fully; Off leaves names readable.",
@@ -2137,7 +3294,12 @@ var guides = {
  "union": {
   "title": "Combined drives (union)",
   "need": "Two or more drives you already set up, to show as one.",
-  "steps": [],
+  "steps": [
+   {
+    "title": "Set up the drive this builds on first",
+    "say": "A union shows several drives as one, so each of them must already be set up in Cloud Drives. Example: mydrive:Photos and otherdrive:Photos shown together as one Photos drive."
+   }
+  ],
   "fields": {
    "upstreams": "The drives to merge, separated by spaces, e.g. mydrive:folder otherdrive: . Add :ro to the end of one to only read from it, e.g. otherdrive::ro.",
    "action_policy": "Which drives changes like delete and rename apply to. Leave empty for the default (epall: all drives that have the file).",
@@ -2149,7 +3311,12 @@ var guides = {
  "combine": {
   "title": "Drives as folders (combine)",
   "need": "Drives you already set up, each shown as a folder of one new drive.",
-  "steps": [],
+  "steps": [
+   {
+    "title": "Set up the drive this builds on first",
+    "say": "Combine puts several drives side by side as folders of one drive, so each must already be set up. Example: a folder photos showing mydrive:Pictures and a folder work showing otherdrive:."
+   }
+  ],
   "fields": {
    "upstreams": "Folder names and the drive behind each, separated by spaces, e.g. photos=mydrive:Pictures work=otherdrive: . Put quotes around a pair that contains spaces."
   }
@@ -2157,7 +3324,12 @@ var guides = {
  "chunker": {
   "title": "Split large files (chunker)",
   "need": "A drive you already set up whose file size limit you want to get around.",
-  "steps": [],
+  "steps": [
+   {
+    "title": "Set up the drive this builds on first",
+    "say": "Chunker works on top of another drive whose file size limit you want to get around: set that drive up first and choose a folder on it. Example: mydrive:big. Always open big files through this new drive, never directly on mydrive:big, where they appear as pieces."
+   }
+  ],
   "fields": {
    "remote": "Another drive you already set up in this app, written as its name, a colon and an optional folder, e.g. mydrive:folder. Big files saved here are stored as smaller pieces.",
    "chunk_size": "Files bigger than this are split, e.g. 2G or 100M. Leave empty for the default, 2G.",
@@ -2167,7 +3339,12 @@ var guides = {
  "hasher": {
   "title": "Checksum helper (hasher)",
   "need": "A drive you already set up that lacks file checksums.",
-  "steps": [],
+  "steps": [
+   {
+    "title": "Set up the drive this builds on first",
+    "say": "Hasher works on top of another drive that doesn't keep file checksums: set that drive up first. Example: mydrive: (the whole drive) or mydrive:Backups."
+   }
+  ],
   "fields": {
    "remote": "Another drive you already set up in this app, written as its name, a colon and an optional folder, e.g. mydrive:folder. Checksums for its files will be remembered on this computer.",
    "hashes": "Which checksum types to keep, separated by commas, e.g. md5,sha1. Leave empty for the default md5,sha1.",
@@ -2177,7 +3354,12 @@ var guides = {
  "compress": {
   "title": "Compressed folder (compress)",
   "need": "A drive you already set up where files should be stored compressed.",
-  "steps": [],
+  "steps": [
+   {
+    "title": "Set up the drive this builds on first",
+    "say": "Compress works on top of another drive: set that drive up first and choose a folder on it for the compressed files. Example: mydrive:compressed. Open files through this new drive; on mydrive they appear with extra .gz or .zst names."
+   }
+  ],
   "fields": {
    "remote": "Another drive you already set up in this app, written as its name, a colon and an optional folder, e.g. mydrive:folder. Files saved through this drive are compressed there.",
    "mode": "Pick gzip (works everywhere, the default) or zstd (faster with better compression). If unsure, choose gzip.",
@@ -2187,7 +3369,12 @@ var guides = {
  "cache": {
   "title": "Cache (old, not recommended)",
   "need": "A drive you already set up. This wrapper is no longer maintained; prefer the app's normal file caching.",
-  "steps": [],
+  "steps": [
+   {
+    "title": "Set up the drive this builds on first",
+    "say": "The cache wraps another drive, which must already be set up. It is old and no longer maintained, so only use it if you know you need it. Example: mydrive:Movies."
+   }
+  ],
   "fields": {
    "remote": "Another drive you already set up in this app, written as its name, a colon and an optional folder, e.g. mydrive:folder. Its files will be cached on this computer.",
    "plex_url": "Leave empty unless you use a Plex media server; then its address, e.g. http://127.0.0.1:32400.",
@@ -2201,7 +3388,12 @@ var guides = {
  "archive": {
   "title": "Open archives (zip, squashfs)",
   "need": "A drive you already set up that holds archive files you want to browse like folders.",
-  "steps": [],
+  "steps": [
+   {
+    "title": "Set up the drive this builds on first",
+    "say": "Archive lets you browse zip and squashfs files on another drive like folders, so that drive must already be set up. Example: point it at mydrive:, then open mydrive:Backups/2024.zip through this new drive as a folder."
+   }
+  ],
   "fields": {
    "remote": "Another drive you already set up in this app, written as its name, a colon and an optional folder, e.g. mydrive:folder. Leave empty to use the whole drive given when you open it."
   }
