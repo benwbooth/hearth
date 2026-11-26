@@ -188,6 +188,7 @@ Scope {
                         Label { text: modelData.text; color: Theme.fgSecondary; font.pointSize: Theme.smallFontSize; width: content.width - 24 }
                     }
                 }
+        ApprovalCard { width: parent.width }
                 // The answer.
                 Label {
                     width: parent.width

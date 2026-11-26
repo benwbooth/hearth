@@ -140,6 +140,19 @@ Singleton {
         case "calculate": return "Calculating " + (a.expression || "");
         case "web_search": return "Searching the web";
         case "desktop_action": return String(a.action || "").replace(/_/g, " ");
+        case "run_command": return "Running " + String(a.command || "").split("\n")[0].slice(0, 60);
+        case "list_windows": return "Looking at the open windows";
+        case "focused_window": return "Checking the active window";
+        case "list_apps": return "Looking at the running apps";
+        case "get_app_state": return "Reading " + (a.app || a.title || a.app_id || "the window");
+        case "screenshot": return "Looking at the screen";
+        case "activate_window": return "Switching to " + (a.title || a.app_id || "a window");
+        case "click": return "Clicking " + (a.name || a.text || (a.element_index !== undefined ? "item " + a.element_index : "the screen"));
+        case "type_text": return "Typing “" + String(a.text || "").slice(0, 40) + (String(a.text || "").length > 40 ? "…" : "") + "”";
+        case "press_key": return "Pressing " + (a.key || a.keys || "a key");
+        case "scroll": return "Scrolling";
+        case "set_value": return "Filling in " + (a.name || "a field");
+        case "perform_action": return (a.action || "Using") + " " + (a.name || "a control");
         }
         return name.replace(/_/g, " ");
     }

@@ -105,6 +105,7 @@ Indicator {
             }
         }
 
+        ApprovalCard { Layout.fillWidth: true }
         MenuSeparator { Layout.fillWidth: true }
 
         // --- the assistant's model ---

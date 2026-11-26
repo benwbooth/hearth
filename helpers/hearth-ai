@@ -28,6 +28,9 @@ JSON lines on stdin/stdout, so the shell never waits:
   {"cmd": "server", "provider": "llamacpp", "on": true}   (systemd user unit)
   {"cmd": "ask", "id": 3, "feature": "assistant", "text": "...", "context": {...}}
       -> {"type": "tool", "id": 3, "call": 1, "name": "launch_app", "args": {...}}
+      -> {"type": "approve", "id": 3, "call": 2, "kind": "command"|"computer", "title": ..., "detail": ...}
+         (the shell shows Allow/Deny and answers toolResult with "allow" or "deny";
+         {"type": "approved", ...} follows when the question is gone)
          (the shell runs it and answers {"cmd": "toolResult", "id": 3, "call": 1, "result": "..."})
       -> {"type": "reply", "id": 3, "text": "...", "done": true}
   {"cmd": "cancel", "id": 3}
@@ -73,6 +76,11 @@ DEFAULTS = {
     "idleMinutes": 5,
     "loadTimeFactor": 10,
     "evictOnPressure": True,
+    # What the assistant may do beyond its own tools: use the computer like
+    # the user (codex-computer-use-linux: read windows, click, type) and run
+    # shell commands. "ask" = an Allow/Deny card first, "allow", or "off".
+    "computerUse": "ask",
+    "runCommands": "ask",
     # Graphics memory kept free for the desktop when making room for a
     # model: windows squeezed out of VRAM flicker and show artifacts.
     "desktopReserveMB": 2048,
@@ -1566,9 +1574,169 @@ TOOLS = [
 ]
 SHELL_TOOLS = {"launch_app", "desktop_action", "get_weather"}
 
+RUN_COMMAND = tool("run_command", "Run a shell command (bash) on the user's computer and get its output and exit "
+                   "code. The user is asked to allow each command first. Use it for what no other tool does.", {
+    "command": S,
+    "why": dict(S, description="one short sentence for the user saying what the command does"),
+}, ["command"])
 
-def system_prompt(ctx):
+
+class ComputerUse:
+    """Client for the computer-use MCP server Codex uses
+    (codex-computer-use-linux, /etc/nixos packages): it reads windows
+    through AT-SPI, takes screenshots, and clicks and types through the
+    portal or ydotool. One server process, started on first use."""
+
+    HIDDEN = {"doctor", "setup_accessibility", "setup_window_targeting"}   # system setup, not for the model
+    BIN = "codex-computer-use-linux"
+
+    def __init__(self):
+        self.proc = None
+        self.lock = threading.Lock()
+        self.waiting = {}
+        self.nid = 0
+        self.defs = []          # MCP tool definitions
+        self.readonly = set()
+
+    def available(self):
+        return bool(shutil.which(self.BIN))
+
+    def _reader(self, proc):
+        for line in proc.stdout:
+            try:
+                m = json.loads(line)
+            except ValueError:
+                continue
+            qu = self.waiting.get(m.get("id"))
+            if qu:
+                qu.put(m)
+
+    def _rpc(self, method, params=None, timeout=60):
+        with self.lock:
+            self.nid += 1
+            rid = self.nid
+            qu = queue.Queue()
+            self.waiting[rid] = qu
+            self.proc.stdin.write(json.dumps({"jsonrpc": "2.0", "id": rid, "method": method,
+                                              "params": params or {}}) + "\n")
+            self.proc.stdin.flush()
+        try:
+            m = qu.get(timeout=timeout)
+        except queue.Empty:
+            raise RuntimeError("the computer-use server didn't answer %s" % method)
+        finally:
+            self.waiting.pop(rid, None)
+        if m.get("error"):
+            raise RuntimeError(m["error"].get("message") or str(m["error"]))
+        return m.get("result") or {}
+
+    def start(self):
+        if self.proc and self.proc.poll() is None:
+            return True
+        exe = shutil.which(self.BIN)
+        if not exe:
+            return False
+        self.proc = subprocess.Popen([exe, "mcp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                     stderr=subprocess.DEVNULL, text=True, bufsize=1, start_new_session=True)
+        threading.Thread(target=self._reader, args=(self.proc,), daemon=True).start()
+        self._rpc("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
+                                 "clientInfo": {"name": "hearth", "version": "1"}}, timeout=20)
+        with self.lock:
+            self.proc.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n")
+            self.proc.stdin.flush()
+        tools = self._rpc("tools/list", timeout=20).get("tools") or []
+        self.defs = [t for t in tools if t["name"] not in self.HIDDEN]
+        # A screenshot changes nothing, whatever its annotation says.
+        self.readonly = {t["name"] for t in self.defs
+                         if (t.get("annotations") or {}).get("readOnlyHint") or t["name"] == "screenshot"}
+        return True
+
+    def tools(self, vision):
+        try:
+            if not self.start():
+                return []
+        except Exception as e:  # noqa: BLE001
+            log("computer use: %s" % e)
+            return []
+        return [{"type": "function", "function": {"name": t["name"], "description": t.get("description", "")[:600],
+                                                  "parameters": t.get("inputSchema") or {"type": "object", "properties": {}}}}
+                for t in self.defs if vision or t["name"] != "screenshot"]
+
+    def names(self):
+        return {t["name"] for t in self.defs}
+
+    def call(self, name, args):
+        """-> (text, [(mime, base64)...])"""
+        self.start()
+        r = self._rpc("tools/call", {"name": name, "arguments": args or {}}, timeout=90)
+        texts, images = [], []
+        for c in r.get("content") or []:
+            if c.get("type") == "text":
+                texts.append(c.get("text", ""))
+            elif c.get("type") == "image" and c.get("data"):
+                images.append((c.get("mimeType") or "image/png", c["data"]))
+        if r.get("structuredContent") and not texts:
+            texts.append(json.dumps(r["structuredContent"]))
+        text = "\n".join(texts).strip() or ("Error." if r.get("isError") else "Done.")
+        if len(text) > 12000:
+            text = text[:12000] + "\n[cut: %d more characters]" % (len(text) - 12000)
+        if r.get("isError") and not text.startswith("Error"):
+            text = "Error: " + text
+        return text, images
+
+
+COMPUTER = ComputerUse()
+
+
+def model_vision(p):
+    """Whether a llama.cpp-style server's model takes images (/props)."""
+    url = getattr(p, "url", "")
+    if not url:
+        return False
+    try:
+        return bool(((http(url + "/props", timeout=3) or {}).get("modalities") or {}).get("vision"))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def run_command(command, timeout=120):
+    try:
+        r = subprocess.run(["bash", "-lc", command], capture_output=True, text=True, timeout=timeout,
+                           cwd=HOME, stdin=subprocess.DEVNULL, start_new_session=True)
+    except subprocess.TimeoutExpired as e:
+        out = e.stdout or b""
+        out = out.decode(errors="replace") if isinstance(out, bytes) else out
+        return "Stopped after %d s. Output so far:\n%s" % (timeout, out[-6000:])
+    out = (r.stdout or "") + (("\n[stderr]\n" + r.stderr) if r.stderr.strip() else "")
+    if len(out) > 8000:
+        out = "[first %d characters cut]\n" % (len(out) - 8000) + out[-8000:]
+    return "Exit code %d.\n%s" % (r.returncode, out.strip() or "(no output)")
+
+
+def describe_action(name, a):
+    if name == "click":
+        what = a.get("name") or a.get("text")
+        return "click %s" % (("“%s”" % what) if what else "on the screen")
+    if name == "type_text":
+        t = str(a.get("text", ""))
+        return "type “%s”" % (t[:60] + ("…" if len(t) > 60 else ""))
+    if name == "press_key":
+        return "press %s" % (a.get("key") or a.get("keys") or "a key")
+    return name.replace("_", " ")
+
+
+def system_prompt(ctx, computer=False, commands=False):
     now = time.localtime()
+    extra = ""
+    if computer:
+        extra += ("You can use the computer like the user does: list_windows and get_app_state read what's on screen "
+                  "(get_app_state lists a window's controls as text with element_index numbers; call it before acting "
+                  "and again after to check), and click, type_text, press_key, scroll, set_value and perform_action act "
+                  "on it (prefer element_index from the latest get_app_state). Open apps with launch_app first. "
+                  "Keep going until the task is done, then say briefly what you did. ")
+    if commands:
+        extra += ("run_command runs a bash command after the user allows it; use it for files, settings and "
+                  "system questions a command answers directly, and give a short 'why'. ")
     return (
         "You are the voice assistant of the user's Linux desktop (hearth). Today is %s, the time is %s. %s"
         "Do what the user asks by calling tools; you may call several in a row. Never take an action the user didn't "
@@ -1579,7 +1747,7 @@ def system_prompt(ctx):
         "If nothing matches, say so in one sentence and offer one next step. Answer in one or two short, friendly sentences meant to be spoken aloud: no markdown, no lists, no file paths "
         "unless asked. If you can't do something, say so plainly."
     ) % (time.strftime("%A, %B %-d, %Y", now), time.strftime("%-I:%M %p", now),
-         ("The user is in %s. " % ctx["place"]) if ctx.get("place") else "")
+         ("The user is in %s. " % ctx["place"]) if ctx.get("place") else "") + extra
 
 
 class Assistant:
@@ -1665,6 +1833,19 @@ class Assistant:
         finally:
             self.pending.pop((rid, call), None)
 
+    def approve(self, rid, call, kind, title, detail):
+        """Ask the user (an Allow/Deny card in the shell). True when allowed."""
+        qu = queue.Queue()
+        self.pending[(rid, call)] = qu
+        emit({"type": "approve", "id": rid, "call": call, "kind": kind, "title": title, "detail": detail})
+        try:
+            return qu.get(timeout=300) == "allow"
+        except queue.Empty:
+            return False
+        finally:
+            self.pending.pop((rid, call), None)
+            emit({"type": "approved", "id": rid, "call": call})
+
     def tool_result(self, rid, call, result):
         qu = self.pending.get((rid, call))
         if qu:
@@ -1696,15 +1877,29 @@ class Assistant:
                 need = ARB.need_for(key, size)
                 if st["gpu"] and st["gpu"]["free"] < need:
                     ARB.make_room(need, exclude=(key,))
-        messages = [{"role": "system", "content": system_prompt(req.get("context") or {})}]
+        # Computer use and shell commands (Settings > AI), for models that
+        # call tools themselves (the agent CLIs bring their own).
+        tools = list(TOOLS)
+        computer = commands = vision = False
+        if not isinstance(p, AgentCli):
+            if cfg.get("computerUse", "ask") != "off" and COMPUTER.available():
+                vision = model_vision(p)
+                ct = COMPUTER.tools(vision)
+                computer = bool(ct)
+                tools += ct
+            if cfg.get("runCommands", "ask") != "off":
+                tools.append(RUN_COMMAND)
+                commands = True
+        computer_ok = cfg.get("computerUse", "ask") == "allow"
+        messages = [{"role": "system", "content": system_prompt(req.get("context") or {}, computer, commands)}]
         messages += req.get("history") or []
         messages.append({"role": "user", "content": req.get("text", "")})
         call = 0
         try:
-            for _ in range(6):
+            for _ in range(30 if computer else 8):
                 if rid in self.cancelled:
                     return
-                text, calls, raw = p.chat(model, messages, TOOLS, keep_minutes(cfg))
+                text, calls, raw = p.chat(model, messages, tools, keep_minutes(cfg))
                 if not calls:
                     emit({"type": "reply", "id": rid, "done": True, "text": (text or "").strip() or "Done."})
                     return
@@ -1716,21 +1911,51 @@ class Assistant:
                 for c in calls:
                     call += 1
                     emit({"type": "step", "id": rid, "name": c["name"], "args": c["args"]})
+                    images = []
+                    if rid in self.cancelled:
+                        return
                     if c["name"] in SHELL_TOOLS:
                         result = self.shell_tool(rid, call, c["name"], c["args"])
+                    elif c["name"] == "run_command" and commands:
+                        cmdline = str(c["args"].get("command", "")).strip()
+                        if not cmdline:
+                            result = "No command given."
+                        elif cfg.get("runCommands", "ask") == "allow" or \
+                                self.approve(rid, call, "command", c["args"].get("why") or "Run this command?", cmdline):
+                            result = run_command(cmdline) if not os.environ.get("HEARTH_AI_DRYRUN") \
+                                else "Exit code 0.\n(dry run)"
+                        else:
+                            result = "The user didn't allow that command. Don't retry it; ask what they'd like instead."
+                    elif computer and c["name"] in COMPUTER.names():
+                        acts = c["name"] not in COMPUTER.readonly
+                        if acts and not computer_ok:
+                            computer_ok = self.approve(rid, call, "computer", "Let the assistant use your computer?",
+                                                       "It wants to %s, and may keep clicking and typing in your apps "
+                                                       "until this request is done." % describe_action(c["name"], c["args"]))
+                        if acts and not computer_ok:
+                            result = "The user didn't allow using the computer for this request. Stop and say so."
+                        else:
+                            try:
+                                result, images = COMPUTER.call(c["name"], c["args"])
+                            except Exception as e:  # noqa: BLE001
+                                result = "Error: %s" % e
                     else:
                         try:
                             result = self.run_local_tool(c["name"], c["args"])
                         except Exception as e:  # noqa: BLE001
                             result = "Error: %s" % e
                     tm = {"role": "tool", "content": str(result)}
-                    if pid == "llamacpp" and c.get("id"):
+                    if isinstance(p, LlamaCpp) and c.get("id"):
                         tm["tool_call_id"] = c["id"]
                     if pid == "ollama":
                         tm["tool_name"] = c["name"]
                     if isinstance(p, AgentCli):
                         tm = {"role": "user", "content": "Result of %s: %s" % (c["name"], result)}
                     messages.append(tm)
+                    if images and vision:
+                        # Tool messages can't carry images in the OpenAI format: hand it over as the user.
+                        messages.append({"role": "user", "content": [{"type": "text", "text": "The screenshot:"}] + [
+                            {"type": "image_url", "image_url": {"url": "data:%s;base64,%s" % im}} for im in images[:1]]})
             emit({"type": "reply", "id": rid, "done": True, "text": "That took too many steps; I stopped."})
         except urllib.error.URLError as e:
             emit({"type": "reply", "id": rid, "done": True, "error": True,

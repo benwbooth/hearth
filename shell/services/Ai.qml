@@ -138,6 +138,14 @@ Singleton {
     // --- assistant ---
     property int nextId: 1
     property var handlers: ({})        // id -> { onReply, onStep, onTool }
+    // The assistant asking before it runs a command or uses the computer:
+    // { id, call, kind: "command"|"computer", title, detail } or null.
+    property var approval: null
+    function answerApproval(allow) {
+        if (!approval) return;
+        send({ cmd: "toolResult", id: approval.id, call: approval.call, result: allow ? "allow" : "deny" });
+        approval = null;
+    }
     function ask(text, context, h) {
         const id = nextId++;
         const hs = Object.assign({}, handlers); hs[id] = h; handlers = hs;
@@ -145,6 +153,7 @@ Singleton {
         return id;
     }
     function cancel(id) {
+        if (approval && approval.id === id) answerApproval(false);
         send({ cmd: "cancel", id: id });
         const hs = Object.assign({}, handlers); delete hs[id]; handlers = hs;
     }
@@ -227,7 +236,14 @@ Singleton {
             if (h && h.onTool) h.onTool(m.name, m.args, result);
             break;
         }
+        case "approve":
+            root.approval = m;
+            break;
+        case "approved":
+            if (root.approval && root.approval.id === m.id && root.approval.call === m.call) root.approval = null;
+            break;
         case "reply": {
+            if (root.approval && root.approval.id === m.id) root.approval = null;
             const h = root.handlers[m.id];
             if (h && h.onReply) h.onReply(m.text || "", !!m.error);
             const hs = Object.assign({}, root.handlers); delete hs[m.id]; root.handlers = hs;

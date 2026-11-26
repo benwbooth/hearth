@@ -158,6 +158,30 @@ ColumnLayout {
         }
         SettingsDivider {}
         SettingsRow {
+            label: "Use the computer"
+            note: "Let the assistant read your windows and click and type in apps to do what you ask."
+            tip: "It uses the same computer-use tools as Codex (codex-computer-use-linux). Ask: a card asks you once per request before it clicks or types (reading windows needs no OK). Always: it acts without asking. Off: it can't see or touch your apps."
+            Dropdown {
+                implicitWidth: 160
+                options: [{ value: "ask", label: "Ask first" }, { value: "allow", label: "Always" }, { value: "off", label: "Off" }]
+                value: pane.cfg.computerUse || "ask"
+                onPicked: v => Settings.set("ai.computerUse", v)
+            }
+        }
+        SettingsDivider {}
+        SettingsRow {
+            label: "Run commands"
+            note: "Let the assistant run terminal commands to answer questions and get things done."
+            tip: "Ask: a card shows each command with Allow and Deny before it runs. Always: commands run without asking (they can change or delete anything you can). Off: no commands."
+            Dropdown {
+                implicitWidth: 160
+                options: [{ value: "ask", label: "Ask each time" }, { value: "allow", label: "Always" }, { value: "off", label: "Off" }]
+                value: pane.cfg.runCommands || "ask"
+                onPicked: v => Settings.set("ai.runCommands", v)
+            }
+        }
+        SettingsDivider {}
+        SettingsRow {
             label: "Try it"
             note: "Ask something to check the model answers."
             PushButton {
