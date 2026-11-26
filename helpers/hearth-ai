@@ -43,6 +43,10 @@ JSON lines on stdin/stdout, so the shell never waits:
 
 Settings come from settings.json `ai` (Settings > AI). Cloud CLIs are used
 only when `ai.allowCloud` is on.
+
+Apps get the same models through an OpenAI-compatible server on 127.0.0.1
+(class ApiServer, README "AI" > Apps): its address and token are in
+$XDG_RUNTIME_DIR/hearth/ai-api.json while this runs.
 """
 
 import glob
@@ -1543,6 +1547,21 @@ def unload_entry(e):
 ARB = Arbiter()
 
 
+def make_room_for(pid, model):
+    """A new request evicts idle models when its model needs the room.
+    Returns True when the model was already loaded."""
+    key = pid if pid.startswith("service:") else "%s:%s" % (pid, model)
+    st = ARB.last or ARB.snapshot(False)
+    if key in {e["key"] for e in st["loaded"]}:
+        return True
+    size = next((i.get("size", 0) for i in st["installed"]
+                 if any(r["provider"] == pid and r["model"] == model for r in i["runners"])), 0)
+    need = ARB.need_for(key, size)
+    if st["gpu"] and st["gpu"]["free"] < need:
+        ARB.make_room(need, exclude=(key,))
+    return False
+
+
 def full_state(with_procs):
     return ARB.snapshot(with_procs)
 
@@ -1907,15 +1926,7 @@ class Assistant:
                   "text": "%s sends what you say to the cloud. Allow cloud AI in Settings > AI first." % p.label})
             return
         if not isinstance(p, AgentCli):
-            # A new request evicts idle models when its model needs the room.
-            key = pid if pid.startswith("service:") else "%s:%s" % (pid, model)
-            st = ARB.last or ARB.snapshot(False)
-            if key not in {e["key"] for e in st["loaded"]}:
-                size = next((i.get("size", 0) for i in st["installed"]
-                             if any(r["provider"] == pid and r["model"] == model for r in i["runners"])), 0)
-                need = ARB.need_for(key, size)
-                if st["gpu"] and st["gpu"]["free"] < need:
-                    ARB.make_room(need, exclude=(key,))
+            make_room_for(pid, model)
         # Computer use and shell commands (Settings > AI), for models that
         # call tools themselves (the agent CLIs bring their own).
         tools = list(TOOLS)
@@ -2005,6 +2016,335 @@ class Assistant:
             emit({"type": "reply", "id": rid, "done": True, "error": True, "text": "Something went wrong: %s" % e})
 
 
+# --- the app API ------------------------------------------------------------------
+#
+# Any app can use the desktop's models through an OpenAI-compatible server
+# on 127.0.0.1 (README "AI > Apps"), with the same models, cloud rule and
+# memory manager as the assistant. Requests need the bearer token; apps find
+# both in $XDG_RUNTIME_DIR/hearth/ai-api.json (readable only by you):
+#
+#   {"url": "http://127.0.0.1:18380/v1", "token": "...", "pid": 1234, "version": 1}
+#
+#   GET  /v1/models            "default" and "fast" (Settings > AI > Apps), then
+#                              every language model as "<provider>/<model>";
+#                              each entry's "hearth" says what it runs on
+#   POST /v1/chat/completions  OpenAI chat, streamed or not; tools pass through
+#                              to local servers. Cloud CLIs answer only with
+#                              ai.allowCloud, as one non-streamed reply.
+
+import hmac         # noqa: E402
+import http.server as httpserver  # noqa: E402  (not `http`: that's the http() helper above)
+import secrets      # noqa: E402
+
+API_PORT = 18380
+API_FILE = os.environ.get("HEARTH_AI_API_FILE") or \
+    os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "hearth", "ai-api.json")
+API_TOKEN_FILE = os.path.join(hm.STATE_HOME, "hearth", "ai-api-token")
+
+
+def api_token():
+    """Kept across restarts, so an app configured by hand keeps working."""
+    try:
+        with open(API_TOKEN_FILE) as f:
+            t = f.read().strip()
+        if t:
+            return t
+    except OSError:
+        pass
+    t = secrets.token_urlsafe(32)
+    os.makedirs(os.path.dirname(API_TOKEN_FILE), exist_ok=True)
+    fd = os.open(API_TOKEN_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(t + "\n")
+    return t
+
+
+_api_provs = [0.0, "", None]   # [when, settings it was made from, providers]
+_api_lock = threading.Lock()
+
+
+def api_providers(cfg, fresh=False):
+    """providers() looks at every process: reuse it for a while, so typing in
+    an app (a request per keystroke pause) stays quick."""
+    sig = json.dumps(cfg, sort_keys=True)
+    with _api_lock:
+        if fresh or _api_provs[2] is None or _api_provs[1] != sig or time.time() - _api_provs[0] > 20:
+            _api_provs[:] = [time.time(), sig, providers(cfg)]
+        return _api_provs[2]
+
+
+def api_alias(cfg, name):
+    """(provider, model) behind "default" / "fast": Settings > AI > Apps, else the assistant's."""
+    f = {}
+    if name == "fast":
+        f = cfg.get("appsFast") or {}
+    if not f.get("provider"):
+        f = cfg.get("apps") or {}
+    if not f.get("provider"):
+        f = cfg["assistant"]
+    return f.get("provider", ""), f.get("model", "")
+
+
+def api_resolve(cfg, name):
+    if name in ("", "default", "hearth", "fast"):
+        return api_alias(cfg, name)
+    if "/" in name:
+        return tuple(name.split("/", 1))
+    return "", name
+
+
+def api_label(p, pid, model):
+    if p is None:
+        return "%s (turned off)" % (model or pid)
+    if pid.startswith("service:"):
+        return p.label
+    name = os.path.splitext(os.path.basename(model))[0] if pid == "gguf" else model
+    return "%s (%s)" % (name, p.label)
+
+
+def api_models(cfg):
+    provs = api_providers(cfg)
+    cloud = bool(cfg.get("allowCloud"))
+
+    def usable(p):
+        return p is not None and (cloud or not isinstance(p, AgentCli))
+
+    out = []
+    for alias in ("default", "fast"):
+        pid, model = api_alias(cfg, alias)
+        p = provs.get(pid)
+        out.append({"id": alias, "object": "model", "owned_by": "hearth",
+                    "hearth": {"provider": pid, "model": model, "label": api_label(p, pid, model),
+                               "available": usable(p), "cloud": isinstance(p, AgentCli)}})
+    inv = ARB.inv[1] or (ARB.last or ARB.snapshot(False)).get("installed", [])
+    seen = set()
+    for it in inv:
+        if it.get("category") != "llm":
+            continue
+        for r in it.get("runners") or []:
+            p = provs.get(r["provider"])
+            mid = "%s/%s" % (r["provider"], r["model"])
+            if usable(p) and mid not in seen:
+                seen.add(mid)
+                out.append({"id": mid, "object": "model", "owned_by": r["provider"],
+                            "hearth": {"provider": r["provider"], "model": r["model"],
+                                       "label": api_label(p, r["provider"], r["model"]), "available": True}})
+    for pid, p in provs.items():
+        if isinstance(p, AgentCli) and cloud and p.bin:
+            for m in p.models():
+                out.append({"id": "%s/%s" % (pid, m), "object": "model", "owned_by": pid,
+                            "hearth": {"provider": pid, "model": m, "label": "%s %s" % (p.label, m),
+                                       "available": True, "cloud": True}})
+    return out
+
+
+def api_cli_reply(p, model, messages):
+    """A cloud CLI: the conversation as one prompt, its answer as the reply."""
+    def text(c):
+        if isinstance(c, list):
+            return " ".join(x.get("text", "") for x in c if isinstance(x, dict))
+        return c or ""
+    convo = "\n\n".join("%s: %s" % (m.get("role", "user").upper(), text(m.get("content"))) for m in messages)
+    prompt = ("Answer the last USER message for the app that sent this conversation. Do not use any tools of "
+              "your own and do not edit files. Reply with the answer only.\n\n" + convo)
+    r = subprocess.run(p.command(model, prompt), capture_output=True, text=True, timeout=240, cwd=HOME,
+                       stdin=subprocess.DEVNULL)
+    out = (r.stdout or "").strip()
+    if r.returncode != 0 and not out:
+        raise RuntimeError(((r.stderr or "").strip().splitlines() or ["%s failed" % p.label])[-1])
+    return out
+
+
+def api_chat_url(p, model):
+    """Where the model's server takes OpenAI chat, starting it when hearth starts it."""
+    if isinstance(p, Ollama):
+        return p.url + "/v1/chat/completions"
+    if isinstance(p, GgufRunner):
+        r = next((x for x in p.running() if x["path"] == model), None)
+        if not r:
+            p.load(model, 60)
+            r = next((x for x in p.running() if x["path"] == model), None)
+        if not r:
+            raise RuntimeError("couldn't start a server for %s" % model)
+        return "http://127.0.0.1:%d/v1/chat/completions" % r["port"]
+    return p.chat_url()
+
+
+class ApiHandler(httpserver.BaseHTTPRequestHandler):
+    server_version = "hearth-ai"
+    protocol_version = "HTTP/1.0"   # one request per connection; the reply ends when it closes
+
+    def log_message(self, fmt, *a):
+        pass
+
+    def reply(self, code, obj):
+        data = json.dumps(obj).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def error(self, code, msg, kind="hearth_error"):
+        self.reply(code, {"error": {"message": msg, "type": kind, "code": code}})
+
+    def authorized(self):
+        got = self.headers.get("Authorization", "")
+        if hmac.compare_digest(got.encode(), ("Bearer " + self.server.token).encode()):
+            return True
+        self.error(401, "Missing or wrong token: read it from %s" % API_FILE, "authentication_error")
+        return False
+
+    def do_GET(self):
+        if not self.authorized():
+            return
+        path = self.path.split("?")[0].rstrip("/")
+        cfg, _ = settings()
+        if path in ("/v1/models", "/models"):
+            self.reply(200, {"object": "list", "data": api_models(cfg)})
+        else:
+            self.error(404, "Not found: GET %s" % path)
+
+    def do_POST(self):
+        if not self.authorized():
+            return
+        path = self.path.split("?")[0].rstrip("/")
+        if path not in ("/v1/chat/completions", "/chat/completions"):
+            self.error(404, "Not found: POST %s" % path)
+            return
+        try:
+            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+        except ValueError:
+            self.error(400, "The body isn't JSON")
+            return
+        cfg, _ = settings()
+        asked = str(body.get("model") or "")
+        pid, model = api_resolve(cfg, asked)
+        p = api_providers(cfg).get(pid) or api_providers(cfg, fresh=True).get(pid)
+        if p is None:
+            self.error(404, "%s isn't available: its server is off or gone. Choose a model in Settings > AI."
+                       % (asked or "The model"), "model_not_found")
+            return
+        stream = bool(body.get("stream"))
+        try:
+            if isinstance(p, AgentCli):
+                if not cfg.get("allowCloud"):
+                    self.error(403, "%s sends what you type to the cloud. Allow cloud AI in Settings > AI first."
+                               % p.label, "permission_error")
+                    return
+                self.send_text(api_cli_reply(p, model, body.get("messages") or []), asked, stream)
+                return
+            key = pid if pid.startswith("service:") else "%s:%s" % (pid, model)
+            loaded = make_room_for(pid, model)
+            if not loaded and isinstance(p, (ModelService, Magnitude)):
+                t0 = time.time()
+                p.load(model, keep_minutes(cfg))
+                ARB.mem.note(key, loadSec=round(time.time() - t0, 1), loadMeasured=True)
+            url = api_chat_url(p, model)
+            fwd = dict(body, model=model)
+            if isinstance(p, Ollama) and "reasoning_effort" not in fwd:
+                fwd["reasoning_effort"] = "none"   # as the assistant: no thinking out loud
+            ARB.mem.note(key, lastActive=time.time())
+            self.relay(url, fwd)
+            ARB.mem.note(key, lastActive=time.time())
+        except (BrokenPipeError, ConnectionResetError):
+            pass   # the app gave up (a newer keystroke): drop the upstream reply too
+        except urllib.error.URLError as e:
+            self.error(502, "Can't reach %s (%s). Is it running? See Settings > AI." % (p.label, e.reason))
+        except Exception as e:  # noqa: BLE001
+            self.error(500, "Something went wrong: %s" % e)
+
+    def relay(self, url, body):
+        req = urllib.request.Request(url, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+        try:
+            r = urllib.request.urlopen(req, timeout=600)
+        except urllib.error.HTTPError as e:
+            r = e
+        with r:
+            self.send_response(r.status if hasattr(r, "status") else r.code)
+            self.send_header("Content-Type", r.headers.get("Content-Type", "application/json"))
+            self.end_headers()
+            while True:
+                chunk = r.read1(65536) if hasattr(r, "read1") else r.read(65536)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                self.wfile.flush()
+
+    def send_text(self, text, model, stream):
+        now = int(time.time())
+        rid = "chatcmpl-hearth-%d" % now
+        if not stream:
+            self.reply(200, {"id": rid, "object": "chat.completion", "created": now, "model": model,
+                             "choices": [{"index": 0, "finish_reason": "stop",
+                                          "message": {"role": "assistant", "content": text}}]})
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+        for delta, fin in (({"role": "assistant", "content": text}, None), ({}, "stop")):
+            ev = {"id": rid, "object": "chat.completion.chunk", "created": now, "model": model,
+                  "choices": [{"index": 0, "delta": delta, "finish_reason": fin}]}
+            self.wfile.write(b"data: " + json.dumps(ev).encode() + b"\n\n")
+        self.wfile.write(b"data: [DONE]\n\n")
+
+
+class ApiServer:
+    """Runs while ai.api.enabled is on (checked as settings change)."""
+
+    def __init__(self):
+        self.httpd = None
+        self.port = 0
+
+    def wanted(self, cfg):
+        api = cfg.get("api") or {}
+        if os.environ.get("HEARTH_AI_API") == "0" or api.get("enabled") is False:
+            return 0
+        return int(os.environ.get("HEARTH_AI_API_PORT") or api.get("port") or API_PORT)
+
+    def sync(self, cfg):
+        port = self.wanted(cfg)
+        if port == self.port and (self.httpd or not port):
+            return
+        self.stop()
+        if not port:
+            return
+        try:
+            httpd = httpserver.ThreadingHTTPServer(("127.0.0.1", port), ApiHandler)
+        except OSError as e:
+            log("app API: can't listen on 127.0.0.1:%d (%s)" % (port, e))
+            self.port = port          # don't retry every 5 s; a port change retries
+            return
+        httpd.daemon_threads = True
+        httpd.token = api_token()
+        self.httpd, self.port = httpd, port
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        os.makedirs(os.path.dirname(API_FILE), exist_ok=True)
+        tmp = API_FILE + ".tmp"
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            json.dump({"url": "http://127.0.0.1:%d/v1" % port, "token": httpd.token, "pid": os.getpid(),
+                       "version": 1}, f)
+        os.replace(tmp, API_FILE)
+
+    def stop(self):
+        if self.httpd:
+            self.httpd.shutdown()
+            self.httpd.server_close()
+            self.httpd = None
+            try:
+                with open(API_FILE) as f:
+                    mine = json.load(f).get("pid") == os.getpid()
+            except (OSError, ValueError):
+                mine = False
+            if mine:
+                os.unlink(API_FILE)
+        self.port = 0
+
+
+API = ApiServer()
+
+
 # --- main loop -------------------------------------------------------------------
 
 def parse_bytes(s):
@@ -2077,6 +2417,9 @@ def main():
         return
     asst = Assistant()
     watching = {"on": False}
+    # A test shell doesn't serve apps (it would take the real one's place),
+    # unless the test gives it a port of its own.
+    serve_apps = os.environ.get("HEARTH_SESSION_DRYRUN") != "1" or bool(os.environ.get("HEARTH_AI_API_PORT"))
 
     def poller():
         # The memory manager looks every 5 s (2 s while a UI watches); the
@@ -2088,6 +2431,11 @@ def main():
             period = 2 if watching["on"] else 5
             if now - last >= period:
                 last = now
+                if serve_apps:
+                    try:
+                        API.sync(settings()[0])
+                    except Exception as e:  # noqa: BLE001
+                        log("app API:", e)
                 try:
                     st = ARB.snapshot(watching["on"], manage=True)
                     while ARB.notices:
@@ -2423,6 +2771,7 @@ def main():
             asst.tool_result(int(req.get("id", 0)), int(req.get("call", 0)), req.get("result", ""))
         elif cmd == "cancel":
             asst.cancelled.add(int(req.get("id", 0)))
+    API.stop()   # the shell went away: so does the app API
 
 
 if __name__ == "__main__":
