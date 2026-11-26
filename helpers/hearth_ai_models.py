@@ -430,9 +430,22 @@ def gpu_clients():
             if key in seen:
                 continue
             seen.add(key)
-            e = per.setdefault((pid, key[1]), {"vram": 0, "gtt": 0, "engineNs": 0})
-            for m in re.finditer(r"drm-memory-(vram|gtt):\s*(\d+)\s*KiB", txt):
-                e[m.group(1)] += int(m.group(2)) * 1024
+            e = per.setdefault((pid, key[1]), {"vram": 0, "gtt": 0, "engineNs": 0, "sharedVram": 0})
+            # Its own memory: drm-total minus drm-shared where the kernel
+            # says (buffers shared with the compositor, a window's surfaces,
+            # are otherwise counted again in every process holding them),
+            # else the older drm-memory-*.
+            tot = {m.group(1): int(m.group(2)) * 1024
+                   for m in re.finditer(r"drm-total-(vram|gtt):\s*(\d+)\s*KiB", txt)}
+            shr = {m.group(1): int(m.group(2)) * 1024
+                   for m in re.finditer(r"drm-shared-(vram|gtt):\s*(\d+)\s*(?:KiB)?", txt)}
+            if tot:
+                for r in ("vram", "gtt"):
+                    e[r] += max(0, tot.get(r, 0) - shr.get(r, 0))
+                e["sharedVram"] += shr.get("vram", 0)
+            else:
+                for m in re.finditer(r"drm-memory-(vram|gtt):\s*(\d+)\s*KiB", txt):
+                    e[m.group(1)] += int(m.group(2)) * 1024
             for m in re.finditer(r"drm-engine-(gfx|compute):\s*(\d+)\s*ns", txt):
                 e["engineNs"] += int(m.group(2))
     out = []
@@ -451,7 +464,7 @@ def gpu_clients():
         if e["vram"] + e["gtt"] >= 256 << 20:
             models = process_models(pid)
         out.append({"pid": int(pid), "pci": pdev, "name": label, "comm": comm, "cmd": cmd[:300],
-                    "vram": e["vram"], "gtt": e["gtt"], "engineNs": e["engineNs"],
+                    "vram": e["vram"], "gtt": e["gtt"], "engineNs": e["engineNs"], "sharedVram": e["sharedVram"],
                     "vramText": human_bytes(e["vram"]), "gttText": human_bytes(e["gtt"]) if e["gtt"] >= 64 << 20 else "",
                     "unit": _unit_of(pid), "models": models})
     out.sort(key=lambda p: -(p["vram"] + p["gtt"]))

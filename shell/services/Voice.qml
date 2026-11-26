@@ -182,6 +182,7 @@ Singleton {
         case "voices": root.voices = m; break;
         case "download":
             root.download = m.finished ? null : { voice: m.voice, done: m.done, total: m.total };
+            if (!m.finished && !m.done && root.phase !== "answer") root.reply = "Getting the voice for spoken replies…";
             if (m.error) { root.reply = "Couldn't download the voice: " + m.error; }
             break;
         }
