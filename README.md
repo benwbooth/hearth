@@ -630,10 +630,13 @@ One hub for every model the desktop uses: `helpers/hearth-ai`,
   free memory), and the coding-agent CLIs Claude Code, Codex and Gemini.
   The CLIs are cloud AI. They are off unless "Allow cloud AI" is on, and
   they run one prompt at a time without their own tools.
-- Models: installed and loaded per backend, with parameters, quantisation,
-  size and capabilities. You can load, unload, download (Ollama names) and
-  delete (asks first). Models stay loaded for the "Keep models loaded" time
-  and can be unloaded whenever something goes full screen.
+- Settings > AI lists every model in one place (the AI menu's own browser:
+  Loaded, Installed, Get More, by category), every multi-model server with
+  Start / Stop when it runs as a user unit, and extra model folders. None of
+  it names a model or server: whatever hearth-ai finds shows up, so new
+  models and new model units need no change here. Models unload after
+  "Unused for" (the memory manager below) and can be unloaded whenever
+  something goes full screen.
 - More backends: Magnitude (`magnitude serve` on :10100, its CLI for
   list/load/stop/pull) and model services: systemd user units that run
   one model each (`inkling-2-mini.service` and the like, found by their

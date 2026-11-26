@@ -10,7 +10,13 @@ url=$(get .ai.providers.llamacpp.url); url=${url:-http://127.0.0.1:8181}
 port=${url##*:}; port=${port%%/*}
 dir=$(get .ai.providers.llamacpp.modelsDir); dir=${dir:-~/models}; dir=${dir/#\~/$HOME}
 max=$(get .ai.providers.llamacpp.modelsMax); max=${max:-1}
-idle=$(get .ai.keepAlive); idle=${idle:-10}
+# Its own idle timer backs up hearth's memory manager (hearth-ai's
+# keep_minutes): an hour while "Unload unused models" is on, else "Unused for".
+idle=60
+# (Read directly: get's `// empty` turns false into nothing.)
+if [ "$(jq -r '.ai.autoUnload' "$settings" 2>/dev/null)" = false ]; then
+  idle=$(get .ai.idleMinutes); idle=${idle:-5}
+fi
 mkdir -p "$dir"
 exec llama-server --host 127.0.0.1 --port "$port" --models-dir "$dir" --models-max "$max" \
   --sleep-idle-seconds "$((idle * 60))" --jinja

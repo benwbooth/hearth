@@ -64,7 +64,6 @@ LLAMA_UNIT = "hearth-llama-server.service"
 
 DEFAULTS = {
     "allowCloud": False,
-    "keepAlive": 10,
     # Memory manager: unload a model idle idleMinutes, or loadTimeFactor x
     # its load time when that's longer (up to an hour); evict idle models
     # when the card is nearly full. Pinned keys never unload by themselves.
@@ -899,6 +898,12 @@ class Arbiter:
                 ("%s:%s" % (r["provider"], r["model"]) in held) or
                 (r["provider"].startswith("service:") and r["provider"] in held) for r in it["runners"])
         model_vram = sum(e["vram"] for e in loaded)
+        for ps in pstates.values():
+            # The user unit that runs this server, when there is one:
+            # Settings lists every server with Start / Stop from this, so a
+            # new one (a model unit, Magnitude's service) needs no code.
+            if ps.get("kind") == "local":
+                ps["controlUnit"] = provider_unit(ps["id"])
         st = {"type": "state", "time": int(now), "providers": list(pstates.values()), "gpus": gs, "gpu": g,
               "allowCloud": bool(cfg.get("allowCloud")),
               "clis": [{"id": k, "label": v["label"], "installed": bool(shutil.which(v["bin"]))} for k, v in CLI.items()],
@@ -1199,7 +1204,7 @@ class Assistant:
             for _ in range(6):
                 if rid in self.cancelled:
                     return
-                text, calls, raw = p.chat(model, messages, TOOLS, int(cfg.get("keepAlive", 10)))
+                text, calls, raw = p.chat(model, messages, TOOLS, keep_minutes(cfg))
                 if not calls:
                     emit({"type": "reply", "id": rid, "done": True, "text": (text or "").strip() or "Done."})
                     return
@@ -1241,6 +1246,37 @@ def parse_bytes(s):
     if not m:
         return None
     return int(float(m.group(1)) * (1024 ** "BKMGT".index((m.group(2) or "B").upper())))
+
+
+def keep_minutes(cfg):
+    """How long a server keeps a model hearth loaded (Ollama's keep_alive).
+    With "Unload unused models" on, the memory manager decides (it may keep
+    a slow-loading model longer than idleMinutes), so the server's own timer
+    only backs it up at its one-hour ceiling; off, the server unloads after
+    idleMinutes itself. (Replaces the separate keepAlive setting.)"""
+    if cfg.get("autoUnload", True):
+        return 60
+    return max(1, int(float(cfg.get("idleMinutes", 5) or 5)))
+
+
+def provider_unit(pid):
+    """The systemd user unit behind a local server, or "" (Ollama runs as
+    a system service; a llama-server started by hand has no unit)."""
+    if pid == "llamacpp":
+        return LLAMA_UNIT
+    if pid.startswith("service:"):
+        return pid[len("service:"):]
+    if pid == "magnitude":
+        now = time.time()
+        if now - _magnitude_unit[1] > 60:
+            r = subprocess.run(["systemctl", "--user", "cat", "magnitude.service"],
+                               capture_output=True, timeout=5, stdin=subprocess.DEVNULL)
+            _magnitude_unit[:] = ["magnitude.service" if r.returncode == 0 else "", now]
+        return _magnitude_unit[0]
+    return ""
+
+
+_magnitude_unit = ["", 0.0]   # [unit or "", when checked]
 
 
 def make_room_cli(arg):
@@ -1321,7 +1357,7 @@ def main():
             ARB.make_room(need, exclude=(key,))
         emit({"type": "busy", "provider": pid, "model": model, "what": "loading"})
         t0 = time.time()
-        p.load(model, int(cfg.get("keepAlive", 10)))
+        p.load(model, keep_minutes(cfg))
         ARB.mem.note(key, loadSec=round(time.time() - t0, 1), loadMeasured=True, lastActive=time.time())
         ARB.mem.save(force=True)
 
@@ -1492,9 +1528,16 @@ def main():
         emit(full_state(watching["on"]))
 
     def server(req):
+        pid = req.get("provider") or "llamacpp"
+        unit = provider_unit(pid)
+        if not unit:
+            emit({"type": "done", "cmd": "server", "provider": pid, "error": "hearth can't start or stop that server"})
+            return
         verb = "start" if req.get("on") else "stop"
-        r = subprocess.run(["systemctl", "--user", verb, LLAMA_UNIT], capture_output=True, text=True, timeout=30)
-        emit({"type": "done", "cmd": "server", "provider": "llamacpp",
+        if verb == "start":
+            make_room_cli(unit)  # free graphics memory first, like the units' own ExecStartPre
+        r = subprocess.run(["systemctl", "--user", verb, unit], capture_output=True, text=True, timeout=360)
+        emit({"type": "done", "cmd": "server", "provider": pid,
               "error": (r.stderr or "").strip() if r.returncode else ""})
         time.sleep(1.5)
         emit(full_state(watching["on"]))

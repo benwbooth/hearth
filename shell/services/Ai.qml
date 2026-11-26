@@ -16,7 +16,6 @@ Singleton {
 
     readonly property var defaults: ({
         allowCloud: false,              // the Claude/Codex/Gemini CLIs may be used
-        keepAlive: 10,                  // minutes an idle model stays loaded
         unloadOnFullscreen: false,      // free VRAM while a game or video is full screen
         menuBarStats: true,             // GPU busy % and VRAM % next to the AI icon
         // Memory manager (helpers/hearth-ai Arbiter): models unused this
