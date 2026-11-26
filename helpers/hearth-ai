@@ -2027,7 +2027,10 @@ class Assistant:
 #
 #   GET  /v1/models            "default" and "fast" (Settings > AI > Apps), then
 #                              every language model as "<provider>/<model>";
-#                              each entry's "hearth" says what it runs on
+#                              each entry's "hearth" says what it runs on.
+#                              An app may also name a model its own way
+#                              ("qwen3.5:4b", "lmstudio/x"): whatever runs a
+#                              model by that name answers
 #   POST /v1/chat/completions  OpenAI chat, streamed or not; tools pass through
 #                              to local servers. Cloud CLIs answer only with
 #                              ai.allowCloud, as one non-streamed reply.
@@ -2138,6 +2141,24 @@ def api_models(cfg):
     return out
 
 
+def api_find(cfg, name):
+    """(provider, model) of a runner whose model or file is called `name`
+    (one already loaded first), else ("", name)."""
+    provs = api_providers(cfg)
+    st = ARB.last or ARB.snapshot(False)
+    loaded = {e["key"] for e in st.get("loaded", [])}
+    hits = []
+    for it in ARB.inv[1] or st.get("installed", []):
+        for r in it.get("runners") or []:
+            if r["provider"] in provs and name in (r["model"], it.get("name")):
+                key = r["provider"] if r["provider"].startswith("service:") else "%s:%s" % (r["provider"], r["model"])
+                hits.append((key not in loaded, r["provider"], r["model"]))
+    if not hits:
+        return "", name
+    hits.sort(key=lambda h: h[0])
+    return hits[0][1], hits[0][2]
+
+
 def api_cli_reply(p, model, messages):
     """A cloud CLI: the conversation as one prompt, its answer as the reply."""
     def text(c):
@@ -2221,6 +2242,11 @@ class ApiHandler(httpserver.BaseHTTPRequestHandler):
         asked = str(body.get("model") or "")
         pid, model = api_resolve(cfg, asked)
         p = api_providers(cfg).get(pid) or api_providers(cfg, fresh=True).get(pid)
+        if p is None:
+            # An app's own name for it ("lmstudio/qwen3-4b", "qwen3.5:4b"):
+            # whatever here runs a model by that name.
+            pid, model = api_find(cfg, model)
+            p = api_providers(cfg).get(pid)
         if p is None:
             self.error(404, "%s isn't available: its server is off or gone. Choose a model in Settings > AI."
                        % (asked or "The model"), "model_not_found")

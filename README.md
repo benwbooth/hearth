@@ -718,6 +718,8 @@ One hub for every model the desktop uses: `helpers/hearth-ai`,
   fast falls back to default), each with a `hearth` field naming the model
   it stands for, then every language model as `<provider>/<model>`
   (`ollama/qwen3.5:4b`, `service:inkling-2-mini.service/inkling-2-mini`).
+  An app may name a model its own way (`qwen3.5:4b`, `lmstudio/x`):
+  whatever here runs a model by that name answers (a 404 otherwise).
   `POST /v1/chat/completions` streams through to the model's own server
   (tools pass through), after the memory manager makes room; a model unit,
   Magnitude model or loose GGUF starts first. Ollama gets
@@ -725,8 +727,9 @@ One hub for every model the desktop uses: `helpers/hearth-ai`,
   only with "Allow cloud AI" on, as one reply. Only the shell's own
   hearth-ai serves (a test shell with `HEARTH_SESSION_DRYRUN=1` doesn't,
   unless `HEARTH_AI_API_PORT` is set; `HEARTH_AI_API_FILE` moves the file,
-  `HEARTH_AI_API=0` turns it off). Tessera uses it (Preferences > AI >
-  Hearth AI hub).
+  `HEARTH_AI_API=0` turns it off). Tessera asks its own local models through it, so
+  they load and unload with the desktop's (Preferences > AI > Hearth AI
+  hub).
 - `hearth-ai --state` prints everything; `hearth-ipc call ai state|unloadAll`.
 
 ## Voice assistant
