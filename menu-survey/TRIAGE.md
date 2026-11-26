@@ -77,6 +77,13 @@ check: the ChatGPT desktop AppImage then shows its whole menu bar. AppImages nee
 glibc 2.43 or host libraries run on menu-survey/appimage-run.nix
 (unstable's appimage-run plus the missing libraries), which would fix them
 for programs.appimage on the desktop as well.
+AppImages built with uruntime (pkgforge's "anylinux", e.g. VSCodium, RSS
+Guard, Goverlay) carry a DwarFS payload that appimage-run can't open
+("Can't find a valid SQUASHFS superblock"). They bundle their own loader,
+so the probe runs them directly with APPIMAGE_EXTRACT_AND_RUN=1 (RSS Guard:
+full menu bar). On the desktop, programs.appimage.binfmt sends them to
+appimage-run too and they fail the same way; running them needs the binfmt
+rule to skip DwarFS images (Ben's call).
 
 ZynAddSubFX: nixpkgs' default build uses Zyn-Fusion (self-drawn OpenGL, no
 keyboard menu commands); the module covers the FLTK/NTK builds
