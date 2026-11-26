@@ -257,7 +257,18 @@ MouseArea {
     PopupWindow {
         id: preview
         property bool hovered: false
-        anchor.item: task
+        // Placed once, where the icon is when it opens, and kept there:
+        // anchored to the icon itself it followed the Dock's magnification
+        // a frame behind and wobbled as the pointer swept across.
+        property rect at: Qt.rect(0, 0, 1, 1)
+        property real atGap: 0
+        function place() {
+            const p = task.mapToItem(null, 0, 0);
+            at = Qt.rect(p.x, p.y, task.width, task.height);
+            atGap = gap;
+        }
+        anchor.window: task.QsWindow.window
+        anchor.rect: at
         anchor.edges: task.edge === "top" ? Edges.Bottom : task.edge === "left" ? Edges.Right
                     : task.edge === "right" ? Edges.Left : Edges.Top
         anchor.gravity: anchor.edges
@@ -266,8 +277,8 @@ MouseArea {
         // The surface has room for the glass's shadow around the pane.
         readonly property real pad: previewFrame.shadowPad
         readonly property real gap: 8 + task.iconSize * (task.zoom - 1) - pad
-        anchor.margins.top: task.edge === "bottom" ? -gap : task.edge === "top" ? gap : 0
-        anchor.margins.left: task.edge === "left" ? gap : task.edge === "right" ? -gap : 0
+        anchor.margins.top: task.edge === "bottom" ? -atGap : task.edge === "top" ? atGap : 0
+        anchor.margins.left: task.edge === "left" ? atGap : task.edge === "right" ? -atGap : 0
         color: "transparent"
         visible: false
         onVisibleChanged: if (task.dock) {
@@ -303,7 +314,7 @@ MouseArea {
                 // Placed against the icon where it is now (it moves as the
                 // Dock magnifies): opened at once, it showed for a frame at
                 // the Dock window's lower-left corner first.
-                if (show && !preview.visible) preview.anchor.updateAnchor();
+                if (show && !preview.visible) { preview.place(); preview.anchor.updateAnchor(); }
                 preview.visible = show;
             }
         }
