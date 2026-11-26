@@ -883,7 +883,9 @@ def open_placeholders(menus, dump, win_id=None):
             except Exception:
                 continue
             m = app_menus(d)
-            if dict(m).get(label, 0) > 1 or len(m) > len(menus):
+            # Read: more items, more menus, or its one item no longer the
+            # "…" placeholder (a ☰ holding only Close window).
+            if dict(m).get(label, 0) > 1 or len(m) > len(menus) or label in read_menus(d):
                 dump, menus = d, m
                 break
         if win_id:  # the bar's menu closes when the app takes focus back
