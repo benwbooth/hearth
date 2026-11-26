@@ -13,6 +13,7 @@ self:
 {
   imports = [
     (import ./spotify.nix self)
+    (import ./libreoffice.nix self)
     (import ./antigravity.nix self)
     (import ./brave.nix self)
     (import ./chatgpt.nix self)

@@ -109,12 +109,16 @@ Singleton {
     property string settledKey: ""
     readonly property bool resolving: wanted !== "" && !current && settledKey !== wanted
     onWantedChanged: { resolveTimer.restart(); extrasAloneTimer.restart() }
-    onCurrentChanged: if (current) { settledKey = wanted; replayClick(); }
+    onCurrentChanged: if (current) settledKey = wanted
+    onUsableChanged: if (usable) replayClick()
     Timer { id: resolveTimer; interval: 500; onTriggered: root.settledKey = root.wanted }
     // While the app's menu isn't here: the last one it had (a dialog of
     // the app keeps it too, as on macOS).
-    readonly property var ownTree: current ? menu
-        : (win ? (treeByApp[menuApp(win, treeByApp)] || null) : null)
+    // An empty menu (a LibreOffice dialog exports one of its own) counts as
+    // none here: the app's last one stays.
+    readonly property bool usable: current && (menu.children || []).length > 0
+    readonly property var ownTree: usable ? menu
+        : (win ? (treeByApp[menuApp(win, treeByApp)] || (current ? menu : null)) : (current ? menu : null))
     // Menus the helper adds to the window's own (MPRIS: a media player's
     // Playback), appended after them.
     property var extraMenus: null
@@ -167,7 +171,7 @@ Singleton {
     // its labels once the real menu is here.
     // (The helper's extra menus, MPRIS's Playback, are live either way.)
     function live(id) {
-        if (current) return true;
+        if (usable) return true;
         const extra = extraMenus && extraMenus.key === wanted ? (extraMenus.menus || []) : [];
         return extra.some(m => !!find(id, m));
     }
