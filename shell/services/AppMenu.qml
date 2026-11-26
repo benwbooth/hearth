@@ -100,7 +100,7 @@ Singleton {
     property string settledKey: ""
     readonly property bool resolving: wanted !== "" && !current && settledKey !== wanted
     onWantedChanged: { resolveTimer.restart(); extrasAloneTimer.restart() }
-    onCurrentChanged: if (current) settledKey = wanted
+    onCurrentChanged: if (current) { settledKey = wanted; replayClick(); }
     Timer { id: resolveTimer; interval: 500; onTriggered: root.settledKey = root.wanted }
     // While the app's menu isn't here: the last one it had (a dialog of
     // the app keeps it too, as on macOS).
@@ -152,9 +152,45 @@ Singleton {
     signal openRequested(string label)
 
     function send(obj) { if (proc.running) proc.write(JSON.stringify(obj) + "\n"); }
-    function open(id) { send({ cmd: "open", id: id }); }
-    function close(id) { send({ cmd: "close", id: id }); }
-    function click(id) { send({ cmd: "click", id: id }); }
+    // While the bar shows a remembered menu (`current` false: the app's
+    // own is still on its way), its ids are from an earlier run: opening a
+    // submenu only shows the remembered items, and a click is replayed by
+    // its labels once the real menu is here.
+    // (The helper's extra menus, MPRIS's Playback, are live either way.)
+    function live(id) {
+        if (current) return true;
+        const extra = extraMenus && extraMenus.key === wanted ? (extraMenus.menus || []) : [];
+        return extra.some(m => !!find(id, m));
+    }
+    function open(id) { if (live(id)) send({ cmd: "open", id: id }); }
+    function close(id) { if (live(id)) send({ cmd: "close", id: id }); }
+    property var pendingClick: null   // { key, labels }
+    function click(id) {
+        if (live(id)) { send({ cmd: "click", id: id }); return; }
+        const labels = labelPath(id, root.tree, []);
+        if (labels) { root.pendingClick = { key: root.wanted, labels: labels }; pendingTimer.restart(); }
+    }
+    function labelPath(id, node, acc) {
+        if (!node) return null;
+        if (node.id === id) return acc;
+        for (const c of node.children || []) {
+            const f = labelPath(id, c, acc.concat([String(c.label || "")]));
+            if (f) return f;
+        }
+        return null;
+    }
+    function replayClick() {
+        if (!pendingClick) return;
+        const pc = pendingClick;
+        pendingClick = null;
+        if (pc.key !== wanted) return;
+        let node = root.tree;
+        for (const l of pc.labels) {
+            node = node ? ((node.children || []).find(i => String(i.label || "") === l && i.visible !== false) || null) : null;
+        }
+        if (node && node.enabled !== false) send({ cmd: "click", id: node.id });
+    }
+    Timer { id: pendingTimer; interval: 5000; onTriggered: root.pendingClick = null }
 
     function find(id, node) {
         node = node === undefined ? root.tree : node;
@@ -248,6 +284,7 @@ Singleton {
                         const t = Object.assign({}, root.treeByApp);
                         t[root.win.appId] = m.menu;
                         root.treeByApp = t;
+                        root.remember(root.win.appId);
                     }
                     if (root.request && m.key === root.request.key && root.win && m.menu.children.length) {
                         const l = Object.assign({}, root.lastByApp);
@@ -298,6 +335,70 @@ Singleton {
             }
         }
     }
+    // treeByApp kept on disk too, so after a restart of the shell (or the
+    // app) the bar shows an app's last menus at once instead of its name
+    // and Window alone while they're read again (Spotify's ☰ takes about a
+    // second over AT-SPI). The newest 40 apps.
+    readonly property string cacheFile: (Quickshell.env("XDG_CACHE_HOME") || Quickshell.env("HOME") + "/.cache")
+        + "/hearth/app-menus.json"
+    property var cacheOrder: []
+    // Apps whose remembered menu came from the file and hasn't been seen
+    // again this run: if the window turns out to have none (the helper's
+    // "none"), that menu is stale and goes.
+    property var unconfirmed: ({})
+    onNoneKeyChanged: {
+        const a = root.win ? root.win.appId : "";
+        if (noneKey !== wanted || !a || !unconfirmed[a]) return;
+        const t = Object.assign({}, treeByApp);
+        delete t[a];
+        treeByApp = t;
+        const u = Object.assign({}, unconfirmed);
+        delete u[a];
+        unconfirmed = u;
+        cacheOrder = cacheOrder.filter(x => x !== a);
+        saveTimer.restart();
+    }
+    function remember(appId) {
+        if (!appId) return;
+        if (root.unconfirmed[appId]) {
+            const u = Object.assign({}, root.unconfirmed);
+            delete u[appId];
+            root.unconfirmed = u;
+        }
+        root.cacheOrder = root.cacheOrder.filter(a => a !== appId).concat([appId]).slice(-40);
+        saveTimer.restart();
+    }
+    Timer {
+        id: saveTimer
+        interval: 2000
+        onTriggered: {
+            const out = { version: 1, apps: {} };
+            for (const a of root.cacheOrder) if (root.treeByApp[a]) out.apps[a] = root.treeByApp[a];
+            cacheMkdir.running = true;
+            cacheView.setText(JSON.stringify(out));
+        }
+    }
+    Process { id: cacheMkdir; command: ["mkdir", "-p", root.cacheFile.replace(/\/[^/]*$/, "")] }
+    FileView {
+        id: cacheView
+        path: root.cacheFile
+        atomicWrites: true
+        printErrors: false
+        onLoaded: {
+            try {
+                const d = JSON.parse(text());
+                if (!d || d.version !== 1 || !d.apps) return;
+                // What this run has seen already wins over the file.
+                const t = Object.assign({}, d.apps, root.treeByApp);
+                const u = {};
+                for (const a in d.apps) if (!root.treeByApp[a]) u[a] = true;
+                root.unconfirmed = u;
+                root.treeByApp = t;
+                root.cacheOrder = Object.keys(d.apps).filter(a => !root.cacheOrder.includes(a)).concat(root.cacheOrder);
+            } catch (e) { }
+        }
+    }
+
     Timer {
         id: restart
         interval: 3000
