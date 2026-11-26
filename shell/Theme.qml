@@ -198,4 +198,16 @@ Singleton {
     // the same (-0.6%) at 14 px.
     readonly property real menuTracking: -0.09
     readonly property string monoFamily: "Hack"
+
+    // AI model categories (helpers/hearth_ai_models.py CATEGORIES): a
+    // colour for the graphics memory bar and an icon for lists.
+    function aiCategoryColor(cat) {
+        return ({ llm: "#3daee9", embedding: "#1abc9c", stt: "#f39c1f", tts: "#e93a9a", image: "#9b59b6",
+                  video: "#da4453", audio: "#fdbc4b", vision: "#27ae60" })[cat] || "#7f8c8d";
+    }
+    function aiCategoryIcon(cat) {
+        return ({ llm: "dialog-messages", embedding: "code-context", stt: "audio-input-microphone",
+                  tts: "audio-speakers", image: "image-x-generic", video: "video-x-generic",
+                  audio: "audio-x-generic", vision: "camera-photo" })[cat] || "applications-science";
+    }
 }

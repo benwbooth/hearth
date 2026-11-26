@@ -42,6 +42,7 @@
       p.cryptography                     # hearth-keyring-prompter: the keyring's secret exchange (AES)
       p.pyyaml                           # hearth-appmenu: menu modules (menus/*.yaml)
       p.websockets                       # hearth-voice: the WhisperLive server
+      p.huggingface-hub                  # hearth-ai: `hf download` for Get More
       (p.toPythonModule recoll)          # hearth-search: recoll's Python API
     ]);
 

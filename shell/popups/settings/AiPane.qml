@@ -90,6 +90,38 @@ ColumnLayout {
             tip: "When any window goes full screen, hearth unloads the models it manages (Ollama, llama.cpp). Models other apps loaded through Ollama are unloaded too."
             Toggle { checked: !!pane.cfg.unloadOnFullscreen; onToggled: c => Settings.set("ai.unloadOnFullscreen", c) }
         }
+        SettingsDivider {}
+        SettingsRow {
+            label: "Unload unused models"
+            note: "Free graphics memory as soon as a model sits unused."
+            tip: "Every AI server's models count (Ollama, llama.cpp, Magnitude, model services like Inkling): hearth watches when each one last used the GPU. A model that takes long to load waits longer (ten times its load time, up to an hour). Pin a model in the AI menu to keep it loaded."
+            Toggle { checked: pane.cfg.autoUnload !== false; onToggled: c => Settings.set("ai.autoUnload", c) }
+        }
+        SettingsDivider {}
+        SettingsRow {
+            label: "Unused for"
+            note: "The shortest a model stays loaded after its last use."
+            enabled: pane.cfg.autoUnload !== false
+            Dropdown {
+                implicitWidth: 160
+                options: [1, 2, 5, 10, 15, 30].map(n => ({ value: n, label: n + (n === 1 ? " minute" : " minutes") }))
+                value: Number(pane.cfg.idleMinutes) || 5
+                onPicked: v => Settings.set("ai.idleMinutes", v)
+            }
+        }
+        SettingsDivider {}
+        SettingsRow {
+            label: "Make room for new requests"
+            note: "When graphics memory runs out, unload the models idle longest."
+            tip: "When the card is nearly full, a model spills into system RAM, or a model is about to load without room, hearth unloads idle models first: the ones unused longest and quickest to load again go first. A model using the GPU right now is never unloaded."
+            Toggle { checked: pane.cfg.evictOnPressure !== false; onToggled: c => Settings.set("ai.evictOnPressure", c) }
+        }
+        SettingsDivider {}
+        SettingsRow {
+            label: "Show GPU use in the menu bar"
+            note: "GPU busy % and graphics memory % next to the AI icon."
+            Toggle { checked: pane.cfg.menuBarStats !== false; onToggled: c => Settings.set("ai.menuBarStats", c) }
+        }
     }
 
     // --- assistant ---

@@ -1281,6 +1281,8 @@ def main():
                     st = ARB.snapshot(watching["on"], manage=True)
                     while ARB.notices:
                         emit(ARB.notices.pop(0))
+                    # The menu bar's GPU % / VRAM % stay current.
+                    emit({"type": "gpu", "gpu": st["gpu"], "loadedCount": len(st["loaded"])})
                     if watching["on"] or now - last_emit >= 30:
                         last_emit = now
                         emit(st)
