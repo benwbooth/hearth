@@ -86,6 +86,21 @@ Singleton {
         level = 0;
     }
 
+    // While thinking, a local assistant model that isn't loaded yet is
+    // starting up (a model on demand can take a minute): say so.
+    readonly property bool loadingModel: {
+        if (phase !== "thinking") return false;
+        const a = Ai.cfg.assistant || {};
+        const p = Ai.provider(a.provider);
+        return !!p && p.kind === "local" && !!a.model && !Ai.isLoaded(a.provider, a.model);
+    }
+    readonly property string thinkingText: loadingModel ? "Loading the model…" : "Thinking…"
+    Timer {
+        // The model list refreshes every 30 s when no AI view is open.
+        interval: 2000; repeat: true; running: root.loadingModel
+        onTriggered: Ai.refresh()
+    }
+
     // Typed questions (Spotlight's "Ask") skip the microphone.
     function ask(text) {
         text = (text || "").trim();

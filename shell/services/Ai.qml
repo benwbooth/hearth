@@ -79,7 +79,9 @@ Singleton {
     signal tabRequested(string tab, string category)
     function provider(id) { return providers.find(p => p.id === id) || null; }
     function isLoaded(pid, model) {
-        return loaded.some(m => m.provider === pid && (m.model === model || m.name === model));
+        // A service unit serves one model, whatever it calls it
+        // ("inkling-2-mini" in settings, "Inkling 2 Mini" once loaded).
+        return loaded.some(m => m.provider === pid && (pid.startsWith("service:") || m.model === model || m.name === model));
     }
 
     // Several views (Settings > AI, the menu bar popup) can watch: the

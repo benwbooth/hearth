@@ -73,6 +73,9 @@ DEFAULTS = {
     "idleMinutes": 5,
     "loadTimeFactor": 10,
     "evictOnPressure": True,
+    # Graphics memory kept free for the desktop when making room for a
+    # model: windows squeezed out of VRAM flicker and show artifacts.
+    "desktopReserveMB": 2048,
     "pinned": [],
     "modelDirs": [],
     # Context window for the llama-servers hearth starts (its llama.cpp
@@ -1473,6 +1476,11 @@ class Arbiter:
         g = st["gpu"]
         if not g:
             return 0
+        # Keep room for the desktop's own buffers on top of the model.
+        try:
+            need += max(0, int(settings()[0].get("desktopReserveMB", 2048))) << 20
+        except (TypeError, ValueError):
+            need += 2048 << 20
         deadline = time.time() + timeout
         tried = set(exclude)
         while g["free"] < need and time.time() < deadline:
@@ -1788,7 +1796,9 @@ def make_room_cli(arg):
                     size += os.path.getsize(f)
         need = ARB.need_for(key, size)
     free = ARB.make_room(need, exclude=(key,))
-    print("hearth-ai: %s free of %s needed" % (human_bytes(free), human_bytes(need)), file=sys.stderr)
+    reserve = int(settings()[0].get("desktopReserveMB", 2048) or 0) << 20
+    print("hearth-ai: %s free of %s needed (%s for the model, %s kept for the desktop)"
+          % (human_bytes(free), human_bytes(need + reserve), human_bytes(need), human_bytes(reserve)), file=sys.stderr)
     ARB.mem.save(force=True)
 
 

@@ -95,7 +95,7 @@ Indicator {
             }
             Label {
                 Layout.fillWidth: true
-                text: Voice.phase === "thinking" ? "Thinking…" : Voice.reply
+                text: Voice.phase === "thinking" ? Voice.thinkingText : Voice.reply
                 visible: text !== ""
                 color: Voice.replyError ? Theme.warn : Theme.fg
                 wrapMode: Text.Wrap

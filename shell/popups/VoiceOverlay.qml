@@ -150,7 +150,7 @@ Scope {
                         anchors.right: closeBtn.left
                         anchors.verticalCenter: parent.verticalCenter
                         text: ({ connecting: "Starting…", listening: "Listening…", transcribing: "Listening…",
-                                 thinking: "Thinking…", answer: Voice.replyError ? "hearth" : "hearth" })[Voice.phase] || ""
+                                 thinking: Voice.thinkingText, answer: Voice.replyError ? "hearth" : "hearth" })[Voice.phase] || ""
                         color: Theme.fgSecondary
                         font.weight: Font.DemiBold
                     }
