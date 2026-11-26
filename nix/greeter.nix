@@ -187,6 +187,9 @@ in
 
     services.greetd = {
       enable = true;
+      # Not After=plymouth-quit-wait: hearth hands Plymouth over itself
+      # (below).
+      greeterManagesPlymouth = plymouth;
       settings.default_session = {
         command = "${session}";
         user = "greeter";
@@ -204,7 +207,6 @@ in
     #   (--retain-splash). plymouth-quit.service then has nothing to do.
     systemd.services.greetd = {
       serviceConfig.Type = lib.mkForce "simple";
-      after = lib.mkIf plymouth (lib.mkForce [ "systemd-user-sessions.service" "getty@tty1.service" ]);
       serviceConfig.ExecStartPre = lib.mkIf plymouth [ "-${pkgs.plymouth}/bin/plymouth deactivate" ];
       serviceConfig.ExecStartPost = lib.mkIf plymouth [ "-${pkgs.writeShellScript "hearth-greeter-plymouth-quit" ''
         ${pkgs.plymouth}/bin/plymouth --ping || exit 0
