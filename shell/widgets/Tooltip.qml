@@ -62,6 +62,23 @@ PopupWindow {
     }
     onTextChanged: if (!text) shown = false
 
+    // Frames drawn since it was mapped: the tag stays invisible until three
+    // (the pop-up's first frame shows at its parent's corner, the Dock's
+    // lower-left, before arbor places it), as the Dock previews do.
+    property int framesShown: 0
+    onVisibleChanged: framesShown = 0
+    Connections {
+        target: tip.visible && tip.framesShown < 3 ? frame.Window.window : null
+        ignoreUnknownSignals: true
+        // (Another frame asked for each time: a tooltip's tag doesn't change,
+        // so the window would otherwise draw once and stop.)
+        function onFrameSwapped() {
+            tip.framesShown++;
+            const w = frame.Window.window;
+            if (tip.framesShown < 3 && w) Qt.callLater(() => w.update());
+        }
+    }
+
     Timer {
         id: showTimer
         onTriggered: tip.shown = tip.hovered && tip.text !== ""
@@ -73,7 +90,7 @@ PopupWindow {
         y: tip.pad
         width: implicitWidth
         height: implicitHeight
-        opacity: tip.shown ? 1 : 0
+        opacity: tip.shown && tip.framesShown >= 3 ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: tip.shown ? 110 : (tip.instant ? 0 : 160); easing.type: Easing.OutCubic } }
         onOpacityChanged: if (opacity === 0 && !tip.shown) tip.visible = false
         tint: Theme.glassTip
