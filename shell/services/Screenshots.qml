@@ -225,6 +225,29 @@ printf %s "$out"`;
         const uri = "file://" + encodeURI(file);
         sh(`busctl --user call org.freedesktop.FileManager1 /org/freedesktop/FileManager1 org.freedesktop.FileManager1 ShowItems ass 1 "$1" "" >/dev/null 2>&1 || xdg-open "$2"`,
            [uri, file.replace(/\/[^\/]*$/, "") || "/"]);
+        // Asked over D-Bus, grove gets no activation token, so arbor leaves
+        // its window behind the editor: bring it forward once it shows the
+        // folder (its newest window, the one titled after the folder first).
+        raiseFiles.folder = (file.replace(/\/[^\/]*$/, "") || "/").replace(/^.*\//, "");
+        raiseFiles.before = Compositor.windows.filter(w => w.appId === "grove").map(w => w.id);
+        raiseFiles.tries = 0;
+        raiseFiles.restart();
+    }
+    Timer {
+        id: raiseFiles
+        property string folder: ""
+        property var before: []
+        property int tries: 0
+        interval: 150
+        repeat: true
+        onTriggered: {
+            const g = Compositor.windows.filter(w => w.appId === "grove");
+            const fresh = g.filter(w => before.indexOf(w.id) < 0);
+            const titled = g.filter(w => folder && String(w.title || "").indexOf(folder) >= 0);
+            const pick = fresh.length ? fresh[fresh.length - 1] : titled.length ? titled[0] : null;
+            if (pick && !pick.focused) { Compositor.focusWindow(pick.id); stop(); return; }
+            if (pick || ++tries >= 20) stop();
+        }
     }
 
     // --- delay ------------------------------------------------------------

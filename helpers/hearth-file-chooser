@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+"""Ask the desktop's file chooser (the xdg-desktop-portal FileChooser, which
+arbor routes to grove) for a file, and print the chosen path.
+
+    hearth-file-chooser save --title T [--name N] [--folder DIR]
+                             [--filter "PNG image:*.png" ...]
+    hearth-file-chooser open --title T [--folder DIR] [--filter ...]
+
+Prints one JSON line: {"path": "/chosen/file", "filter": "PNG image"} or
+{"cancelled": true}. Run from QML with Process (never on the UI thread):
+Qt's own FileDialog falls back to its unthemed built-in dialog when Qt has
+no platform theme with native dialogs, which is the case for hearth.
+"""
+import argparse
+import json
+import os
+import secrets
+import sys
+import urllib.parse
+
+import dbus
+import dbus.mainloop.glib
+from gi.repository import GLib
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("mode", choices=["save", "open"])
+    ap.add_argument("--title", default="")
+    ap.add_argument("--name", default="")
+    ap.add_argument("--folder", default="")
+    ap.add_argument("--filter", action="append", default=[], help='"Label:*.ext;*.ext2"')
+    a = ap.parse_args()
+
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    bus = dbus.SessionBus()
+    portal = bus.get_object("org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop")
+    chooser = dbus.Interface(portal, "org.freedesktop.portal.FileChooser")
+
+    token = "hearth" + secrets.token_hex(6)
+    sender = bus.get_unique_name()[1:].replace(".", "_")
+    handle = f"/org/freedesktop/portal/desktop/request/{sender}/{token}"
+
+    filters = []
+    for f in a.filter:
+        label, _, pats = f.partition(":")
+        globs = [(dbus.UInt32(0), p.strip()) for p in pats.split(";") if p.strip()]
+        if globs:
+            filters.append(dbus.Struct((label, dbus.Array(globs, signature="(us)")), signature=None))
+
+    opts = {"handle_token": token, "modal": dbus.Boolean(True)}
+    if filters:
+        opts["filters"] = dbus.Array(filters, signature="(sa(us))")
+        opts["current_filter"] = filters[0]
+    if a.folder and os.path.isdir(a.folder):
+        opts["current_folder"] = dbus.ByteArray(os.fsencode(a.folder) + b"\0")
+    if a.mode == "save" and a.name:
+        opts["current_name"] = a.name
+
+    loop = GLib.MainLoop()
+    result = {"cancelled": True}
+
+    def on_response(code, results):
+        uris = results.get("uris", [])
+        if code == 0 and uris:
+            path = urllib.parse.unquote(urllib.parse.urlparse(str(uris[0])).path)
+            result.clear()
+            result["path"] = path
+            cf = results.get("current_filter")
+            if cf:
+                result["filter"] = str(cf[0])
+        loop.quit()
+
+    bus.add_signal_receiver(on_response, signal_name="Response",
+                            dbus_interface="org.freedesktop.portal.Request", path=handle)
+    try:
+        if a.mode == "save":
+            chooser.SaveFile("", a.title, opts)
+        else:
+            chooser.OpenFile("", a.title, opts)
+    except dbus.DBusException as e:
+        print(json.dumps({"error": str(e)}))
+        return 1
+    loop.run()
+    print(json.dumps(result))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

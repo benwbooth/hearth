@@ -257,6 +257,12 @@ MouseArea {
     PopupWindow {
         id: preview
         property bool hovered: false
+        property int framesShown: 0
+        Connections {
+            target: preview.visible && preview.framesShown < 3 ? previewFrame.Window.window : null
+            ignoreUnknownSignals: true
+            function onFrameSwapped() { preview.framesShown++; }
+        }
         // Placed once, where the icon is when it opens, and kept there:
         // anchored to the icon itself it followed the Dock's magnification
         // a frame behind and wobbled as the pointer swept across.
@@ -281,7 +287,9 @@ MouseArea {
         anchor.margins.left: task.edge === "left" ? atGap : task.edge === "right" ? -atGap : 0
         color: "transparent"
         visible: false
-        onVisibleChanged: if (task.dock) {
+        onVisibleChanged: {
+            framesShown = 0;
+            if (!task.dock) return;
             ShellState.dockPreviews += visible ? 1 : -1;
             if (visible) {
                 // The previous app's previews go at once.
@@ -330,6 +338,12 @@ MouseArea {
             y: preview.pad
             width: implicitWidth
             height: implicitHeight
+            // Invisible (glass too) until the pop-up has drawn three frames,
+            // then a quick fade in: an empty box the size of a preview
+            // flashed in the screen's lower-left corner, the pop-up's first
+            // frame before arbor placed it.
+            opacity: preview.framesShown >= 3 ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
             implicitWidth: previewCol.implicitWidth + 16
             implicitHeight: previewCol.implicitHeight + 16
             radius: Theme.menuRadius

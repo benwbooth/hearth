@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Dialogs
 import QtQuick.Effects
 import QtQuick.Shapes
 import Quickshell
@@ -126,25 +125,34 @@ Scope {
             function showFolder() { save(p => Screenshots.showInFolder(p)); }
             function newShot() { Screenshots.closeEditor(); Screenshots.later(0, () => Screenshots.overlayRequested("")); }
 
-            FileDialog {
+            // Save As: the desktop's file chooser (the portal, so grove),
+            // through helpers/hearth-file-chooser. Qt's FileDialog showed its
+            // own unthemed fallback dialog here.
+            Process {
                 id: saveDialog
-                title: "Save Screenshot As"
-                fileMode: FileDialog.SaveFile
-                nameFilters: ["PNG image (*.png)", "JPEG image (*.jpg *.jpeg)", "WebP image (*.webp)"]
-                defaultSuffix: Screenshots.extFor(Screenshots.opt("format"))
-                onAccepted: {
-                    let path = decodeURIComponent(String(selectedFile).replace(/^file:\/\//, ""));
-                    if (!/\.(png|jpe?g|webp)$/i.test(path)) path += "." + Screenshots.extFor(Screenshots.opt("format"));
-                    win.exportPng(f => Screenshots.saveFile(f, Screenshots.editorTitle, path, p => {
-                        win.savedPath = p;
-                        win.flash("Saved as " + p.replace(Screenshots.home, "~"));
-                    }));
+                stdout: StdioCollector {
+                    onStreamFinished: {
+                        let r = {};
+                        try { r = JSON.parse(text.trim() || "{}"); } catch (e) {}
+                        if (!r.path) return;
+                        let path = r.path;
+                        const fmt = /jpe?g/i.test(r.filter || "") ? "jpg" : /webp/i.test(r.filter || "") ? "webp" : "";
+                        if (!/\.(png|jpe?g|webp)$/i.test(path)) path += "." + (fmt || Screenshots.extFor(Screenshots.opt("format")));
+                        win.exportPng(f => Screenshots.saveFile(f, Screenshots.editorTitle, path, p => {
+                            win.savedPath = p;
+                            win.flash("Saved as " + p.replace(Screenshots.home, "~"));
+                        }));
+                    }
                 }
             }
             function saveAs() {
-                saveDialog.currentFolder = "file://" + Screenshots.expand(Screenshots.opt("folder"));
-                saveDialog.selectedFile = "file://" + Screenshots.savePathFor(Screenshots.editorTitle);
-                saveDialog.open();
+                if (saveDialog.running) return;
+                const suggested = Screenshots.savePathFor(Screenshots.editorTitle);
+                saveDialog.command = ["hearth-file-chooser", "save", "--title", "Save Screenshot As",
+                    "--folder", Screenshots.expand(Screenshots.opt("folder")),
+                    "--name", suggested.replace(/^.*\//, ""),
+                    "--filter", "PNG image:*.png", "--filter", "JPEG image:*.jpg;*.jpeg", "--filter", "WebP image:*.webp"];
+                saveDialog.running = true;
             }
 
             // Scripting (and tests): hearth-ipc call screenshot-editor addMark '{"type":"arrow",...}' | crop X Y W H | save | copy | undo
