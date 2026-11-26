@@ -43,11 +43,23 @@ RIGDIR = os.path.join(os.environ["XDG_RUNTIME_DIR"], "menu-rig-survey" + WORKER)
 # MENU_RIG_DISK default). /run/user is a small RAM tmpfs the live session
 # needs; Flatpak apps' data filled it.
 DISKDIR = os.path.join("/var/tmp", "menu-rig-" + os.environ.get("USER", "ben"), "menu-rig-survey" + WORKER)
+# Probed apps' own folders (home, XDG dirs, temp), outside /var/tmp: WebKit's
+# sandbox mounts them and then can't make its /var/tmp symlink ("destination
+# exists": Evolution never started). Sandboxed AppImages keep DISKDIR (their
+# sandbox hides your home).
+APPROOT = os.path.join(os.path.expanduser("~/.cache/hearth-menu-survey"), "menu-rig-survey" + WORKER)
 
 
 def rmtree(path):
     """Delete, read-only folders too (Flatpak payloads): rmtree's
-    ignore_errors otherwise leaves them, gigabytes at a time."""
+    ignore_errors otherwise leaves them, gigabytes at a time. Only inside
+    the survey's own folders: anything else is refused."""
+    real = os.path.realpath(path)
+    user = os.environ.get("USER", "ben")
+    roots = (f"/var/tmp/menu-rig-{user}/", os.path.expanduser("~/.cache/hearth-menu-survey/"))
+    if not real.startswith(roots) or real.rstrip("/") in {r.rstrip("/") for r in roots}:
+        print(f"menu-probe: refusing to delete {path}", file=sys.stderr, flush=True)
+        return
     for dp, dn, fn in os.walk(path):
         for d in dn:
             try:
@@ -396,7 +408,7 @@ def throttle_flatpak_scopes():
 
 
 def own_app_procs():
-    mine = os.path.join(DISKDIR, "apps") + "/"
+    mine = (os.path.join(DISKDIR, "apps") + "/", os.path.join(APPROOT, "apps") + "/")
     return app_procs(lambda x: x.startswith(mine))
 
 
@@ -631,7 +643,7 @@ def attempt(attr, argv, variant, extra_env, extra_args, wait_win=50, wait_menu=1
     # Every attempt gets fresh home, runtime and temp dirs: a killed app's
     # single-instance lock or socket ("Strawberry is already running") must
     # not stop the next app, and no first-run state carries over.
-    base = os.path.join(DISKDIR, "apps", str(SCOPE["n"] + 1))
+    base = os.path.join(DISKDIR if argv[0] == "bwrap" else APPROOT, "apps", str(SCOPE["n"] + 1))
     rmtree(base)
     dirs = {"HOME": "home", "XDG_CONFIG_HOME": "home/.config", "XDG_CACHE_HOME": "home/.cache",
             "XDG_DATA_HOME": "home/.local/share", "XDG_STATE_HOME": "home/.local/state",

@@ -69,13 +69,13 @@ EOF
   # closure: evolution-data-server, gnome-terminal-server...). From the
   # system only an allow-list: never the keyring, the a11y bus (started
   # separately), systemd, your accounts or file manager.
-  # The apps' runtime dir (Flatpak instances, sockets, whatever an app
-  # writes to XDG_RUNTIME_DIR) on disk too, linked from $R/run: one app
-  # once filled the 6 GB /run/user tmpfs (2026-11-25).
-  mkdir -p "$R/services" "$D/run"
-  chmod 700 "$D/run"
-  [[ -L $R/run || ! -e $R/run ]] || rm -rf "${R:?}/run"
-  ln -sfn "$D/run" "$R/run"
+  # The rig's own runtime dir (its bus, PipeWire, a11y and portal sockets)
+  # stays a real folder here: WebKit's sandbox mounts the a11y socket's
+  # folder and fails on a link (Evolution). Probed apps get their own
+  # runtime dirs on disk (menu-probe.py), and logs are on disk (daemon).
+  [[ ! -L $R/run ]] || rm -f "$R/run"
+  mkdir -p "$R/services" "$R/run"
+  chmod 700 "$R/run"
   for f in /run/current-system/sw/share/dbus-1/services/*.service /etc/profiles/per-user/$USER/share/dbus-1/services/*.service; do
     case $(basename "$f" .service) in
       ca.desrt.dconf|org.freedesktop.portal.Desktop|org.freedesktop.portal.Documents|org.freedesktop.portal.Flatpak|\
