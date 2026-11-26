@@ -321,6 +321,8 @@
     nixosModules.session = import ./nix/session.nix self;
     # The boot menu and splash (README "Boot").
     nixosModules.boot = import ./nix/boot.nix self;
+    # Hearth's changes to other apps, one file per app (nix/apps).
+    nixosModules.apps = import ./nix/apps self;
 
     # `nix develop`, then `quickshell -p shell` runs straight from the
     # checkout and hot-reloads on every save.
