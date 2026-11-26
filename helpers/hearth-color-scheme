@@ -440,7 +440,7 @@ def apply_qtct():
                 "menus_have_icons=true\n"
                 "show_shortcuts_in_context_menus=true\n"
                 "toolbutton_style=4\n"
-                "underline_shortcut=1\n"
+                "underline_shortcut=0\n"
                 "wheel_scroll_lines=3\n")
         for path, text in ((colors, scheme), (os.path.join(base, ct + ".conf"), conf)):
             try:
