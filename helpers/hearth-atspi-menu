@@ -260,7 +260,7 @@ def split_shortcut(label):
     if SHORTCUT_RE is None:
         import re
         mod = r"(?:Ctrl|Shift|Alt|Super|Meta|Cmd|Command|Option|AltGr)\+"
-        SHORTCUT_RE = re.compile(r"^(.*?\S)\s+(\[[^\]]+\]|(?:" + mod + r")+\S+|F\d{1,2})$")
+        SHORTCUT_RE = re.compile(r"^(.*?\S)\s+(\[[^\]]+\]|(?:" + mod + r")+\S+|F\d{1,2}|Del|Ins|Esc|PgUp|PgDn|Backspace)$")
     m = SHORTCUT_RE.match(label)
     if not m:
         return label, ""

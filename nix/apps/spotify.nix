@@ -10,9 +10,15 @@ self:
 # can't fit it into the side area; on Wayland it fits. nixpkgs' wrapper
 # drops DISPLAY too, but only with NIXOS_OZONE_WL=1, which Hearth doesn't
 # set. So the launcher drops it: there's no X display to choose.
+#
+# The global menu: on X11 CEF exported Spotify's menus over dbusmenu; on
+# Wayland it exports none, and hearth reads the "⋯" menu in its window over
+# AT-SPI instead (File, Edit, View, Playback, Develop, Help, with their
+# shortcuts), which CEF only builds with electron.nix's global-menu flags.
 { config, lib, pkgs, ... }:
 let
   cfg = config.hearth.apps.spotify;
+  e = import ./electron.nix self { inherit lib pkgs; };
   wrapped = pkgs.symlinkJoin {
     name = "${cfg.package.name}-hearth";
     paths = [ cfg.package ];
@@ -21,7 +27,8 @@ let
       wrapProgram $out/bin/spotify \
         --unset DISPLAY \
         --add-flags "--enable-features=UseOzonePlatform" \
-        --add-flags "--ozone-platform=wayland"
+        --add-flags "--ozone-platform=wayland" \
+        ${lib.concatStringsSep " " e.globalMenuArgs}
     '';
   };
 in
