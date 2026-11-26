@@ -24,7 +24,11 @@ QS=$(grep -oE '/nix/store/[^ ]*quickshell-[^/ ]*/bin/quickshell' "$H/bin/hearth-
 cmd=${1:?command}; shift || true
 
 daemon() { local pidfile=$1 log=$2; shift 2
-  setsid bash -c 'echo $$ > "$0"; exec "$@"' "$pidfile" "$@" >"$log" 2>&1 </dev/null &
+  # Logs on disk, linked from $R: a chatty process once filled the 6 GB
+  # /run/user tmpfs (2026-11-25/26).
+  mkdir -p "$D/logs"
+  ln -sfn "$D/logs/$(basename "$log")" "$log"
+  setsid bash -c 'echo $$ > "$0"; exec "$@"' "$pidfile" "$@" >"$D/logs/$(basename "$log")" 2>&1 </dev/null &
   for _ in $(seq 40); do [[ -s $pidfile ]] && break; sleep 0.05; done; }
 
 priv_env() {

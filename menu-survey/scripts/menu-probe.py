@@ -674,12 +674,15 @@ def attempt(attr, argv, variant, extra_env, extra_args, wait_win=50, wait_menu=1
     APPDIRS.append(base)
     env.update(extra_env)
     envargs = [f"{k}={v}" for k, v in env.items()]
-    log = open(os.path.join(RIGDIR, "app.log"), "w")
+    # On disk (DISKDIR), never the /run/user tmpfs: an app that floods its
+    # output once filled it (2026-11-25/26).
+    os.makedirs(DISKDIR, exist_ok=True)
+    log = open(os.path.join(DISKDIR, "app.log"), "w")
     SCOPE["n"] += 1
     SCOPE["unit"] = f"menuprobe-{os.getpid()}-{SCOPE['n']}.scope"
     proc = subprocess.Popen(["systemd-run", "--user", "--scope", "--quiet", "--collect", "--unit", SCOPE["unit"],
                              "-p", "MemoryMax=8G", "-p", "CPUWeight=idle", "-p", "IOWeight=1",
-                             "-p", "AllowedCPUs=0-7,12-19", "prlimit", "--core=0", "--", "setsid", RIG, "run", "env", *envargs, *argv, *extra_args], env=ENV,
+                             "-p", "AllowedCPUs=0-7,12-19", "prlimit", "--core=0", "--fsize=1073741824", "--", "setsid", RIG, "run", "env", *envargs, *argv, *extra_args], env=ENV,
                             stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                             cwd=env["HOME"])  # apps drop logs/configs in their cwd
     t0 = time.time()
@@ -699,7 +702,7 @@ def attempt(attr, argv, variant, extra_env, extra_args, wait_win=50, wait_menu=1
         time.sleep(0.5)
     res = dict(attr=attr, variant=variant, argv=argv[:1] + extra_args, t_window=round(time.time() - t0, 1))
     if not win:
-        res.update(result="no-window", log_tail=tail(os.path.join(RIGDIR, "app.log")))
+        res.update(result="no-window", log_tail=tail(os.path.join(DISKDIR, "app.log")))
         # A tray-only app (Flameshot, EasyEffects, KTeaTime): no window, its
         # menu is its tray icon's. Nothing for the menu bar to show.
         tray = tray_items(proc.pid)
