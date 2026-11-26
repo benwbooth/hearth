@@ -74,11 +74,20 @@ Singleton {
     // for that app id is used when the window itself has none.
     property var lastByApp: ({})
     property var resolved: ({})     // x11 key -> the concrete request it found
+    // The app id a window's remembered menu is under: its own, or, for a
+    // dialog with an id of its own (LibreOffice's are "soffice" in front of
+    // "libreoffice-writer": Tip of the Day, Options), that of another window
+    // of the same process that has one.
+    function menuApp(w, map) {
+        if (!w || map[w.appId] || !w.pid) return w ? w.appId : "";
+        const o = Compositor.windows.find(x => x.pid === w.pid && x.id !== w.id && map[x.appId]);
+        return o ? o.appId : w.appId;
+    }
     property string noneKey: ""
     readonly property var request: {
         const own = root.ownRequest;
         if (own && own.key !== root.noneKey) return own;
-        const last = root.win ? root.lastByApp[root.win.appId] : null;
+        const last = root.win ? root.lastByApp[root.menuApp(root.win, root.lastByApp)] : null;
         return last || own;
     }
     readonly property string key: (request && request.key) || ""
@@ -105,7 +114,7 @@ Singleton {
     // While the app's menu isn't here: the last one it had (a dialog of
     // the app keeps it too, as on macOS).
     readonly property var ownTree: current ? menu
-        : (win ? (treeByApp[win.appId] || null) : null)
+        : (win ? (treeByApp[menuApp(win, treeByApp)] || null) : null)
     // Menus the helper adds to the window's own (MPRIS: a media player's
     // Playback), appended after them.
     property var extraMenus: null
