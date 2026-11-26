@@ -16,8 +16,9 @@ self:
 # hearth itself starts, which find it long done) is ordered after it.
 # arbor's session restore waits for hearth's menu bar the same way, and
 # arbor starts the menu registrar first thing (hearth/arbor/config.kdl).
-{ pkgs, ... }:
+{ lib, pkgs, ... }:
 let
+  hearth = self.packages.${pkgs.stdenv.hostPlatform.system}.hearth;
   wait = pkgs.writeShellScript "hearth-ready" ''
     names="org.kde.StatusNotifierWatcher org.freedesktop.Notifications com.canonical.AppMenu.Registrar"
     for _ in $(seq 120); do
@@ -91,5 +92,49 @@ in
       printf '[Unit]\nWants=hearth-ready.service\nAfter=hearth-ready.service\n' \
         > $out/lib/systemd/user/app-.service.d/50-hearth-ready.conf
     '')
+  ];
+
+  # The shell and the tools the session runs beside it: wallpaper, night
+  # light, idle/lock (swaybg, wlsunset, swayidle), X11 apps
+  # (xwayland-satellite), the screenshot editor of the Print overlay
+  # (satty) and the launcher (vicinae).
+  environment.systemPackages = [
+    hearth
+    pkgs.swaybg pkgs.wlsunset pkgs.swayidle
+    pkgs.xwayland-satellite
+    pkgs.satty
+    pkgs.vicinae
+  ];
+
+  # Services hearth (and grove) use that Plasma used to turn on: UDisks2
+  # (drives, disk images), UPower and power-profiles-daemon (the battery
+  # menu, the lock screen), GeoClue (location for apps that ask), dconf
+  # (hearth-portal's org.gnome.* settings), i2c (monitor brightness over
+  # DDC/CI with ddcutil).
+  services.udisks2.enable = lib.mkDefault true;
+  services.upower.enable = lib.mkDefault true;
+  services.power-profiles-daemon.enable = lib.mkDefault true;
+  services.geoclue2.enable = lib.mkDefault true;
+  programs.dconf.enable = lib.mkDefault true;
+  hardware.i2c.enable = lib.mkDefault true;
+
+  # hearth's lock screen: password and fingerprint run side by side
+  # (pam_fprintd blocks its stack, so each gets its own service).
+  security.pam.services.hearth-lock = { unixAuth = true; fprintAuth = false; };
+  security.pam.services.hearth-lock-fingerprint = {
+    unixAuth = false;
+    fprintAuth = true;
+    rules.auth.fprintd.args = [ "max-tries=10" ];
+  };
+  # hyprlock: the fallback locker if hearth's lock screen doesn't come up.
+  # Its module also turns on hypridle; the session idles with swayidle.
+  programs.hyprlock.enable = lib.mkDefault true;
+  services.hypridle.enable = lib.mkForce false;
+
+  # hearth's current wallpaper (still, video, metadata), copied here so the
+  # lock and login screens can show it: the greeter can't read ~.
+  systemd.tmpfiles.rules = [
+    "d /var/lib/hearth 0755 root root -"
+    "d /var/lib/hearth/wallpaper 2775 root users -"
   ];
 }

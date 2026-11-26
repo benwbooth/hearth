@@ -323,6 +323,12 @@
     nixosModules.boot = import ./nix/boot.nix self;
     # Hearth's changes to other apps, one file per app (nix/apps).
     nixosModules.apps = import ./nix/apps self;
+    # The portal table: hearth's backend, arbor's, a file chooser, oo7's.
+    nixosModules.portal = import ./nix/portal.nix self;
+    # The oo7 keyring, gcr's SSH agent and hearth's password dialogs.
+    nixosModules.keyring = import ./nix/keyring.nix self;
+    # The Hearth look for Qt, GTK and Flatpak apps.
+    nixosModules.appearance = import ./nix/appearance.nix self;
 
     # `nix develop`, then `quickshell -p shell` runs straight from the
     # checkout and hot-reloads on every save.
