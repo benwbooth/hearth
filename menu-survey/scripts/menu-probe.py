@@ -995,7 +995,9 @@ def tail(fn, n=6, limit=64 * 1024):
         with open(fn, "rb") as f:
             f.seek(0, os.SEEK_END)
             f.seek(max(0, f.tell() - limit))
-            return f.read().decode(errors="replace").strip().splitlines()[-n:]
+            # Each line cut too: a terminal program draws its whole screen
+            # on one line (klip: 6.6 GB).
+            return [l[:400] for l in f.read().decode(errors="replace").strip().splitlines()[-n:]]
     except OSError:
         return []
 
@@ -1395,7 +1397,69 @@ def app_rows():
             continue
 
 
+SLICE = "hearth-menu-survey.slice"
+SLICE_LIMITS = ["MemoryHigh=12G", "MemoryMax=16G", "CPUWeight=idle", "IOWeight=1"]
+
+
+def ensure_slice():
+    """The survey's slice and its limits, whoever starts a run: all of it
+    (workers, rigs, probed apps, one-off runs) in 16 GB (Ben, 2026-11-26:
+    11 workers once held 40 GB). Runtime properties: set on every start."""
+    subprocess.run(["systemctl", "--user", "start", SLICE], capture_output=True, timeout=20)
+    subprocess.run(["systemctl", "--user", "set-property", "--runtime", SLICE, *SLICE_LIMITS],
+                   capture_output=True, timeout=20)
+
+
+def row_line(r, limit=100_000):
+    """One result row as a JSON line, never over `limit` bytes: bulky
+    fields (logs, inspection dumps) are cut first."""
+    line = json.dumps(r)
+    if len(line) > limit:
+        r = dict(r)
+        for k in ("log_tail", "inspect", "error"):
+            if k in r and len(json.dumps(r[k])) > limit // 10:
+                r[k] = ["(cut: over the row size limit)"] if k == "log_tail" else "(cut: over the row size limit)"
+        line = json.dumps(r)
+        if len(line) > limit:
+            line = json.dumps({k: r[k] for k in ("attr", "variant", "result") if k in r} | {"note": "row cut: over the size limit"})
+    return line + "\n"
+
+
+def result_attrs(fn, limit=1 << 20):
+    """The attrs measured in a results file, read a line at a time; a line
+    over `limit` bytes is skipped, never loaded whole."""
+    attrs = set()
+    try:
+        with open(fn, "rb") as f:
+            while True:
+                l = f.readline(limit)
+                if not l:
+                    break
+                if not l.endswith(b"\n"):
+                    while l and not l.endswith(b"\n"):  # the rest of an over-long line
+                        l = f.readline(limit)
+                    continue
+                try:
+                    attrs.add(json.loads(l)["attr"])
+                except (ValueError, KeyError):
+                    pass
+    except OSError:
+        pass
+    return attrs
+
+
+def own_rss_mb():
+    try:
+        for l in open("/proc/self/status"):
+            if l.startswith("VmRSS:"):
+                return int(l.split()[1]) // 1024
+    except OSError:
+        pass
+    return 0
+
+
 def main():
+    ensure_slice()
     # Every run, the workers and one-off test runs alike, in its own scope
     # at idle CPU/IO weight off the desktop's reserved cores: the rig it
     # starts (arbor, hearth, the bus) inherits it.
@@ -1405,7 +1469,7 @@ def main():
     if os.environ.get("MENU_PROBE_LIMITED") != "1" and not in_worker:
         os.environ["MENU_PROBE_LIMITED"] = "1"
         os.execvp("systemd-run", ["systemd-run", "--user", "--scope", "--quiet", "--collect",
-                                  "-p", "CPUWeight=idle", "-p", "IOWeight=1", "-p", "AllowedCPUs=0-7,12-19",
+                                  "-p", f"Slice={SLICE}", "-p", "MemoryMax=4G", "-p", "CPUWeight=idle", "-p", "IOWeight=1", "-p", "AllowedCPUs=0-7,12-19",
                                   sys.executable, "-I", os.path.abspath(__file__), *sys.argv[1:]])
     ap = argparse.ArgumentParser()
     ap.add_argument("--from", dest="start", type=int, default=1)
@@ -1419,7 +1483,7 @@ def main():
     a = ap.parse_args()
     done = set()
     for fn in glob.glob(os.path.join(ROOT, "data", "probe*.jsonl")) + glob.glob(os.path.join(LOCAL, "probe*.jsonl")):
-        done |= {json.loads(l)["attr"] for l in open(fn)}
+        done |= result_attrs(fn)
     if a.attrs:
         todo = a.attrs.split(",")
     else:
@@ -1453,6 +1517,12 @@ def main():
     streak = 0
     with open(OUT, "a") as pub, open(os.path.join(LOCAL, f"probe{WORKER}.jsonl"), "a") as loc:
         for attr in todo:
+            # A probe that grew (a leak, a huge read) stops instead of
+            # growing on: its service is restarted by restart-workers.sh
+            # and skips what it measured.
+            if own_rss_mb() > 1500:
+                print(f"menu-probe: {own_rss_mb()} MB resident, stopping", flush=True)
+                break
             f = loc if attr.startswith("installed:") else pub
             t = time.time()
             if not rig_alive():
@@ -1471,7 +1541,7 @@ def main():
                 except Exception as e:
                     print(f"cleanup failed: {e!r}", file=sys.stderr, flush=True)
             for r in rows:
-                f.write(json.dumps(r) + "\n")
+                f.write(row_line(r))
             f.flush()
             last = rows[-1]
             # Ten apps in a row without a window: the harness is broken (an
