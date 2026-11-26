@@ -602,7 +602,7 @@ MouseArea {
             MenuItem {
                 visible: !!task.entry
                 text: "Show in Files"
-                icon: "system-file-manager"
+                icon: "grove"
                 onTriggered: { menu.close(); Launchpad.showInFiles(task.modelData.key); }
             }
             // Assign To: open this app's windows on a named workspace (a

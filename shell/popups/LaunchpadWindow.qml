@@ -821,7 +821,7 @@ Scope {
                     }
                     MenuItem {
                         text: "Show in Files"
-                        icon: "system-file-manager"
+                        icon: "grove"
                         onTriggered: { const k = menuCol.key; menu.close(); Launchpad.hide(); Launchpad.showInFiles(k); }
                     }
                 }
