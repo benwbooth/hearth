@@ -132,6 +132,11 @@ def drop_key(sections, header, key):
 # --- kdeglobals ---------------------------------------------------------------
 
 def scheme_file():
+    # hearth's own copies first (helpers/color-schemes: Breeze's went with
+    # Plasma, and with none found kdeglobals was never written).
+    own = os.path.join(os.path.dirname(os.path.realpath(__file__)), "color-schemes", SCHEME + ".colors")
+    if os.path.isfile(own):
+        return own
     for d in data_dirs():
         p = os.path.join(d, "color-schemes", SCHEME + ".colors")
         if os.path.isfile(p):
@@ -153,6 +158,29 @@ def apply_kdeglobals():
     sections = [s for s in sections if not colour(s[0])]
     first = next((i for i, s in enumerate(sections) if s[0] is not None), len(sections))
     sections[first:first] = [(h, [l for l in lines if l.strip()]) for h, lines in scheme if colour(h)]
+    # hearth's accent where KDE uses one (Breeze's own is #3daee9): the
+    # selection, focus/hover lines and links in every colour group, so KDE
+    # and Kirigami apps (Haruna...) select in the same blue as hearth and our
+    # apps; and Inter, hearth's UI font.
+    accent = (ACCENT or ("#0a84ff" if DARK else "#007aff")).lower()
+    if accent == "#007aff" and DARK:
+        accent = "#0a84ff"
+    rgb = ",".join(str(int(accent[i:i + 2], 16)) for i in (1, 3, 5))
+    for h, _ in sections:
+        if h and h.startswith("[Colors:"):
+            set_key(sections, h, "DecorationFocus", rgb)
+            set_key(sections, h, "DecorationHover", rgb)
+            set_key(sections, h, "ForegroundLink", rgb)
+    for key in ("BackgroundNormal", "BackgroundAlternate"):
+        set_key(sections, "[Colors:Selection]", key, rgb)
+    set_key(sections, "[Colors:Selection]", "ForegroundNormal", "255,255,255")
+    set_key(sections, "[Colors:Selection]", "ForegroundActive", "255,255,255")
+    set_key(sections, "[General]", "AccentColor", rgb)
+    set_key(sections, "[General]", "font", "Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1")
+    set_key(sections, "[General]", "menuFont", "Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1")
+    set_key(sections, "[General]", "toolBarFont", "Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1")
+    set_key(sections, "[General]", "smallestReadableFont", "Inter,8,-1,5,400,0,0,0,0,0,0,0,0,0,0,1")
+    set_key(sections, "[WM]", "activeFont", "Inter,10,-1,5,600,0,0,0,0,0,0,0,0,0,0,1")
     set_key(sections, "[General]", "ColorScheme", SCHEME)
     drop_key(sections, "[General]", "ColorSchemeHash")
     set_key(sections, "[Icons]", "Theme", ICONS)
