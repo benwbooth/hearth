@@ -354,6 +354,9 @@ MouseArea {
             Behavior on opacity { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
             implicitWidth: previewCol.implicitWidth + 16
             implicitHeight: previewCol.implicitHeight + 16
+            // Dense glass, as a tooltip's: the lighter menu glass went mid-grey
+            // over a bright window and the text washed out.
+            tint: Theme.glassTip
             radius: Theme.menuRadius
 
             HoverHandler { id: previewHover; onHoveredChanged: if (!hovered) previewHide.restart() }
@@ -371,7 +374,10 @@ MouseArea {
                 Label {
                     visible: !task.running && !task.dock && task.entry && task.entry.comment !== ""
                     text: task.entry ? task.entry.comment : ""
-                    color: Theme.fgDim
+                    // (The text colour, dimmed: fgDim vanished on the glass
+                    // over a bright window.)
+                    color: Theme.fg
+                    opacity: 0.72
                     width: Math.min(implicitWidth, 360)
                 }
                 Label {
@@ -384,7 +390,8 @@ MouseArea {
                     visible: task.dock
                     text: (task.running ? (task.windows.length > 1 ? "Click to switch between its windows" : "Click to switch to it")
                                         : "Click to open") + " · right-click for options"
-                    color: Theme.fgDim
+                    color: Theme.fg
+                    opacity: 0.72
                     font.pointSize: Theme.smallFontSize
                 }
                 Row {
