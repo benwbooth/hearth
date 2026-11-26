@@ -22,8 +22,11 @@ Indicator {
     active: popup.open || Voice.visible
     tooltip: Voice.phase === "listening" ? "Listening…" : "Assistant and AI models"
     tooltipSub: Voice.shortcutText + " asks by voice"
-        + (Ai.loaded.length ? "\n" + Ai.loaded.map(m => `${m.name} loaded`).join("\n") : "")
-        + (Ai.mainGpu ? `\nGraphics memory: ${Ai.mainGpu.usedText} of ${Ai.mainGpu.totalText}` : "")
+        + (Ai.mainGpu ? `\nGPU ${Ai.mainGpu.busy}% busy · graphics memory ${Ai.mainGpu.percent}% (${Ai.mainGpu.usedText} of ${Ai.mainGpu.totalText})` : "")
+        + (Ai.loaded.length ? "\n" + Ai.loaded.map(m => `${m.name} loaded` + (m.vramText ? ` (${m.vramText})` : "")).join("\n") : "")
+    // GPU busy % and graphics memory % next to the icon (Settings > AI).
+    text: Ai.cfg.menuBarStats !== false && Ai.mainGpu && Ai.mainGpu.busy !== null && Ai.mainGpu.busy !== undefined
+          ? `${Ai.mainGpu.busy}% · ${Ai.mainGpu.percent}%` : ""
     onRightClicked: Settings.openRequested("ai")
 
     Connections {
@@ -43,7 +46,7 @@ Indicator {
 
     popupContent: ColumnLayout {
         spacing: 10
-        width: 400
+        width: 470
 
         // --- ask ---
         RowLayout {
@@ -137,44 +140,14 @@ Indicator {
             }
         }
 
-        // --- graphics memory and loaded models ---
-        Repeater {
-            model: Ai.gpus.filter(g => !g.integrated)
-            VramBar { required property var modelData; gpu: modelData; Layout.fillWidth: true }
-        }
-        Label {
-            text: Ai.loaded.length ? "Loaded models" : "No models loaded: they load when something uses them."
-            color: Theme.fgSecondary
-            font.pointSize: Theme.smallFontSize
+        // --- GPU, graphics memory, models ---
+        GpuMeters {
             Layout.fillWidth: true
-            wrapMode: Text.Wrap
+            gpu: Ai.mainGpu
+            loaded: Ai.loaded
+            apps: Ai.apps
         }
-        Repeater {
-            model: Ai.loaded
-            RowLayout {
-                id: lm
-                required property var modelData
-                Layout.fillWidth: true
-                spacing: 8
-                Icon { implicitSize: 18; name: Quickshell.shellDir + "/assets/ai.svg" }
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 0
-                    Label { text: lm.modelData.name; Layout.fillWidth: true }
-                    Label {
-                        text: lm.modelData.providerLabel + (lm.modelData.vramText ? " · " + lm.modelData.vramText + " graphics memory" : "") + (lm.modelData.external ? " · started outside hearth" : "")
-                        color: Theme.fgSecondary
-                        font.pointSize: Theme.smallFontSize
-                        Layout.fillWidth: true
-                    }
-                }
-                PushButton {
-                    text: lm.modelData.external ? "Stop" : "Unload"
-                    tooltip: lm.modelData.external ? "Stops that llama-server process (pid " + lm.modelData.pid + ") to free its memory" : "Frees its memory now; it loads again next time it's used"
-                    onClicked: Ai.unload(lm.modelData.provider, lm.modelData.name)
-                }
-            }
-        }
+        AiModels { Layout.fillWidth: true }
         Label {
             visible: Ai.lastError !== ""
             text: Ai.lastError
@@ -186,8 +159,8 @@ Indicator {
             Layout.fillWidth: true
             PushButton {
                 text: "Unload All"
-                visible: Ai.loaded.some(m => !m.external)
-                tooltip: "Unload every model hearth's AI servers have loaded (Ollama, llama.cpp)"
+                visible: Ai.loaded.some(m => m.auto && !m.pinned)
+                tooltip: "Unload every model the AI servers have loaded (Ollama, llama.cpp, Magnitude, model services), except kept ones"
                 onClicked: Ai.unloadAll()
             }
             Item { Layout.fillWidth: true }

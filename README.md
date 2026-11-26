@@ -634,9 +634,40 @@ One hub for every model the desktop uses: `helpers/hearth-ai`,
   size and capabilities. You can load, unload, download (Ollama names) and
   delete (asks first). Models stay loaded for the "Keep models loaded" time
   and can be unloaded whenever something goes full screen.
-- Graphics memory: used/total per GPU from amdgpu's sysfs, and per process
-  from DRM fdinfo (`drm-memory-vram`). The helper polls every 2 s while a
-  view shows it, otherwise every 30 s.
+- More backends: Magnitude (`magnitude serve` on :10100, its CLI for
+  list/load/stop/pull) and model services: systemd user units that run
+  one model each (`inkling-2-mini.service` and the like, found by their
+  `llama-server` run scripts; Load starts, Unload stops; units behind a
+  `*-proxy.socket` still start on demand).
+- Every installed model (`helpers/hearth_ai_models.py`), sorted into
+  Language, Embeddings, Speech to text, Text to speech, Image generation,
+  Video generation, Audio & music, Vision and Other: Ollama, Magnitude,
+  GGUF folders (llama.cpp's models folder, model services' folders,
+  Magnitude's folders, `ai.modelDirs`, LM Studio), the Hugging Face cache,
+  ComfyUI, Piper, Whisper. Each shows what can run it ("Runs in"). Delete
+  moves files to the trash (provider models are deleted by the provider).
+  Get More installs from Ollama, Magnitude's recommendations for this
+  computer, hearth's picks per category, or a Hugging Face search by
+  category (`hf download` into the Hugging Face cache).
+- Graphics memory: GPU busy % and VRAM used/total per GPU from amdgpu's
+  sysfs (also next to the AI icon), GTT spill, and per process from DRM
+  fdinfo (`drm-memory-vram`/`gtt`, `drm-engine-*` for GPU time). Models
+  other apps hold are found by the model files they have mapped or open
+  (a Whisper app shows as its model, not `python3`).
+- Memory manager (`Arbiter` in hearth-ai, every 5 s): each loaded model's
+  last use (its processes' GPU time; Ollama's expiry moving) and load time
+  (measured on load or from systemd start-to-ready, else estimated from
+  size and disk speed) are kept in `~/.local/state/hearth/ai-models.json`.
+  A model unused `ai.idleMinutes` (default 5), or 10x its load time when
+  that's longer (up to an hour), unloads. When VRAM is over 94%, a model
+  spills over 1 GB into GTT, or Ollama runs one partly on the CPU, the idle
+  model with the lowest load time / idle time goes first (never the newest
+  one or one using the GPU). Loads from the menu and the assistant make room
+  first. `hearth-ai --make-room UNIT|BYTES` does it for a unit's
+  `ExecStartPre`. Pinned models (`ai.pinned`) never unload by themselves.
+  `HEARTH_AI_MANAGE_DRYRUN=1` (set by the test rig) only reports.
+- The helper polls every 2 s while a view shows it, otherwise every 5 s
+  for the manager (the shell gets the full state every 30 s).
 - Assistant: the model in Settings > AI > Assistant (default Ollama
   `qwen3.5:4b`) gets tools: search files (through hearth-search), open or
   reveal a file, launch an app, set or change the volume (wpctl), desktop

@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+"""Tells the shell when sudo is waiting for a fingerprint
+(popups/FingerprintPrompt.qml).
+
+sudo's pam_fprintd runs before the password: for up to 30 s it waits for
+a finger, and the only sign is "Place your right index finger on the
+fingerprint reader" printed to sudo's terminal, which an app or an agent
+running sudo has none of. Only when that times out does the password
+dialog (hearth-askpass) appear. fprintd announces each verify on the
+system bus (VerifyFingerSelected, VerifyStatus, the finger-needed
+property), so this watches those and finds the sudo that asked.
+
+JSON lines on stdout:
+  {"type": "start", "finger": "right-index-finger", "who": "sudo",
+   "command": "nixos-rebuild switch --flake /etc/nixos", "pid": 123, "tty": false}
+  {"type": "status", "result": "verify-no-match", "done": true}
+  {"type": "end"}            the verify is over (sudo moved on or exited)
+
+polkit (hearth's PolkitDialog shows its own fingerprint line) and other
+callers (the lock screen) are reported with "who" set accordingly; the
+shell decides what to show.
+"""
+import json
+import os
+import sys
+
+import dbus
+import dbus.mainloop.glib
+from gi.repository import GLib
+
+DEV_IFACE = "net.reactivated.Fprint.Device"
+
+
+def emit(obj):
+    sys.stdout.write(json.dumps(obj) + "\n")
+    sys.stdout.flush()
+
+
+def _stat(pid):
+    try:
+        with open("/proc/%s/stat" % pid) as f:
+            s = f.read()
+        rest = s[s.rindex(")") + 2:].split()
+        return {"tty": int(rest[4]), "start": int(rest[19])}
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _comm(pid):
+    try:
+        with open("/proc/%s/comm" % pid) as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def _argv(pid):
+    try:
+        with open("/proc/%s/cmdline" % pid, "rb") as f:
+            return [a.decode("utf-8", "replace") for a in f.read().split(b"\0") if a]
+    except OSError:
+        return []
+
+
+def claimant():
+    """The newest process that runs pam_fprintd: sudo, or polkit's agent
+    helper. (fprintd doesn't say who claimed the reader.)"""
+    best = None
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit():
+            continue
+        comm = _comm(pid)
+        if comm not in ("sudo", "polkit-agent-he", "polkit-agent-helper-1", "su", "run0"):
+            continue
+        st = _stat(pid)
+        if not st:
+            continue
+        if best is None or st["start"] > best["start"]:
+            best = dict(st, pid=int(pid), comm=comm)
+    if not best:
+        return {"who": "other", "command": "", "pid": 0, "tty": False}
+    who = "polkit" if best["comm"].startswith("polkit") else best["comm"]
+    argv = _argv(best["pid"])[1:]
+    if who == "sudo":
+        # Drop sudo's own options (and the values of the ones that take one).
+        takes = {"-u", "-g", "-C", "-D", "-h", "-p", "-r", "-t", "-U", "-T", "--user", "--group", "--prompt"}
+        i = 0
+        while i < len(argv) and argv[i].startswith("-"):
+            i += 2 if argv[i] in takes else 1
+        argv = argv[i:]
+    return {"who": who, "command": " ".join(argv)[:200], "pid": best["pid"], "tty": best["tty"] != 0}
+
+
+class Watch:
+    def __init__(self, bus):
+        self.bus = bus
+        self.active = None       # the claimant while a verify runs
+        self.timer = 0
+
+    def start(self, finger):
+        who = claimant()
+        self.active = who
+        emit(dict(who, type="start", finger=str(finger)))
+        if not self.timer:
+            self.timer = GLib.timeout_add(500, self.check)
+
+    def check(self):
+        """End when the asking process is gone or has moved on to its
+        password prompt (sudo starts the askpass helper)."""
+        a = self.active
+        if not a:
+            self.timer = 0
+            return False
+        gone = a["pid"] and not os.path.exists("/proc/%d" % a["pid"])
+        moved_on = False
+        if a["pid"] and not gone:
+            for pid in os.listdir("/proc"):
+                if pid.isdigit() and _comm(pid).startswith("hearth-askpass"):
+                    st = _stat(pid)
+                    try:
+                        with open("/proc/%s/status" % pid) as f:
+                            ppid = int(next(l.split()[1] for l in f if l.startswith("PPid:")))
+                    except (OSError, StopIteration, ValueError):
+                        ppid = 0
+                    if st and ppid == a["pid"]:
+                        moved_on = True
+                        break
+        if gone or moved_on:
+            self.active = None
+            self.timer = 0
+            emit({"type": "end"})
+            return False
+        return True
+
+    def status(self, result, done):
+        emit({"type": "status", "result": str(result), "done": bool(done)})
+
+    def props(self, iface, changed, invalidated, path=None):
+        if str(iface) != DEV_IFACE:
+            return
+        if "finger-needed" in changed and bool(changed["finger-needed"]) and not self.active:
+            self.start("")
+
+
+def main():
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    bus = dbus.SystemBus()
+    w = Watch(bus)
+    bus.add_signal_receiver(lambda finger, **kw: w.start(finger), signal_name="VerifyFingerSelected",
+                            dbus_interface=DEV_IFACE, bus_name="net.reactivated.Fprint")
+    bus.add_signal_receiver(lambda result, done, **kw: w.status(result, done), signal_name="VerifyStatus",
+                            dbus_interface=DEV_IFACE, bus_name="net.reactivated.Fprint")
+    bus.add_signal_receiver(w.props, signal_name="PropertiesChanged",
+                            dbus_interface="org.freedesktop.DBus.Properties",
+                            bus_name="net.reactivated.Fprint", path_keyword="path")
+    emit({"type": "ready"})
+    GLib.MainLoop().run()
+
+
+if __name__ == "__main__":
+    main()

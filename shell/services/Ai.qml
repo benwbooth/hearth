@@ -18,6 +18,16 @@ Singleton {
         allowCloud: false,              // the Claude/Codex/Gemini CLIs may be used
         keepAlive: 10,                  // minutes an idle model stays loaded
         unloadOnFullscreen: false,      // free VRAM while a game or video is full screen
+        menuBarStats: true,             // GPU busy % and VRAM % next to the AI icon
+        // Memory manager (helpers/hearth-ai Arbiter): models unused this
+        // many minutes unload (slow loaders get loadTimeFactor x their load
+        // time, up to an hour); a full card evicts idle models first.
+        autoUnload: true,
+        idleMinutes: 5,
+        loadTimeFactor: 10,
+        evictOnPressure: true,
+        pinned: [],                     // keys never unloaded automatically
+        modelDirs: [],                  // extra folders with GGUF models
         providers: {
             ollama: { enabled: true, url: "http://127.0.0.1:11434" },
             llamacpp: { enabled: true, url: "http://127.0.0.1:8181", modelsDir: "~/models", modelsMax: 1 },
@@ -45,20 +55,28 @@ Singleton {
     property string lastError: ""
     property var pulls: ({})            // "provider/model" -> { status, completed, total }
 
-    // The discrete GPU (biggest VRAM) for the menu bar meter.
-    readonly property var mainGpu: gpus.length ? gpus.reduce((a, b) => b.total > a.total ? b : a) : null
-    readonly property var loaded: {
-        const out = [];
-        for (const p of providers) for (const m of p.loaded || []) out.push(Object.assign({ provider: p.id, providerLabel: p.label, external: !!p.external }, m));
-        return out;
-    }
-    readonly property var installed: {
-        const out = [];
-        for (const p of providers) for (const m of p.installed || []) out.push(Object.assign({ provider: p.id, providerLabel: p.label }, m));
-        return out;
-    }
+    // The discrete GPU (biggest VRAM): busy %, VRAM used/free/percent, GTT.
+    property var gpu: null
+    readonly property var mainGpu: gpu || (gpus.length ? gpus.reduce((a, b) => b.total > a.total ? b : a) : null)
+    // Every loaded model, from the helper's memory manager: { key, name,
+    // category, categoryLabel, provider, providerLabel, kind (server |
+    // process), vram, gtt, active, gpuPercent, idleSec, loadSec, idleLimit,
+    // unloadIn (-1 never), pinned, canUnload, unloadLabel, unit, external }.
+    property var loaded: []
+    // Every installed model: { key, name, family, category, categoryLabel,
+    // source, size, sizeText, quant, context, runners: [{ provider, model,
+    // label, fits, note }], loaded, loadable, deletable }.
+    property var installed: []
+    property var apps: []               // other GPU users: [{ name, vram, vramText, count }]
+    property var categories: []         // [{ id, label }]
+    property int modelVram: 0
+    property var evicted: []            // the last few automatic unloads: [{ name, reason, vramText, time }]
+    property var catalog: ({ picks: [], magnitude: [], search: [], category: "", query: "", loading: false })
+    signal tabRequested(string tab, string category)
     function provider(id) { return providers.find(p => p.id === id) || null; }
-    function isLoaded(pid, model) { return loaded.some(m => m.provider === pid && m.name === model); }
+    function isLoaded(pid, model) {
+        return loaded.some(m => m.provider === pid && (m.model === model || m.name === model));
+    }
 
     // Several views (Settings > AI, the menu bar popup) can watch: the
     // helper polls every 2 s only while one is open, else every 30 s.
@@ -81,6 +99,22 @@ Singleton {
         send({ cmd: "pull", provider: pid, model: model });
     }
     function remove(pid, model) { send({ cmd: "delete", provider: pid, model: model }); }
+    // By key (Ai.loaded / Ai.installed entries).
+    property var busyKeys: ({})         // key -> "loading" | "unloading" | "removing"
+    function markBusy(key, what) { const b = Object.assign({}, busyKeys); if (what) b[key] = what; else delete b[key]; busyKeys = b; }
+    function loadKey(key, provider) { markBusy(key, "loading"); send({ cmd: "loadKey", key: key, provider: provider || "" }); }
+    function unloadKey(key) { markBusy(key, "unloading"); send({ cmd: "unloadKey", key: key }); }
+    function removeKey(key) { markBusy(key, "removing"); send({ cmd: "remove", key: key }); }
+    function pin(key, on) { send({ cmd: "pin", key: key, on: on }); }
+    function isPinned(key) { return (cfg.pinned || []).indexOf(key) >= 0; }
+    function install(provider, model) {
+        const p = Object.assign({}, pulls); p[provider + "/" + model] = { status: "starting", completed: 0, total: 0 }; pulls = p;
+        send({ cmd: "install", provider: provider, model: model });
+    }
+    function browse(category, query) {
+        catalog = Object.assign({}, catalog, { loading: true, category: category, query: query || "" });
+        send({ cmd: "catalog", category: category, query: query || "", browse: true });
+    }
     function server(pid, on) { send({ cmd: "server", provider: pid, on: on }); }
 
     // --- assistant ---
@@ -119,16 +153,40 @@ Singleton {
         case "state":
             root.providers = m.providers || [];
             root.gpus = m.gpus || [];
+            root.gpu = m.gpu || null;
             if (m.processes) root.processes = m.processes;
             root.clis = m.clis || [];
+            root.loaded = m.loaded || [];
+            root.installed = m.installed || [];
+            root.apps = m.apps || [];
+            root.categories = m.categories || [];
+            root.modelVram = m.modelVram || 0;
             root.ready = true;
             break;
         case "busy":
             root.busy = m.provider + "/" + m.model;
             break;
-        case "done":
-            if (m.cmd === "load") root.busy = "";
-            root.lastError = m.error ? `${m.cmd === "load" ? "Couldn't load" : m.cmd === "unload" ? "Couldn't unload" : m.cmd === "pull" ? "Couldn't download" : "Couldn't " + m.cmd} ${m.model || ""}: ${m.error}` : "";
+        case "done": {
+            if (m.cmd === "load" || m.cmd === "loadKey") root.busy = "";
+            if (m.key) root.markBusy(m.key, "");
+            const verb = { load: "Couldn't load", loadKey: "Couldn't load", unload: "Couldn't unload", unloadKey: "Couldn't unload",
+                           pull: "Couldn't download", remove: "Couldn't remove", delete: "Couldn't delete" }[m.cmd] || ("Couldn't " + m.cmd);
+            root.lastError = m.error ? `${verb} ${m.model || ""}: ${m.error}` : "";
+            break;
+        }
+        case "gpu":
+            root.gpu = m.gpu || null;
+            break;
+        case "evicted": {
+            const ev = [Object.assign({ time: Date.now() }, m)].concat(root.evicted).slice(0, 5);
+            root.evicted = ev;
+            break;
+        }
+        case "setting":
+            Settings.set(m.path, m.value);
+            break;
+        case "catalog":
+            root.catalog = Object.assign({ loading: false }, m);
             break;
         case "pull": {
             const p = Object.assign({}, root.pulls);
@@ -136,6 +194,7 @@ Singleton {
             if (m.done || m.error) delete p[k];
             else p[k] = { status: m.status, completed: m.completed || 0, total: m.total || 0 };
             root.pulls = p;
+            if (m.error) root.lastError = `Couldn't download ${m.model}: ${m.error}`;
             break;
         }
         case "step": {
@@ -230,5 +289,7 @@ Singleton {
         function load(provider: string, model: string): void { root.load(provider, model); }
         function unload(provider: string, model: string): void { root.unload(provider, model); }
         function unloadAll(): void { root.unloadAll(); }
+        // The AI menu's tab: loaded | installed | more (and a category id).
+        function showTab(tab: string, category: string): void { root.tabRequested(tab, category); }
     }
 }

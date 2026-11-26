@@ -42,6 +42,7 @@
       p.cryptography                     # hearth-keyring-prompter: the keyring's secret exchange (AES)
       p.pyyaml                           # hearth-appmenu: menu modules (menus/*.yaml)
       p.websockets                       # hearth-voice: the WhisperLive server
+      p.huggingface-hub                  # hearth-ai: `hf download` for Get More
       (p.toPythonModule recoll)          # hearth-search: recoll's Python API
     ]);
 
@@ -245,7 +246,8 @@
         # systemd user units in nixosModules.ai; hearth-askpass, the system's
         # SUDO_ASKPASS / SSH_ASKPASS (hearth's password dialog).
         # hearth-appmenu: arbor starts its registrar first in a session (--registrar-only).
-        for t in hearth-indexer hearth-llama-server hearth-accounts hearth-portal hearth-askpass hearth-appmenu; do
+        # hearth-ai for model units' `ExecStartPre=hearth-ai --make-room %n`.
+        for t in hearth-indexer hearth-llama-server hearth-accounts hearth-portal hearth-askpass hearth-appmenu hearth-ai; do
           makeWrapper $out/share/hearth/helpers/$t $out/bin/$t \
             --prefix PATH : ${lib.makeBinPath runtimeDeps}:$out/share/hearth/helpers
         done

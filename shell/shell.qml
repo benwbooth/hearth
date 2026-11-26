@@ -40,6 +40,8 @@ ShellRoot {
     // hearth's lock screen (services/Lock.qml): ext-session-lock surfaces.
     LockScreen {}
     Osd {}
+    // "Touch the fingerprint reader" while sudo waits for a finger.
+    FingerprintPrompt {}
     BtPairDialog {}
     // FanzyZones: Hyprland Lua (hypr/fanzyzones.lua) or arbor's own zones
     // (services/ArborZones.qml).

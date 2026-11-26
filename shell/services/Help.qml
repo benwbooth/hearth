@@ -118,6 +118,8 @@ Singleton {
         { title: "Voice assistant (like Siri): press, speak, it stops when you stop talking: open apps and files, find documents, volume, weather, dark mode…", keys: "Super+Alt+Space", run: () => Voice.toggle() },
         { title: "Settings: voice assistant: shortcut, language, Whisper model, pause length, spoken replies (Piper voices), glowing edge, sounds", pane: "voice" },
         { title: "Assistant menu (the sparkle next to Control Center): ask by voice or by typing, the last answer, switch the assistant's model, see graphics memory (VRAM) and load or unload AI models", run: () => ShellState.openIndicator("ai") },
+        { title: "AI models: GPU % and graphics memory %, which models are loaded and how much memory each takes, every installed model by category (language, speech to text, text to speech, image, video, audio, embeddings, vision), install more (Ollama, Magnitude, Hugging Face), unload or keep loaded", run: () => ShellState.openIndicator("ai") },
+        { title: "Settings: AI: unload unused models after a few minutes, make room for new requests by unloading idle models, GPU use in the menu bar", pane: "ai" },
         { title: "Settings: AI: installed and loaded models (Ollama, llama.cpp), download or delete models, the assistant's model, cloud AI (Claude Code, Codex, Gemini), unload when full screen", pane: "ai" },
         { title: "Search apps (Vicinae launcher)", keys: "Alt+Space", run: () => Quickshell.execDetached(["vicinae", "toggle"]) },
         { title: "Launchpad: every installed app in a full-screen grid, grouped (Internet, Office, Games…); type to search, Enter opens the first match", keys: "F4", run: () => Launchpad.show() },
