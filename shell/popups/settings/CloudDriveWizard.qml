@@ -183,12 +183,33 @@ ColumnLayout {
 
     readonly property bool signingIn: busy && waitingLong && (lastAsked === "config_is_local" || !!guide.signin)
     readonly property var signin: guide.signin || { address: "the sign-in page", heading: "Allow rclone to access your account", allow: "Allow" }
+    // The browser's sign-in, page by page (the guide's signin.pages), to
+    // step through while rclone waits; one consent picture without them.
+    readonly property var signinPages: signin.pages && signin.pages.length ? signin.pages : [{
+        title: "Allow access", address: signin.address, heading: signin.heading,
+        say: "Sign in there and click " + signin.allow + ".",
+        rows: [{ kind: "text", label: "Signed in as you@example.com" },
+               { kind: "text", label: "rclone wants to see, edit, create and delete your files." },
+               { kind: "button", label: signin.allow, hot: true }] }]
+    property int signinPage: 0
+    onSigningInChanged: if (signingIn) signinPage = 0
+    // Why a sign-in drive asks for no website chores up front.
+    readonly property bool oauth: !!guide.signin
+    // The whole way, for the first page: the website chores, the questions,
+    // the browser sign-in, the check.
+    readonly property var plan: {
+        const p = steps.map(s => s.title);
+        p.push(editName !== "" ? "Change its settings" : "Answer a few questions (most can stay as they are)");
+        if (oauth) p.push("Sign in in your browser" + (signinPages.length > 1 ? " (" + signinPages.length + " pages, shown here as you go)" : ""));
+        p.push("Check that the drive answers");
+        return p;
+    }
 
     // ---------------------------------------------------------------- header
     RowLayout {
         Layout.fillWidth: true
         spacing: 10
-        Icon { implicitSize: 32; name: wiz.host.iconFor(wiz.provider.name); fallback: "folder-cloud" }
+        Icon { implicitSize: 32; name: wiz.host.iconFor(wiz.provider.name === "s3" && wiz.providerValue ? "s3:" + wiz.providerValue : wiz.provider.key || wiz.provider.name); fallback: "folder-cloud" }
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 0
@@ -221,12 +242,24 @@ ColumnLayout {
         }
         Label {
             Layout.fillWidth: true
-            text: wiz.steps.length
-                ? "First " + (wiz.steps.length === 1 ? "one step" : wiz.steps.length + " steps") + " on the website (each opens the page for you), then a few questions."
-                : "Next, a few questions rclone needs answered. Most can stay as they are."
+            text: "How it goes" + (wiz.steps.length ? " (website steps open their page for you):" : ":")
             color: Theme.fgDim
-            wrapMode: Text.Wrap
-            elide: Text.ElideNone
+        }
+        Repeater {
+            model: wiz.page === "name" ? wiz.plan : []
+            RowLayout {
+                required property string modelData
+                required property int index
+                Layout.fillWidth: true
+                spacing: 8
+                Rectangle {
+                    implicitWidth: 20; implicitHeight: 20; radius: 10
+                    color: Theme.accent
+                    Layout.alignment: Qt.AlignTop
+                    Label { anchors.centerIn: parent; text: parent.parent.index + 1; color: Theme.accentText; font.pointSize: Theme.smallFontSize; font.weight: Font.DemiBold }
+                }
+                Label { Layout.fillWidth: true; text: parent.modelData; wrapMode: Text.Wrap; elide: Text.ElideNone }
+            }
         }
         RowLayout {
             spacing: 8
@@ -385,24 +418,41 @@ ColumnLayout {
         visible: wiz.busy && wiz.waitingLong
         Layout.fillWidth: true
         spacing: 10
+        readonly property var sp: wiz.signinPages[Math.min(wiz.signinPage, wiz.signinPages.length - 1)] || ({})
         Label {
             Layout.fillWidth: true
             wrapMode: Text.Wrap
             elide: Text.ElideNone
             text: wiz.signingIn
-                ? "Your browser opened " + wiz.signin.address + ". Sign in there and click " + wiz.signin.allow
-                  + ". (The page names rclone: that's the tool hearth uses for cloud drives.) When it says Success, come back here."
+                ? "Your browser opened " + wiz.signin.address + ". (The pages name rclone: that's the tool hearth uses for cloud drives.) When it says Success, come back here: this page moves on by itself."
                 : "Waiting for rclone…"
         }
-        Picture {
+        Label {
             visible: wiz.signingIn
             Layout.fillWidth: true
+            text: (wiz.signinPages.length > 1 ? "Page " + (wiz.signinPage + 1) + " of " + wiz.signinPages.length + ": " : "") + (parent.sp.title || "")
+            font.weight: Font.DemiBold
+        }
+        Label {
+            visible: wiz.signingIn && !!parent.sp.say
+            Layout.fillWidth: true
+            text: parent.sp.say || ""
+            wrapMode: Text.Wrap
+            elide: Text.ElideNone
+        }
+        Picture {
+            visible: wiz.signingIn && !!(parent.sp.rows && parent.sp.rows.length)
+            Layout.fillWidth: true
             Layout.maximumWidth: 560
-            address: wiz.signin.address
-            heading: wiz.signin.heading
-            rows: [{ kind: "text", label: "Signed in as you@example.com" },
-                   { kind: "text", label: "rclone wants to see, edit, create and delete your files." },
-                   { kind: "button", label: wiz.signin.allow, hot: true }]
+            address: parent.sp.address || wiz.signin.address
+            heading: parent.sp.heading || ""
+            rows: parent.sp.rows || []
+        }
+        RowLayout {
+            visible: wiz.signingIn && wiz.signinPages.length > 1
+            spacing: 8
+            PushButton { text: "Previous Page"; enabled: wiz.signinPage > 0; tooltip: "The page before this one in your browser"; onClicked: wiz.signinPage-- }
+            PushButton { text: "Next Page"; enabled: wiz.signinPage + 1 < wiz.signinPages.length; tooltip: "What your browser shows after this page"; onClicked: wiz.signinPage++ }
         }
     }
 

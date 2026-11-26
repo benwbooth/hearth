@@ -5,6 +5,7 @@ import Quickshell.Io
 import "../../widgets"
 import "../.."
 import "RcloneGuides.js" as Guides
+import "CloudIcons.js" as CloudIcons
 
 // Settings > Accounts > Cloud Drives: the drives set up in rclone (Google
 // Drive, OneDrive, Dropbox, S3, SFTP... every kind rclone knows), shared by
@@ -73,7 +74,14 @@ ColumnLayout {
     }
     Component.onCompleted: refresh()
 
-    function iconFor(type) {
+    // A kind's logo (CloudIcons.js, built into $HEARTH_CLOUD_ICONS), else a
+    // theme icon. `key` is the guide key: the rclone type, or "s3:<provider>".
+    readonly property string logoDir: Quickshell.env("HEARTH_CLOUD_ICONS") || ""
+    function iconFor(key) {
+        key = String(key || "");
+        if (logoDir && CloudIcons.icons[key]) return logoDir + "/" + CloudIcons.file(key);
+        const type = key.split(":")[0];
+        if (type !== key && logoDir && CloudIcons.icons[type]) return logoDir + "/" + CloudIcons.file(type);
         if (["sftp", "ftp", "smb", "webdav", "http", "hdfs", "filescom"].indexOf(type) >= 0) return "network-server";
         if (type === "crypt") return "folder-locked";
         if (type === "local" || type === "alias" || type === "memory") return "folder";
@@ -191,7 +199,7 @@ ColumnLayout {
                     width: parent.width
                     height: 36
                     spacing: 10
-                    Icon { implicitSize: 28; name: pane.iconFor(dr.modelData.type); fallback: "folder-cloud" }
+                    Icon { implicitSize: 28; name: pane.iconFor(dr.modelData.type === "s3" && dr.modelData.summary ? "s3:" + dr.modelData.summary.split(" · ")[0] : dr.modelData.type); fallback: "folder-cloud" }
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 0
@@ -335,7 +343,7 @@ ColumnLayout {
                     width: parent.width - 16
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 10
-                    Icon { implicitSize: 22; name: pane.iconFor(pr.modelData.name || ""); fallback: "folder-cloud" }
+                    Icon { implicitSize: 22; name: pane.iconFor(pr.modelData.key || pr.modelData.name || ""); fallback: "folder-cloud" }
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 0

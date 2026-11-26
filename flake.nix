@@ -106,6 +106,18 @@
     # bridge JAVA_TOOL_OPTIONS (arbor/config.kdl) loads into every JVM.
     java-atk-wrapper = pkgs.callPackage ./nix/java-atk-wrapper.nix { };
 
+    # Settings > Accounts > Cloud Drives: each kind's logo (Papirus's app
+    # icons, Simple Icons (CC0) for the rest; shell/popups/settings/
+    # CloudIcons.js lists them), built here so neither set is copied in.
+    simpleIcons = pkgs.fetchzip {
+      url = "https://registry.npmjs.org/simple-icons/-/simple-icons-16.38.1.tgz";
+      hash = "sha256-lgGCUbWHukYDvxqXnZQNoeKpRu/sSGpGfP7L4sEQ0mM=";
+    };
+    cloudIcons = pkgs.runCommand "hearth-cloud-icons" { nativeBuildInputs = [ pkgs.python3 ]; } ''
+      python3 ${./nix/cloud-icons.py} ${./shell/popups/settings/CloudIcons.js} \
+        ${pkgs.papirus-icon-theme}/share/icons/Papirus/64x64/apps ${simpleIcons} $out
+    '';
+
     # Shown in About This Computer: the commit this build came from.
     hearthVersion = "0.1.0 (${self.shortRev or self.dirtyShortRev or "dev"})";
 
@@ -143,6 +155,7 @@
           --set-default HEARTH_BACKGROUND_DIRS ${backgroundDirs} \
           --set-default HEARTH_AVATAR_DIR $out/share/hearth/avatars \
           --set-default HEARTH_FONT_DIR ${fontDir} \
+          --set-default HEARTH_CLOUD_ICONS ${cloudIcons} \
           --set-default HEARTH_VERSION "${hearthVersion}" \
           --set-default HEARTH_SOUND_DIR ${pkgs.sound-theme-freedesktop}/share/sounds/freedesktop/stereo \
           --set-default HEARTH_XKB_RULES ${pkgs.xkeyboard_config}/share/X11/xkb/rules/evdev.lst \
