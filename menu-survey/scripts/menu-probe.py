@@ -219,6 +219,64 @@ def nix_build(attr, timeout=900, unfree=False, root=None):
     return outs, (r.stderr.strip().splitlines() or [""])[-1]
 
 
+HEAVY = re.compile(r"(^|-)(gcc|clang|llvm|rustc|cargo|ghc|go|openjdk|jdk|qtbase|qtwebengine|webkitgtk|chromium|"
+                   r"electron-unwrapped|linux|boost|opencv|opencascade|ffmpeg|gtk[34]?|python3)-\d", re.I)
+
+
+def unfree_build_ok(attr):
+    """Whether an unfree package is cheap to build here: Hydra builds no
+    unfree package, but most are a vendor binary repackaged (fetch, unpack,
+    patchelf, wrap: Steam, Discord, Chrome, VS Code), minutes of work. A dry
+    run lists what would be built; a few derivations and nothing heavy (a
+    compiler, a toolkit, a browser engine) is cheap. Anything else (bambu-
+    studio once compiled from source at -j24 and filled RAM) is not."""
+    r = subprocess.run(["nix", "build", "--dry-run", "--impure", "--inputs-from", "/etc/nixos", f"nixpkgs#{attr}"],
+                       capture_output=True, text=True, timeout=300, env=dict(ENV, NIXPKGS_ALLOW_UNFREE="1"))
+    if r.returncode:
+        return False, (r.stderr.strip().splitlines() or [""])[-1]
+    drvs, building = [], False
+    for l in r.stderr.splitlines():
+        if "will be built" in l:
+            building = True
+            continue
+        if "will be fetched" in l:
+            building = False
+            continue
+        if building and l.strip().endswith(".drv"):
+            drvs.append(os.path.basename(l.strip())[33:-4])
+    heavy = [d for d in drvs if HEAVY.search(d)]
+    # The package itself compiled from source (bambu-studio: two
+    # derivations, one a C++ build of hours): its build tools say so.
+    e = subprocess.run(["nix", "eval", "--json", "--impure", "--inputs-from", "/etc/nixos",
+                        f"nixpkgs#{attr}.nativeBuildInputs", "--apply",
+                        "map (p: p.pname or p.name or \"\")"],
+                       capture_output=True, text=True, timeout=300, env=dict(ENV, NIXPKGS_ALLOW_UNFREE="1"))
+    try:
+        tools = json.loads(e.stdout or "[]")
+    except ValueError:
+        tools = []
+    compiles = [t for t in tools if re.match(r"(cmake|meson|ninja|cargo|rustc|go|qmake|scons|gradle|maven|"
+                                             r"autoreconf|cargo-.*-hook|yarn-config-hook|npm-config-hook)", t or "")]
+    why = f"{len(drvs)} to build" + (f", heavy: {heavy[:3]}" if heavy else "") + (f", compiles: {compiles[:3]}" if compiles else "")
+    return len(drvs) <= 12 and not heavy and not (compiles and drvs), why
+
+
+def nix_build_unfree(attr, timeout=1200):
+    """Build a cheap unfree package (unfree_build_ok): two jobs of four
+    cores at most, 20 minutes at most."""
+    args = ["nix", "build", "--print-out-paths", "--no-link", "--impure", "--inputs-from", "/etc/nixos",
+            "--option", "max-jobs", "2", "--option", "cores", "4", f"nixpkgs#{attr}"]
+    global ENV
+    old = ENV
+    ENV = dict(ENV, NIXPKGS_ALLOW_UNFREE="1")
+    try:
+        r = sh(args, timeout=timeout)
+    finally:
+        ENV = old
+    outs = [l for l in r.stdout.split() if l.startswith("/nix/store/")]
+    return outs, (r.stderr.strip().splitlines() or [""])[-1]
+
+
 def tool(name, attr=None):
     if name not in TOOLS:
         outs, _ = nix_build(attr or name, root=name)  # rooted: per-app deletes keep it
@@ -1290,6 +1348,23 @@ def probe(attr):
     src = APPS.get(attr, {}).get("source", "nixpkgs")
     # Not in the binary cache (uncached free, and every unfree package): its
     # Flathub copy instead (a download, never a build), else skipped.
+    if src == "nixpkgs-unfree":
+        # Ben, 2026-11-26: measure unfree packages themselves when that's
+        # no hours-long build; their Flathub copy otherwise.
+        try:
+            ok, why = unfree_build_ok(attr)
+        except subprocess.TimeoutExpired:
+            ok, why = False, "dry run timed out"
+        if ok:
+            outs, err = nix_build_unfree(attr)
+            if outs:
+                try:
+                    rows = probe_store(attr, outs, err)
+                    for r in rows:
+                        r["unfree_built"] = why
+                    return rows
+                finally:
+                    store_delete(outs)
     if src in ("nixpkgs-unfree", "nixpkgs-uncached"):
         fid = APPS[attr].get("flathub")
         if not fid:
