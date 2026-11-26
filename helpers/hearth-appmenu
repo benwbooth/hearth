@@ -2021,6 +2021,15 @@ def main():
     bus = dbus.SessionBus()
     loop = GLib.MainLoop()
 
+    # `hearth-appmenu --registrar-only`: just the registrar, started by arbor
+    # first thing in a session. Qt (and Electron) look for a registrar once,
+    # when an app starts, and never export a menu if there is none: apps
+    # started before hearth was up (tessera at a login on 2026-11-25) had no
+    # global menu until restarted. This one holds the name (replaceable)
+    # and records registrations in Registrar.STATE; hearth's own instance
+    # takes the name over, loads them, and this one exits.
+    early = "--registrar-only" in sys.argv[1:]
+
     owned = False
     # Plasma's kded owns the registrar there. An arbor session says
     # "arbor:KDE" (for KDE apps' sake) but has no kded appmenu module.
@@ -2028,12 +2037,22 @@ def main():
     in_kde = "KDE" in desktops and "arbor" not in desktops
     if not in_kde and os.environ.get("HEARTH_APPMENU_REGISTRAR", "1") != "0":
         try:
-            r = bus.request_name(REGISTRAR, dbus.bus.NAME_FLAG_DO_NOT_QUEUE)
+            flags = dbus.bus.NAME_FLAG_DO_NOT_QUEUE | (
+                dbus.bus.NAME_FLAG_ALLOW_REPLACEMENT if early else dbus.bus.NAME_FLAG_REPLACE_EXISTING)
+            r = bus.request_name(REGISTRAR, flags)
             if r in (dbus.bus.REQUEST_NAME_REPLY_PRIMARY_OWNER, dbus.bus.REQUEST_NAME_REPLY_ALREADY_OWNER):
                 registrar = Registrar(bus)
                 owned = True
         except dbus.DBusException as e:
             err(e)
+    if early:
+        if not owned:
+            return
+        # Handed over to hearth's instance (or the bus went away): done.
+        bus.add_signal_receiver(lambda name: name == REGISTRAR and loop.quit(),
+                                signal_name="NameLost", dbus_interface="org.freedesktop.DBus")
+        loop.run()
+        return
     out({"type": "registrar", "owned": owned})
 
     GLib.io_add_watch(sys.stdin.fileno(), GLib.IO_IN | GLib.IO_HUP, on_stdin)

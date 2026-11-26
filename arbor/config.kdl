@@ -182,6 +182,11 @@ screenshot-path "~/Pictures/Screenshots/Screenshot_%Y%m%d_%H%M%S.png"
 // locked screen); the system's hearth when devloop isn't there or no
 // hearth is up 30 s after login.
 spawn-sh-at-startup "d=\"$HOME/.local/bin/devloop\"; if [ -x \"$d\" ] && [ -f \"$HOME/src/home-services/devloop/apps/hearth.conf\" ]; then \"$d\" start hearth; sleep 30; pgrep -u \"$(id -u)\" -f 'quickshell -p /nix/store/[^ ]*-hearth-[^ ]*/share/hearth/shell' >/dev/null && exit 0; fi; exec hearth"
+// The global menu's registrar, before any app starts: Qt and Electron apps
+// look for it once, at start, and never export their menu bar otherwise.
+// hearth's menu helper takes it over when the shell is up
+// (helpers/hearth-appmenu --registrar-only). devloop's build first.
+spawn-sh-at-startup "a=\"$HOME/.local/state/devloop/hearth/result/bin/hearth-appmenu\"; [ -x \"$a\" ] || a=hearth-appmenu; exec \"$a\" --registrar-only"
 spawn-at-startup "vicinae" "server"
 // The wallpaper is drawn by hearth itself (a background-layer surface per
 // screen, cross-faded; Settings > Wallpaper). Until hearth is up, swaybg

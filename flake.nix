@@ -243,7 +243,8 @@
         # Spotlight's indexer and the AI hub's llama.cpp server, for the
         # systemd user units in nixosModules.ai; hearth-askpass, the system's
         # SUDO_ASKPASS / SSH_ASKPASS (hearth's password dialog).
-        for t in hearth-indexer hearth-llama-server hearth-accounts hearth-portal hearth-askpass; do
+        # hearth-appmenu: arbor starts its registrar first in a session (--registrar-only).
+        for t in hearth-indexer hearth-llama-server hearth-accounts hearth-portal hearth-askpass hearth-appmenu; do
           makeWrapper $out/share/hearth/helpers/$t $out/bin/$t \
             --prefix PATH : ${lib.makeBinPath runtimeDeps}:$out/share/hearth/helpers
         done
