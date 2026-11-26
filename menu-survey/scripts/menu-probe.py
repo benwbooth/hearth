@@ -1153,6 +1153,26 @@ def appimage_terminal_only():
     return False
 
 
+def appimage_fs(fn):
+    """The AppImage's payload: "squashfs" (the classic type 2 runtime) or
+    "dwarfs" (uruntime), by the magic right after the ELF runtime (its end:
+    the section header table, as appimagetool and uruntime find it; both
+    runtimes carry the other format's magic as a string inside)."""
+    import struct
+    try:
+        with open(fn, "rb") as f:
+            eh = f.read(64)
+            if eh[:4] != b"\x7fELF" or eh[4] != 2:
+                return ""
+            shoff, = struct.unpack_from("<Q", eh, 0x28)
+            shentsize, shnum = struct.unpack_from("<HH", eh, 0x3A)
+            f.seek(shoff + shentsize * shnum)
+            magic = f.read(6)
+    except (OSError, struct.error):
+        return ""
+    return "dwarfs" if magic == b"DWARFS" else "squashfs" if magic[:4] == b"hsqs" else ""
+
+
 def probe_appimage(attr):
     how = APPIMAGES.get(attr) or {}
     url = appimage_url(how)
@@ -1170,7 +1190,22 @@ def probe_appimage(attr):
         # the libraries AppImages expect from the host), else the system's.
         ar = os.path.expanduser("~/.cache/hearth-menu-survey/roots/appimage-run/bin/appimage-run")
         # Its store path: the sandbox hides your home, where the GC root is.
-        argv = sandboxed([os.path.realpath(ar) if os.path.exists(ar) else "/run/current-system/sw/bin/appimage-run", fn])
+        if appimage_fs(fn) == "dwarfs":
+            # uruntime (pkgforge's "anylinux" AppImages): a DwarFS image that
+            # appimage-run can't open, but self-contained (sharun bundles its
+            # own loader and libraries), so it runs as is, extracting itself
+            # to $TMPDIR (no FUSE in the sandbox).
+            # The "AI\x02" marker at offset 8 blanked in this copy: with it,
+            # NixOS's AppImage binfmt hands any exec of the file to the
+            # system's appimage-run (programs.appimage.binfmt).
+            with open(fn, "r+b") as f:
+                f.seek(8)
+                if f.read(3) == b"AI\x02":
+                    f.seek(8)
+                    f.write(b"\0\0\0")
+            argv = sandboxed(["env", "APPIMAGE_EXTRACT_AND_RUN=1", fn])
+        else:
+            argv = sandboxed([os.path.realpath(ar) if os.path.exists(ar) else "/run/current-system/sw/bin/appimage-run", fn])
         rows = [attempt(attr, argv, "session", {}, [])]
         r0 = rows[0]
         r0.update(hearth=HEARTH_PKG or "installed", appimage=url, sandboxed=True)
