@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+"""Kokoro text to speech for hearth-voice (Kokoro-82M, hexgrad).
+
+Runs on the CPU (PyTorch, a few threads): about 4x faster than real time
+on a desktop CPU, no graphics memory, so it never competes with the
+language model and Whisper for VRAM. Stays running so the model loads
+once; each reply is spoken sentence by sentence, so the first words play
+while the rest is still being made.
+
+Started by hearth-voice with the Kokoro Python environment
+($HEARTH_KOKORO_PYTHON). JSON lines:
+
+  stdin  {"text": "...", "voice": "af_heart", "speed": 1.0}   speak (stops anything playing)
+         {"cmd": "stop"}                                      stop speaking
+  stdout {"type": "ready"}  {"type": "start"}  {"type": "done"}  {"type": "error", "message": "..."}
+"""
+import json
+import os
+import queue
+import subprocess
+import sys
+import threading
+
+# Keep PyTorch off the GPU: ROCm beside the desktop corrupts the screen
+# (whisperlive-typer, 2026-11-26), and Kokoro is fast enough on the CPU.
+os.environ["HIP_VISIBLE_DEVICES"] = "-1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
+RATE = 24000
+
+
+def emit(obj):
+    sys.stdout.write(json.dumps(obj) + "\n")
+    sys.stdout.flush()
+
+
+jobs = queue.Queue()
+current = {"gen": 0, "play": None}
+lock = threading.Lock()
+
+
+def stop():
+    with lock:
+        current["gen"] += 1
+        p = current["play"]
+        current["play"] = None
+    if p:
+        try:
+            p.kill()
+        except OSError:
+            pass
+
+
+def reader():
+    for line in sys.stdin:
+        try:
+            req = json.loads(line)
+        except ValueError:
+            continue
+        if req.get("cmd") == "stop":
+            stop()
+        elif req.get("text"):
+            stop()
+            with lock:
+                gen = current["gen"]
+            jobs.put((gen, req))
+    os._exit(0)
+
+
+def main():
+    import numpy as np
+    import torch
+    torch.set_num_threads(int(os.environ.get("HEARTH_KOKORO_THREADS", "6")))
+    from kokoro import KPipeline
+
+    pipes = {}
+
+    def pipe_for(voice):
+        lang = voice[0] if voice and voice[0] in "abefhijpz" else "a"
+        if lang not in pipes:
+            pipes[lang] = KPipeline(lang_code=lang, repo_id="hexgrad/Kokoro-82M", device="cpu")
+        return pipes[lang]
+
+    pipe_for("af_heart")
+    threading.Thread(target=reader, daemon=True).start()
+    emit({"type": "ready"})
+    while True:
+        gen, req = jobs.get()
+        voice = req.get("voice") or "af_heart"
+        try:
+            pipe = pipe_for(voice)
+            play = subprocess.Popen(["pw-play", "--rate", str(RATE), "--channels", "1", "--format", "s16",
+                                     "--media-role", "Assistant", "-"], stdin=subprocess.PIPE,
+                                    stderr=subprocess.DEVNULL)
+            with lock:
+                if gen != current["gen"]:
+                    play.kill()
+                    continue
+                current["play"] = play
+            emit({"type": "start"})
+            for _gs, _ps, audio in pipe(req["text"], voice=voice, speed=float(req.get("speed") or 1.0)):
+                if gen != current["gen"]:
+                    break
+                a = audio.numpy() if hasattr(audio, "numpy") else np.asarray(audio)
+                try:
+                    play.stdin.write((np.clip(a, -1, 1) * 32767).astype(np.int16).tobytes())
+                    play.stdin.flush()
+                except (BrokenPipeError, OSError):
+                    break
+            try:
+                play.stdin.close()
+            except OSError:
+                pass
+            play.wait()
+        except Exception as e:  # noqa: BLE001
+            emit({"type": "error", "message": str(e)})
+        with lock:
+            latest = gen == current["gen"]
+            if latest:
+                current["play"] = None
+        if latest:
+            emit({"type": "done"})
+
+
+if __name__ == "__main__":
+    main()

@@ -24,7 +24,9 @@ Singleton {
         language: "en",
         silenceMs: 1000,                // quiet after speech that ends listening
         maxSeconds: 15,
-        speak: false,                   // read replies aloud (Piper)
+        speak: false,                   // read replies aloud
+        ttsEngine: "kokoro",            // "kokoro" (natural, CPU) or "piper" (lighter)
+        kokoroVoice: "af_heart",
         piperVoice: "en_US-ryan-high",
         sounds: true,                   // a chime when listening starts and ends
         edgeGlow: true                  // the glowing screen edge while listening
@@ -39,6 +41,18 @@ Singleton {
     property bool replyError: false
     property var steps: []              // [{ name, text }] what the assistant did
     property bool speaking: false
+    // Kokoro-82M's English voices (a = US, b = UK; f/m = woman/man).
+    readonly property var kokoroVoices: [
+        { value: "af_heart", label: "Heart (US English, woman)" },
+        { value: "af_bella", label: "Bella (US English, woman)" },
+        { value: "af_nicole", label: "Nicole (US English, woman, soft)" },
+        { value: "am_michael", label: "Michael (US English, man)" },
+        { value: "am_fenrir", label: "Fenrir (US English, man)" },
+        { value: "am_puck", label: "Puck (US English, man)" },
+        { value: "bf_emma", label: "Emma (UK English, woman)" },
+        { value: "bm_george", label: "George (UK English, man)" },
+        { value: "bm_fable", label: "Fable (UK English, man)" }
+    ]
     property bool visible: phase !== "idle"
     property int askId: 0
     property var history: []            // the conversation so far (until dismissed)

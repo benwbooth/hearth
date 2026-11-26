@@ -46,6 +46,13 @@
       (p.toPythonModule recoll)          # hearth-search: recoll's Python API
     ]);
 
+    # Spoken replies (helpers/hearth-kokoro): Kokoro-82M on the CPU. misaki
+    # (Kokoro's English pronunciation) needs spaCy's English model, which it
+    # would otherwise try to pip-install at run time.
+    kokoroPython = pkgs.python3.withPackages (p: [
+      p.kokoro p.numpy p.soundfile p.spacy-models.en_core_web_sm
+    ]);
+
     # Everything the shell's widgets shell out to.
     runtimeDeps = with pkgs; [
       quickshell
@@ -154,6 +161,7 @@
           --prefix QT_PLUGIN_PATH : ${pluginPath} \
           --set-default HEARTH_BACKGROUND_DIRS ${backgroundDirs} \
           --set-default HEARTH_AVATAR_DIR $out/share/hearth/avatars \
+          --set-default HEARTH_KOKORO_PYTHON ${kokoroPython}/bin/python \
           --set-default HEARTH_FONT_DIR ${fontDir} \
           --set-default HEARTH_CLOUD_ICONS ${cloudIcons} \
           --set-default HEARTH_VERSION "${hearthVersion}" \

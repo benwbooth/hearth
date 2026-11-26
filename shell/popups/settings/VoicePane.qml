@@ -114,12 +114,43 @@ ColumnLayout {
     SettingsGroup {
         SettingsRow {
             label: "Speak replies"
-            note: "Read answers aloud with Piper, a voice that runs on this computer."
+            note: "Read answers aloud with a voice that runs on this computer."
             Toggle { checked: !!pane.cfg.speak; onToggled: c => Settings.set("voice.speak", c) }
         }
         SettingsDivider {}
         SettingsRow {
+            label: "Speech engine"
+            note: "Kokoro sounds natural; Piper is lighter and more robotic. Both run on the processor, not the graphics card."
+            tip: "Kokoro-82M runs about four times faster than real time on the processor and speaks each sentence as soon as it's ready. Its model (about 330 MB) downloads from Hugging Face the first time."
+            Dropdown {
+                implicitWidth: 240
+                options: [{ value: "kokoro", label: "Kokoro (natural)" }, { value: "piper", label: "Piper (lighter)" }]
+                value: pane.cfg.ttsEngine || "kokoro"
+                onPicked: v => Settings.set("voice.ttsEngine", v)
+            }
+        }
+        SettingsDivider {}
+        SettingsRow {
+            visible: (pane.cfg.ttsEngine || "kokoro") === "kokoro"
+            label: "Voice"
+            note: "Kokoro's voices."
+            RowLayout {
+                spacing: 6
+                Dropdown {
+                    implicitWidth: 240
+                    options: Voice.kokoroVoices
+                    value: pane.cfg.kokoroVoice || "af_heart"
+                    onPicked: v => Settings.set("voice.kokoroVoice", v)
+                }
+                PushButton {
+                    text: "Preview"
+                    onClicked: Voice.speak("Hi, I'm your desktop assistant. Ask me to open apps, find files or change settings.")
+                }
+            }
+        }
+        SettingsRow {
             id: voiceRow
+            visible: pane.cfg.ttsEngine === "piper"
             label: "Voice"
             readonly property bool have: Voice.voices.installed.indexOf(pane.cfg.piperVoice) >= 0
             note: have ? "Downloaded." : Voice.download && Voice.download.voice === pane.cfg.piperVoice

@@ -12,7 +12,7 @@ Replies: Piper (local neural text to speech) when Settings > Voice >
 Speak replies is on and a voice is downloaded.
 
   stdin  {"cmd": "listen"} {"cmd": "stop"} {"cmd": "cancel"}
-         {"cmd": "speak", "text": "..."} {"cmd": "hush"}
+         {"cmd": "speak", "text": "..."} {"cmd": "hush"}   (Kokoro or Piper: settings ttsEngine)
          {"cmd": "voices"} {"cmd": "download", "voice": "en_US-ryan-high"}
   stdout {"type": "state", "state": "connecting|listening|transcribing|idle"}
          {"type": "level", "level": 0.0-1.0}       (about 25 a second)
@@ -50,6 +50,10 @@ DEFAULTS = {
     "maxSeconds": 15,
     "speak": False,
     "piperVoice": "en_US-ryan-high",
+    # Spoken replies: "kokoro" (Kokoro-82M, natural, CPU, helpers/hearth-kokoro)
+    # or "piper" (lighter, more robotic).
+    "ttsEngine": "kokoro",
+    "kokoroVoice": "af_heart",
 }
 
 # A few good Piper voices (rhasspy/piper-voices); any other name works too.
@@ -249,12 +253,61 @@ class Listener:
         emit({"type": "state", "state": "idle"})
 
 
+class Kokoro:
+    """helpers/hearth-kokoro, kept running so the model loads once."""
+
+    def __init__(self):
+        self.proc = None
+        self.lock = threading.Lock()
+
+    @staticmethod
+    def python():
+        return os.environ.get("HEARTH_KOKORO_PYTHON", "")
+
+    def available(self):
+        return bool(self.python()) and os.path.exists(self.python())
+
+    def _relay(self, proc):
+        for line in proc.stdout:
+            try:
+                m = json.loads(line)
+            except ValueError:
+                continue
+            t = m.get("type")
+            if t == "start":
+                emit({"type": "speaking", "on": True})
+            elif t == "done":
+                emit({"type": "speaking", "on": False})
+            elif t == "error":
+                emit({"type": "error", "message": "Couldn't speak: %s" % m.get("message", "")})
+                emit({"type": "speaking", "on": False})
+
+    def send(self, obj):
+        with self.lock:
+            if not self.proc or self.proc.poll() is not None:
+                if obj.get("cmd") == "stop":
+                    return
+                helper = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hearth-kokoro")
+                self.proc = subprocess.Popen([self.python(), helper], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                             stderr=subprocess.DEVNULL, text=True, bufsize=1)
+                threading.Thread(target=self._relay, args=(self.proc,), daemon=True).start()
+            try:
+                self.proc.stdin.write(json.dumps(obj) + "\n")
+                self.proc.stdin.flush()
+            except OSError:
+                self.proc = None
+
+
+KOKORO = Kokoro()
+
+
 class Speaker:
     def __init__(self):
         self.procs = []
         self.lock = threading.Lock()
 
     def hush(self):
+        KOKORO.send({"cmd": "stop"})
         with self.lock:
             for p in self.procs:
                 try:
@@ -266,6 +319,9 @@ class Speaker:
     def speak(self, text):
         self.hush()
         cfg = settings()
+        if cfg.get("ttsEngine", "kokoro") == "kokoro" and KOKORO.available():
+            KOKORO.send({"text": text, "voice": cfg.get("kokoroVoice") or "af_heart"})
+            return
         voice = cfg["piperVoice"]
         model = os.path.join(VOICES, voice + ".onnx")
         if not os.path.exists(model) and not adopt_voice(voice):
