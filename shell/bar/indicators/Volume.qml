@@ -205,7 +205,11 @@ Indicator {
             function set(x) { sl.moved(root.clamp((x - track.x) / track.width)); }
             onPressed: m => set(m.x)
             onPositionChanged: m => { if (pressed) set(m.x); }
-            onWheel: w => sl.moved(root.clamp(Math.round((sl.value + (w.angleDelta.y > 0 ? 0.05 : -0.05)) * 20) / 20))
+            WheelNotches { id: sliderNotches }
+            onWheel: w => {
+                const n = sliderNotches.feed(w);
+                if (n) sl.moved(root.clamp(Math.round((sl.value + 0.05 * n) * 20) / 20));
+            }
         }
     }
 

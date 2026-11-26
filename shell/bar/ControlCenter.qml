@@ -335,7 +335,11 @@ Indicator {
                 function at(x) { return Math.max(0, Math.min(1, x / width)); }
                 onPressed: mouse => sm.moved(at(mouse.x))
                 onPositionChanged: mouse => { if (pressed) sm.moved(at(mouse.x)); }
-                onWheel: w => sm.moved(Math.max(0, Math.min(1, sm.value + (w.angleDelta.y > 0 ? 0.05 : -0.05))))
+                WheelNotches { id: smNotches }
+                onWheel: w => {
+                    const n = smNotches.feed(w);
+                    if (n) sm.moved(Math.max(0, Math.min(1, sm.value + 0.05 * n)));
+                }
             }
         }
     }

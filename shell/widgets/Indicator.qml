@@ -35,7 +35,13 @@ BarButton {
         else if (mouse.button === Qt.RightButton) root.rightClicked();
         else if (mouse.button === Qt.MiddleButton) root.middleClicked();
     }
-    onWheel: w => root.scrolled(w.angleDelta.y !== 0 ? w.angleDelta.y : w.angleDelta.x)
+    // One `scrolled` (±120) per wheel notch, physical direction
+    // (widgets/WheelNotches.qml).
+    WheelNotches { id: notches }
+    onWheel: w => {
+        const n = notches.feed(w);
+        for (let i = 0; i < Math.min(Math.abs(n), 5); i++) root.scrolled(n > 0 ? 120 : -120);
+    }
 
     Connections {
         target: ShellState

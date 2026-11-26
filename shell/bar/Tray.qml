@@ -139,7 +139,12 @@ Row {
             else if (mouse.button === Qt.MiddleButton && key === "notifications") Notifications.toggleDnd();
             else if (mouse.button === Qt.MiddleButton && target.middleClicked) target.middleClicked();
         }
-        onWheel: w => { if (target.scrolled) target.scrolled(w.angleDelta.y !== 0 ? w.angleDelta.y : w.angleDelta.x); }
+        WheelNotches { id: rowNotches }
+        onWheel: w => {
+            if (!target.scrolled) return;
+            const n = rowNotches.feed(w);
+            for (let i = 0; i < Math.min(Math.abs(n), 5); i++) target.scrolled(n > 0 ? 120 : -120);
+        }
 
         Rectangle {
             anchors.fill: parent
