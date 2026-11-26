@@ -211,6 +211,7 @@ Singleton {
         { id: "windowrules", label: "Window Rules", icon: "preferences-system-windows-actions", words: "app window float" },
         { id: "power", label: "Sleep & Power", icon: "preferences-system-power-management", words: "battery idle suspend energy" },
         { id: "night", label: "Night Light", icon: "redshift-status-on", words: "blue light warm" },
+        { id: "sound", label: "Sound", icon: "audio-volume-high", words: "volume chime feedback pop beep" },
         { id: "notifications", label: "Notifications", icon: "preferences-desktop-notification", words: "do not disturb alerts" },
         { id: "clipboard", label: "Clipboard", icon: "klipper-symbolic", words: "copy paste history" },
         { id: "screenshots", label: "Screenshots", icon: "camera-photo", words: "screen capture record" },

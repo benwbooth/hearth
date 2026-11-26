@@ -72,6 +72,9 @@ Singleton {
             iconSize: 88,               // px
             collapsed: []               // section ids folded shut (click a section's title)
         },
+        sound: {
+            volumeFeedback: true,       // a pop on every volume change, like macOS (services/VolumeFeedback.qml)
+        },
         notifications: {
             timeout: 6,                 // s a banner stays
             showOnTop: true,            // position follows the bar
@@ -188,6 +191,7 @@ Singleton {
     readonly property var dock: { void root.data; return Object.assign({}, defaults.dock, data.dock || {}); }
     readonly property var launchpad: { void root.data; return Object.assign({}, defaults.launchpad, data.launchpad || {}); }
     readonly property var notifications: { void root.data; return Object.assign({}, defaults.notifications, data.notifications || {}); }
+    readonly property var sound: { void root.data; return Object.assign({}, defaults.sound, data.sound || {}); }
     readonly property var hotCorners: { void root.data; return Object.assign({}, defaults.hotCorners, data.hotCorners || {}); }
     readonly property var power: { void root.data; return Object.assign({}, defaults.power, data.power || {}); }
     readonly property var lockScreen: { void root.data; return Object.assign({}, defaults.lockScreen, data.lockScreen || {}); }
