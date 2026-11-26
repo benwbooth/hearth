@@ -2,10 +2,20 @@
 """hearth's AI hub (shell/services/Ai.qml, README "AI").
 
 One place for every model the desktop uses: local servers (Ollama,
-llama.cpp's llama-server in router mode) and coding-agent CLIs (Claude
-Code, Codex, Gemini). It lists installed and loaded models, loads and
-unloads them, pulls new ones, reports VRAM per GPU and per process, and
-runs the assistant (voice and Spotlight's "Ask") with tools.
+llama.cpp's llama-server in router mode, Magnitude, systemd user units that
+serve one model such as inkling-2-mini.service), models other apps keep in
+graphics memory (found by the model files they have open), every model
+installed anywhere (helpers/hearth_ai_models.py: Hugging Face cache, model
+folders, LM Studio, ComfyUI, Piper...) sorted by category, and coding-agent
+CLIs (Claude Code, Codex, Gemini). It loads and unloads models, installs
+and deletes them, reports GPU load and VRAM per GPU, per process and per
+model, and runs the assistant (voice and Spotlight's "Ask") with tools.
+
+Graphics memory is managed (class Arbiter): a model that hasn't used the
+GPU for a while unloads (later for models that take long to load), and
+when the card fills up the models idle longest and quickest to load again
+are evicted first, so a new request finds room. `hearth-ai --make-room
+UNIT|BYTES` does the same on demand (model units call it in ExecStartPre).
 
 JSON lines on stdin/stdout, so the shell never waits:
 
@@ -21,6 +31,11 @@ JSON lines on stdin/stdout, so the shell never waits:
          (the shell runs it and answers {"cmd": "toolResult", "id": 3, "call": 1, "result": "..."})
       -> {"type": "reply", "id": 3, "text": "...", "done": true}
   {"cmd": "cancel", "id": 3}
+  {"cmd": "catalog", "category": "tts", "query": ""}  -> {"type": "catalog", ...}
+  {"cmd": "install", "provider": "hf"|"ollama"|"magnitude", "model": "..."}  -> {"type": "pull", ...}
+  {"cmd": "remove", "key": "<installed key>"}          (provider delete, or files to the trash)
+  {"cmd": "loadKey"|"unloadKey", "key": "<installed or loaded key>"}
+  {"cmd": "pin", "key": "...", "on": true}              never unload it automatically
 
 Settings come from settings.json `ai` (Settings > AI). Cloud CLIs are used
 only when `ai.allowCloud` is on.
@@ -39,6 +54,9 @@ import time
 import urllib.error
 import urllib.request
 
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import hearth_ai_models as hm  # noqa: E402
+
 HOME = os.path.expanduser("~")
 CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME") or os.path.join(HOME, ".config")
 SETTINGS = os.path.join(CONFIG_HOME, "hearth", "settings.json")
@@ -47,9 +65,20 @@ LLAMA_UNIT = "hearth-llama-server.service"
 DEFAULTS = {
     "allowCloud": False,
     "keepAlive": 10,
+    # Memory manager: unload a model idle idleMinutes, or loadTimeFactor x
+    # its load time when that's longer (up to an hour); evict idle models
+    # when the card is nearly full. Pinned keys never unload by themselves.
+    "autoUnload": True,
+    "idleMinutes": 5,
+    "loadTimeFactor": 10,
+    "evictOnPressure": True,
+    "pinned": [],
+    "modelDirs": [],
     "providers": {
         "ollama": {"enabled": True, "url": "http://127.0.0.1:11434"},
         "llamacpp": {"enabled": True, "url": "http://127.0.0.1:8181", "modelsDir": "~/models"},
+        "magnitude": {"enabled": True},
+        "services": {"enabled": True},
         "claude": {"enabled": False},
         "codex": {"enabled": False},
         "gemini": {"enabled": False},
@@ -350,6 +379,106 @@ class LlamaInstance(LlamaCpp):
         os.kill(self.pid, 15)
 
 
+class Magnitude(LlamaCpp):
+    """Magnitude (magnitude.dev): its own engine that spreads a model over
+    VRAM, RAM and SSD. `magnitude serve` on :10100; models are listed,
+    loaded and stopped with its CLI, chat goes through its OpenAI API."""
+    id = "magnitude"
+    label = "Magnitude"
+
+    def __init__(self, cfg):
+        self.url = "http://127.0.0.1:10100/inference"
+        self.models_dir = ""
+
+    def state(self):
+        st = {"id": self.id, "label": self.label, "kind": "local", "url": "http://127.0.0.1:10100",
+              "running": False, "installed": [], "loaded": [], "error": "", "available": hm.magnitude_installed()}
+        if not st["available"]:
+            st["error"] = "Magnitude isn't installed"
+            return st
+        health = hm.magnitude_running()
+        if not health:
+            st["error"] = "Magnitude isn't running (magnitude serve)"
+            return st
+        st["running"] = True
+        hw = ((health.get("state") or {}).get("hardware") or {})
+        st["backend"] = hw.get("backend", "")
+        inst, loaded = hm.magnitude_models()
+        st["installed"] = [{"name": m["id"], "label": m["name"] + (" " + m["quant"] if m["quant"] else ""),
+                            "size": m["size"], "sizeText": m["sizeText"], "params": "", "quant": m["quant"],
+                            "context": m["context"], "maxContext": m["maxContext"], "fits": m["fits"],
+                            "note": m["note"], "arch": m["arch"], "capabilities": ["vision"] if m["vision"] else []}
+                           for m in inst]
+        st["loaded"] = [{"name": m["id"], "label": m["name"], "vram": 0, "vramText": "", "context": m["context"]}
+                        for m in loaded]
+        return st
+
+    def load(self, model, keep_minutes):
+        hm.magnitude("models", "load", model, timeout=900)
+
+    def unload(self, model):
+        hm.magnitude("models", "stop", model, timeout=60)
+
+    def delete(self, model):
+        hm.magnitude("models", "rm", model, timeout=120)
+
+    def pull(self, model, progress):
+        progress("downloading", 0, 0, "")
+        hm.magnitude("models", "pull", model, timeout=6 * 3600)
+
+
+class ModelService(LlamaCpp):
+    """A systemd user unit that serves one model (inkling-2-mini.service):
+    loaded while the unit runs, Load starts it, Unload stops it. Units
+    behind a socket (inkling-2-mini-proxy.socket) start on demand anyway."""
+
+    def __init__(self, svc):
+        self.svc = svc
+        self.unit = svc["unit"]
+        self.id = "service:" + self.unit
+        base = self.unit[:-len(".service")]
+        self.label = re.sub(r"\s*local inference server.*$|\s*inference server.*$", "", svc["desc"], flags=re.I) or base
+        self.model_path = hm.service_model_path(svc)
+        self.models_dir = os.path.dirname(self.model_path)
+        self.alias = base
+        self.url = "http://127.0.0.1:%d" % self.port()
+
+    def port(self):
+        env = hm._read(self.svc["env"])
+        m = re.search(r"^\w*PORT=(\d+)", env, re.M) or re.search(r'port="\$\{\w+:-(\d+)\}"', self.svc["body"]) \
+            or re.search(r"--port\s+(\d+)", self.svc["body"])
+        return int(m.group(1)) if m else 8080
+
+    def state(self):
+        info = hm.unit_info(self.unit)
+        active = info.get("ActiveState", "")
+        size = 0
+        for f in glob.glob(re.sub(r"-00001-of-(\d+)\.gguf$", r"-*-of-\1.gguf", self.model_path)) or [self.model_path]:
+            try:
+                size += os.path.getsize(f)
+            except OSError:
+                pass
+        m = {"name": self.alias, "label": self.label, "size": size, "sizeText": human_bytes(size),
+             "path": self.model_path, "params": "", "quant": "", "capabilities": []}
+        st = {"id": self.id, "label": self.label, "kind": "local", "url": self.url, "running": active == "active",
+              "service": True, "unit": self.unit, "socket": self.svc["socket"], "activeState": active,
+              "installed": [m], "loaded": [], "error": "", "unitInfo": info}
+        if active in ("active", "activating", "reloading"):
+            st["loaded"] = [{"name": self.alias, "label": self.label, "vram": 0, "vramText": "",
+                             "pid": int(info.get("MainPID") or 0), "status": active}]
+        return st
+
+    def load(self, model, keep_minutes):
+        r = subprocess.run(["systemctl", "--user", "start", self.unit], capture_output=True, text=True, timeout=600)
+        if r.returncode:
+            raise RuntimeError((r.stderr or "couldn't start %s" % self.unit).strip())
+
+    def unload(self, model):
+        r = subprocess.run(["systemctl", "--user", "stop", self.unit], capture_output=True, text=True, timeout=120)
+        if r.returncode:
+            raise RuntimeError((r.stderr or "couldn't stop %s" % self.unit).strip())
+
+
 def llama_instances(managed_url):
     out = []
     for cmdf in glob.glob("/proc/[0-9]*/cmdline"):
@@ -369,8 +498,17 @@ def llama_instances(managed_url):
         port = int(opt("--port") or 8080)
         if managed_url.endswith(":%d" % port):
             continue
-        out.append(LlamaInstance(int(cmdf.split("/")[2]), port, opt("--alias", "-a"), opt("--model", "-m")))
+        pid = cmdf.split("/")[2]
+        if hm._unit_of(pid) in service_units:
+            continue  # shown as its model service
+        ppid = (re.search(r"^PPid:\s*(\d+)", hm._read("/proc/%s/status" % pid), re.M) or [None, "0"])[1]
+        if "ollama" in hm._read("/proc/%s/cmdline" % ppid) or "/ollama/" in opt("--model", "-m"):
+            continue  # Ollama's own runner: shown as the Ollama model
+        out.append(LlamaInstance(int(pid), port, opt("--alias", "-a"), opt("--model", "-m")))
     return out
+
+
+service_units = set()
 
 
 def providers(cfg):
@@ -380,6 +518,13 @@ def providers(cfg):
         out["ollama"] = Ollama(pc["ollama"])
     if pc["llamacpp"].get("enabled", True):
         out["llamacpp"] = LlamaCpp(pc["llamacpp"])
+    if pc.get("magnitude", {}).get("enabled", True) and hm.magnitude_installed():
+        out["magnitude"] = Magnitude(pc["magnitude"])
+    if pc.get("services", {}).get("enabled", True):
+        for svc in hm.services():
+            p = ModelService(svc)
+            service_units.add(p.unit)
+            out[p.id] = p
     for inst in llama_instances(pc["llamacpp"].get("url", "")):
         out[inst.id] = inst
     for pid in CLI:
@@ -424,9 +569,22 @@ def gpus():
             used = int(open(os.path.join(dev, "mem_info_vram_used")).read())
         except (OSError, ValueError):
             continue
+        # gpu_busy_percent is an instant reading: average a few.
         busy = None
+        samples = []
+        for i in range(5):
+            try:
+                samples.append(int(open(os.path.join(dev, "gpu_busy_percent")).read()))
+            except (OSError, ValueError):
+                break
+            if i < 4:
+                time.sleep(0.03)
+        if samples:
+            busy = round(sum(samples) / len(samples))
+        gtt_used = gtt_total = 0
         try:
-            busy = int(open(os.path.join(dev, "gpu_busy_percent")).read())
+            gtt_used = int(open(os.path.join(dev, "mem_info_gtt_used")).read())
+            gtt_total = int(open(os.path.join(dev, "mem_info_gtt_total")).read())
         except (OSError, ValueError):
             pass
         try:
@@ -436,66 +594,16 @@ def gpus():
         # A small "VRAM" carve-out is an integrated GPU.
         out.append({"card": os.path.basename(card), "pci": pci, "name": gpu_name(dev), "total": total,
                     "used": used, "totalText": human_bytes(total), "usedText": human_bytes(used),
+                    "free": max(0, total - used), "freeText": human_bytes(max(0, total - used)),
+                    "percent": round(100 * used / total) if total else 0,
+                    "gttUsed": gtt_used, "gttTotal": gtt_total, "gttText": human_bytes(gtt_used),
                     "busy": busy, "integrated": total < 4 << 30})
     return out
 
 
-KNOWN = [
-    (r"ollama", "Ollama"), (r"llama-server", "llama.cpp"), (r"whisper", "Speech recognition (Whisper)"),
-    (r"piper", "Speech (Piper)"), (r"quickshell", "hearth"), (r"arbor", "arbor (compositor)"),
-    (r"Xwayland|xwayland", "Xwayland"),
-]
-
-
-def vram_processes():
-    """Per process VRAM from amdgpu's fdinfo (drm-memory-vram), each DRM
-    client counted once."""
-    per = {}
-    for fdinfo in glob.glob("/proc/[0-9]*/fdinfo"):
-        pid = fdinfo.split("/")[2]
-        seen = set()
-        try:
-            fds = os.listdir(fdinfo)
-        except OSError:
-            continue
-        for fd in fds:
-            try:
-                with open(os.path.join(fdinfo, fd)) as f:
-                    txt = f.read()
-            except OSError:
-                continue
-            if "drm-client-id" not in txt:
-                continue
-            cid = re.search(r"drm-client-id:\s*(\d+)", txt)
-            pdev = re.search(r"drm-pdev:\s*(\S+)", txt)
-            key = (cid.group(1) if cid else fd, pdev.group(1) if pdev else "")
-            if key in seen:
-                continue
-            seen.add(key)
-            m = re.search(r"drm-memory-vram:\s*(\d+)\s*KiB", txt)
-            if m:
-                e = per.setdefault((pid, key[1]), 0)
-                per[(pid, key[1])] = e + int(m.group(1)) * 1024
-    out = []
-    for (pid, pdev), vram in per.items():
-        if vram < 32 << 20:
-            continue
-        try:
-            comm = open("/proc/%s/comm" % pid).read().strip()
-            cmd = open("/proc/%s/cmdline" % pid).read().replace("\0", " ").strip()
-        except OSError:
-            continue
-        # comm is cut at 15 characters; Nix wrappers add ".x-wrapped".
-        exe = os.path.basename(cmd.split(" ", 1)[0]) if cmd else comm
-        label = re.sub(r"-wrapped$", "", exe.lstrip(".")) or comm
-        for pat, name in KNOWN:
-            if re.search(pat, cmd):
-                label = name
-                break
-        out.append({"pid": int(pid), "pci": pdev, "name": label, "comm": comm, "vram": vram,
-                    "vramText": human_bytes(vram)})
-    out.sort(key=lambda p: -p["vram"])
-    return out[:20]
+def main_gpu(gs):
+    d = [g for g in gs if not g["integrated"]] or gs
+    return max(d, key=lambda g: g["total"]) if d else None
 
 
 # --- state -------------------------------------------------------------------
@@ -508,23 +616,406 @@ def unit_active(unit):
         return "unknown"
 
 
-def full_state(with_procs):
+HIDDEN_APPS = {"hearth", "arbor (compositor)", "Xwayland"}
+
+
+def model_category(name, caps=(), arch=""):
+    if "embedding" in caps:
+        return "embedding"
+    return hm.classify(name, arch=arch, default="llm")
+
+
+class Arbiter:
+    """Who holds graphics memory, and the memory manager.
+
+    Each snapshot lists every loaded model (server models and models other
+    apps hold) with its VRAM, GTT spill, when it last used the GPU (GPU
+    time of its processes from fdinfo; Ollama's expiry moving forward) and
+    how long it takes to load (measured: our own loads, systemd start to
+    ready; else estimated from size and disk speed). manage() then unloads
+    idle models and evicts under memory pressure."""
+
+    def __init__(self):
+        self.mem = hm.Memory()
+        self.lock = threading.RLock()
+        self.prev_engine = {}      # pid -> (engine ns, time)
+        self.ollama_exp = {}       # model -> expires_at
+        self.present = set()       # loaded keys in the last snapshot
+        self.unloading = {}        # key -> time an unload was sent
+        self.last_evict = 0
+        self.inv = (0, [])
+        self.last = None           # last snapshot
+        self.notices = []          # [{"type": "evicted", ...}] to emit
+
+    # --- installed models ---
+    def inventory(self, cfg, pstates, force=False):
+        now = time.time()
+        if not force and now - self.inv[0] < 30 and self.inv[1]:
+            return self.inv[1]
+        items, by_path = [], {}
+        dirs = list(cfg.get("modelDirs") or [])
+        llama = pstates.get("llamacpp") or {}
+        if llama.get("modelsDir"):
+            dirs.append(llama["modelsDir"])
+        for s in pstates.values():
+            if s.get("service"):
+                for m in s.get("installed", []):
+                    if m.get("path"):
+                        dirs.append(os.path.dirname(os.path.dirname(m["path"])))
+        mcfg = hm._json(os.path.join(HOME, ".magnitude", "config.json"), {}) or {}
+        dirs += ((mcfg.get("models") or {}).get("paths") or [])
+        dirs.append(os.path.join(HOME, ".magnitude", "models"))
+        seen, uniq = set(), []
+        for d in dirs:
+            d = os.path.realpath(os.path.expanduser(d))
+            if d not in seen and not any(d.startswith(s + "/") for s in seen) and d != HOME and d != "/":
+                seen.add(d)
+                uniq.append(d)
+        for it in hm.scan_gguf(uniq, "Folder"):
+            if "/.magnitude/models" in it["path"]:
+                it["source"] = "Magnitude"
+            by_path[it["path"]] = it
+            items.append(it)
+        lms = [os.path.join(HOME, ".lmstudio", "models"), os.path.join(HOME, ".cache", "lm-studio", "models")]
+        for it in hm.scan_gguf([d for d in lms if os.path.isdir(d)], "LM Studio") + \
+                hm.scan_gguf([os.path.join(hm.CACHE_HOME, "llama.cpp")], "llama.cpp cache"):
+            if it["path"] not in by_path:
+                by_path[it["path"]] = it
+                items.append(it)
+        items += hm.scan_hf()
+        items += hm.scan_misc()
+        # Server models.
+        for pid, s in pstates.items():
+            if s.get("kind") == "cloud":
+                continue
+            for m in s.get("installed", []):
+                runner = {"provider": pid, "model": m["name"], "label": s.get("label", pid)}
+                path = m.get("path", "")
+                if pid == "magnitude":
+                    # A GGUF Magnitude found in a folder: same architecture and
+                    # quant, closest size (Magnitude counts the projector too).
+                    msize, quant = m.get("size", 0), (m.get("quant") or "").lower()
+                    cands = [i for i in items if i.get("path", "").endswith(".gguf") and i.get("size")
+                             and (not m.get("arch") or not i.get("arch") or i["arch"] == m["arch"])
+                             and abs(i["size"] - msize) < 0.12 * msize]
+                    cands = [i for i in cands if quant and quant in i["name"].lower()] or cands
+                    match = min(cands, key=lambda i: abs(i["size"] - msize)) if cands else None
+                    runner.update(fits=m.get("fits", ""), note=m.get("note", ""), context=m.get("context", 0))
+                    if match:
+                        match["runners"].append(runner)
+                        continue
+                    items.append({"key": "magnitude:" + m["name"], "name": m.get("label") or m["name"],
+                                  "family": "", "category": "llm", "source": "Magnitude", "size": m.get("size", 0),
+                                  "sizeText": m.get("sizeText", ""), "quant": m.get("quant", ""),
+                                  "context": m.get("context", 0), "arch": m.get("arch", ""), "deletable": True,
+                                  "deleteVia": runner, "runners": [runner], "note": m.get("note", "")})
+                    continue
+                if path and os.path.realpath(path) in by_path:
+                    by_path[os.path.realpath(path)]["runners"].append(runner)
+                    if s.get("service"):
+                        by_path[os.path.realpath(path)]["serviceLabel"] = s.get("label")
+                    continue
+                if path and path in by_path:
+                    by_path[path]["runners"].append(runner)
+                    continue
+                items.append({
+                    "key": "%s:%s" % (pid, m["name"]), "name": m.get("label") or m["name"], "family": m.get("family", ""),
+                    "category": model_category(m["name"], m.get("capabilities") or [], m.get("family", "")),
+                    "source": s.get("label", pid), "size": m.get("size", 0), "sizeText": m.get("sizeText", ""),
+                    "params": m.get("params", ""), "quant": m.get("quant", ""), "path": path,
+                    "deletable": pid == "ollama", "deleteVia": runner if pid == "ollama" else None,
+                    "runners": [runner], "capabilities": m.get("capabilities") or []})
+        for it in items:
+            it["categoryLabel"] = hm.CATEGORY_LABEL.get(it["category"], "Other")
+            it["loadable"] = bool(it["runners"])
+        items.sort(key=lambda i: (i["category"] != "llm", i["category"], i["name"].lower()))
+        self.inv = (now, items)
+        return items
+
+    # --- snapshot ---
+    def snapshot(self, with_procs=True, manage=False):
+        with self.lock:
+            return self._snapshot(with_procs, manage)
+
+    def _snapshot(self, with_procs, manage):
+        cfg, _ = settings()
+        provs = providers(cfg)
+        gs = gpus()
+        g = main_gpu(gs)
+        now = time.time()
+        clients = hm.gpu_clients()
+        active_pids = set()
+        alive = set()
+        for c in clients:
+            alive.add(c["pid"])
+            prev = self.prev_engine.get(c["pid"])
+            c["gpuPercent"] = 0
+            if prev and now > prev[1]:
+                frac = (c["engineNs"] - prev[0]) / 1e9 / (now - prev[1])
+                c["gpuPercent"] = round(max(0.0, min(1.0, frac)) * 100)
+                if frac > 0.02:
+                    active_pids.add(c["pid"])
+            self.prev_engine[c["pid"]] = (c["engineNs"], now)
+        for pid in list(self.prev_engine):
+            if pid not in alive:
+                del self.prev_engine[pid]
+        pstates = {}
+        for p in provs.values():
+            try:
+                s = p.state()
+            except Exception as e:  # noqa: BLE001
+                s = {"id": p.id, "label": p.label, "installed": [], "loaded": [], "error": str(e)}
+            if p.id == "llamacpp":
+                s["unit"] = unit_active(LLAMA_UNIT)
+            pstates[p.id] = s
+        by_pid = {c["pid"]: c for c in clients}
+        covered = set()
+        loaded = []
+        pinned = set(cfg.get("pinned") or [])
+
+        def entry(key, name, cat, pid_, s, pids=(), vram=None, extra=None):
+            cs = [by_pid[x] for x in pids if x in by_pid]
+            covered.update(c["pid"] for c in cs)
+            e = {"key": key, "name": name, "category": cat, "categoryLabel": hm.CATEGORY_LABEL.get(cat, "Other"),
+                 "provider": pid_, "providerLabel": s.get("label", pid_), "kind": "server",
+                 "vram": vram if vram is not None else sum(c["vram"] for c in cs),
+                 "gtt": sum(c["gtt"] for c in cs), "pids": [c["pid"] for c in cs],
+                 "active": any(c["pid"] in active_pids for c in cs),
+                 "gpuPercent": max([c["gpuPercent"] for c in cs] or [0]), "auto": True, "canUnload": True,
+                 "unloadLabel": "Unload", "unit": "", "model": name, "partial": False}
+            e.update(extra or {})
+            loaded.append(e)
+            return e
+
+        for pid_, s in pstates.items():
+            for m in s.get("loaded", []):
+                name = m["name"]
+                if pid_ == "ollama":
+                    inst = next((i for i in s.get("installed", []) if i["name"] == name), {})
+                    e = entry("ollama:" + name, name, model_category(name, inst.get("capabilities") or [],
+                                                                       inst.get("family", "")),
+                              pid_, s, vram=m.get("vram", 0), extra={"size": m.get("size", 0),
+                                                                     "context": m.get("context", 0)})
+                    e["partial"] = bool(m.get("size")) and m.get("vram", 0) < 0.97 * m["size"]
+                    exp = m.get("expires", "")
+                    if self.ollama_exp.get(name) not in (None, exp):
+                        e["active"] = True       # a request moved its expiry
+                    self.ollama_exp[name] = exp
+                elif pid_ == "magnitude":
+                    mp = [c["pid"] for c in clients if c["name"] == "Magnitude"]
+                    entry("magnitude:" + name, m.get("label") or name, "llm", pid_, s, mp,
+                          extra={"context": m.get("context", 0)})
+                elif s.get("service"):
+                    unit = s["unit"]
+                    sp = [c["pid"] for c in clients if c["unit"] == unit]
+                    inst = (s.get("installed") or [{}])[0]
+                    e = entry("service:" + unit, s.get("label") or name, model_category(inst.get("path", name)),
+                              pid_, s, sp, extra={"unit": unit, "unloadLabel": "Stop", "size": inst.get("size", 0),
+                                                  "path": inst.get("path", ""), "socket": s.get("socket", "")})
+                    info = s.get("unitInfo") or {}
+                    try:
+                        t0 = int(info.get("InactiveExitTimestampMonotonic") or 0)
+                        t1 = int(info.get("ActiveEnterTimestampMonotonic") or 0)
+                        if t1 > t0 > 0:
+                            self.mem.note(e["key"], loadSec=round((t1 - t0) / 1e6, 1), loadMeasured=True)
+                    except ValueError:
+                        pass
+                elif s.get("external"):
+                    entry(pid_ + ":" + name, name, model_category(name), pid_, s, [s["pid"]],
+                          extra={"unloadLabel": "Stop", "external": True, "pid": s["pid"]})
+                else:
+                    entry(pid_ + ":" + name, name, model_category(name), pid_, s)
+        # Models other apps hold (found by the model files they have open).
+        apps = {}
+        for c in clients:
+            if c["pid"] in covered:
+                continue
+            if c["models"] and c["name"] not in HIDDEN_APPS:
+                first = c["models"][0]
+                mname = first.split("/", 1)[-1] if first.startswith("hf:") else \
+                    os.path.splitext(os.path.basename(first))[0]
+                cat = hm.classify(" ".join(c["models"]) + " " + c["cmd"], default="other")
+                unit = c["unit"]
+                more = len(c["models"]) - 1
+                entry("process:%d" % c["pid"], mname + (" +%d" % more if more > 0 else ""), cat, "process",
+                      {"label": c["name"]}, [c["pid"]],
+                      extra={"kind": "process", "auto": False, "canUnload": bool(unit), "unit": unit,
+                             "unloadLabel": "Stop", "models": c["models"], "app": c["name"], "pid": c["pid"]})
+                continue
+            a = apps.setdefault(c["name"], {"name": c["name"], "vram": 0, "gtt": 0, "count": 0, "gpuPercent": 0})
+            a["vram"] += c["vram"]
+            a["gtt"] += c["gtt"]
+            a["count"] += 1
+            a["gpuPercent"] = max(a["gpuPercent"], c["gpuPercent"])
+        # History: last use, load time, idle limit.
+        idle_min = float(cfg.get("idleMinutes", 5) or 5)
+        factor = float(cfg.get("loadTimeFactor", 10) or 10)
+        keys = set()
+        for e in loaded:
+            k = e["key"]
+            keys.add(k)
+            h = self.mem.get(k)
+            if k not in self.present:
+                self.mem.note(k, firstSeen=now)
+                h["lastActive"] = max(h.get("lastActive", 0), now)
+            if e["active"]:
+                h["lastActive"] = now
+                self.mem.dirty = True
+            if e["vram"] > h.get("peakVram", 0):
+                self.mem.note(k, peakVram=e["vram"])
+            if not h.get("loadSec"):
+                size = e.get("size") or e["vram"]
+                h["loadSec"] = round(2 + size / hm.load_speed(e.get("path", "")), 1)
+            e["loadSec"] = h["loadSec"]
+            e["loadMeasured"] = bool(h.get("loadMeasured"))
+            e["lastActive"] = h.get("lastActive", now)
+            e["idleSec"] = max(0, int(now - e["lastActive"]))
+            e["firstSeen"] = h.get("firstSeen", now)
+            e["pinned"] = k in pinned
+            e["idleLimit"] = int(min(3600, max(idle_min * 60, e["loadSec"] * factor)))
+            # Seconds until it unloads by itself; -1: never (pinned, not managed).
+            e["unloadIn"] = max(0, e["idleLimit"] - e["idleSec"]) if e["auto"] and cfg.get("autoUnload", True) \
+                and not e["pinned"] else -1
+            e["vramText"] = human_bytes(e["vram"]) if e["vram"] else ""
+            e["gttText"] = human_bytes(e["gtt"]) if e["gtt"] >= 256 << 20 else ""
+            e["unloading"] = now - self.unloading.get(k, 0) < 30
+        for k in list(self.unloading):
+            if k not in keys or now - self.unloading[k] > 120:
+                self.unloading.pop(k, None)
+        self.present = keys
+        self.mem.save()
+        loaded.sort(key=lambda e: -(e["vram"] + e["gtt"]))
+        inv = self.inventory(cfg, pstates)
+        held = set()
+        for e in loaded:
+            held.add(e["key"])
+            held.update(e.get("models") or [])
+            if e.get("path"):
+                held.add("file:" + e["path"])
+        for it in inv:
+            it["loaded"] = it["key"] in held or any(
+                ("%s:%s" % (r["provider"], r["model"]) in held) or
+                (r["provider"].startswith("service:") and r["provider"] in held) for r in it["runners"])
+        model_vram = sum(e["vram"] for e in loaded)
+        st = {"type": "state", "time": int(now), "providers": list(pstates.values()), "gpus": gs, "gpu": g,
+              "allowCloud": bool(cfg.get("allowCloud")),
+              "clis": [{"id": k, "label": v["label"], "installed": bool(shutil.which(v["bin"]))} for k, v in CLI.items()],
+              "loaded": loaded, "installed": inv,
+              "apps": sorted([a for a in apps.values() if a["vram"] >= 16 << 20], key=lambda a: -a["vram"]),
+              "modelVram": model_vram, "categories": [{"id": k, "label": v} for k, v in hm.CATEGORIES],
+              "policy": {"autoUnload": bool(cfg.get("autoUnload", True)), "idleMinutes": idle_min,
+                         "evictOnPressure": bool(cfg.get("evictOnPressure", True))}}
+        for a in st["apps"]:
+            a["vramText"] = human_bytes(a["vram"])
+        if with_procs:
+            st["processes"] = [dict(c, cmd="") for c in clients if c["vram"] >= 32 << 20][:20]
+        self.last = st
+        if manage:
+            self.manage(cfg, st)
+        return st
+
+    # --- memory manager ---
+    def victims(self, st, exclude=()):
+        """Models that may be evicted, best first. Never the newest one (the
+        request that needs the room) nor one using the GPU right now."""
+        cands = [e for e in st["loaded"] if e["auto"] and not e["pinned"] and not e["active"]
+                 and e["idleSec"] >= 20 and not e["unloading"] and e["key"] not in exclude]
+        newest = max((e["firstSeen"] for e in st["loaded"]), default=0)
+        cands = [e for e in cands if e["firstSeen"] < newest]
+        # Idle longest and quickest to load again go first.
+        cands.sort(key=lambda e: e["loadSec"] / (e["idleSec"] + 30.0))
+        return cands
+
+    def manage(self, cfg, st):
+        g = st["gpu"]
+        now = time.time()
+        if cfg.get("autoUnload", True):
+            for e in st["loaded"]:
+                if e["auto"] and not e["pinned"] and not e["active"] and not e["unloading"] \
+                        and e["unloadIn"] == 0:
+                    idle = e["idleSec"]
+                    self.unload(e, "unused for %s" % ("%d min" % (idle // 60) if idle >= 60 else "%d s" % idle))
+        if not cfg.get("evictOnPressure", True) or not g or now - self.last_evict < 8:
+            return
+        spill = any(e["gtt"] >= 1 << 30 for e in st["loaded"])
+        partial = any(e["partial"] for e in st["loaded"])
+        if g["total"] and (g["used"] / g["total"] > 0.94 or spill or partial):
+            vs = self.victims(st)
+            if vs:
+                self.last_evict = now
+                self.unload(vs[0], "make room")
+
+    def unload(self, e, reason, wait=False):
+        self.unloading[e["key"]] = time.time()
+        dry = bool(os.environ.get("HEARTH_AI_MANAGE_DRYRUN"))
+        self.notices.append({"type": "evicted", "key": e["key"], "name": e["name"], "reason": reason,
+                             "vramText": e.get("vramText", ""), "dryRun": dry})
+        log("%sunloading %s (%s)" % ("[dry run] " if dry else "", e["key"], reason))
+        if dry:
+            return
+
+        def go():
+            try:
+                unload_entry(e)
+            except Exception as ex:  # noqa: BLE001
+                log("unload %s: %s" % (e["key"], ex))
+                self.unloading.pop(e["key"], None)
+        if wait:
+            go()
+        else:
+            threading.Thread(target=go, daemon=True).start()
+
+    def make_room(self, need, exclude=(), timeout=45):
+        """Evict idle models (best victims first) until `need` bytes of VRAM
+        are free. Returns the free bytes."""
+        st = self.snapshot(False)
+        g = st["gpu"]
+        if not g:
+            return 0
+        deadline = time.time() + timeout
+        tried = set(exclude)
+        while g["free"] < need and time.time() < deadline:
+            vs = [v for v in self.victims(st) if v["key"] not in tried] or \
+                 [v for v in st["loaded"] if v["auto"] and not v["pinned"] and not v["active"] and v["key"] not in tried]
+            if not vs:
+                break
+            tried.add(vs[0]["key"])
+            self.unload(vs[0], "make room for a new model", wait=True)
+            for _ in range(30):
+                time.sleep(0.5)
+                st = self.snapshot(False)
+                g = st["gpu"]
+                if g["free"] >= need or vs[0]["key"] not in {e["key"] for e in st["loaded"]}:
+                    break
+        return g["free"]
+
+    def need_for(self, key, size=0):
+        """VRAM a model is expected to take: its peak last time, else its
+        size plus some room for context."""
+        h = self.mem.get(key)
+        return h.get("peakVram") or int(size * 1.1 + (768 << 20))
+
+
+def unload_entry(e):
+    if e["kind"] == "process":
+        if not e.get("unit"):
+            raise RuntimeError("%s isn't a service hearth can stop" % e.get("app", "That app"))
+        r = subprocess.run(["systemctl", "--user", "stop", e["unit"]], capture_output=True, text=True, timeout=120)
+        if r.returncode:
+            raise RuntimeError((r.stderr or "couldn't stop %s" % e["unit"]).strip())
+        return
     cfg, _ = settings()
-    provs = providers(cfg)
-    st = {"type": "state", "time": int(time.time()), "providers": [], "gpus": gpus(),
-          "allowCloud": bool(cfg.get("allowCloud")),
-          "clis": [{"id": k, "label": v["label"], "installed": bool(shutil.which(v["bin"]))} for k, v in CLI.items()]}
-    for p in provs.values():
-        try:
-            s = p.state()
-        except Exception as e:  # noqa: BLE001
-            s = {"id": p.id, "label": p.label, "installed": [], "loaded": [], "error": str(e)}
-        if p.id == "llamacpp":
-            s["unit"] = unit_active(LLAMA_UNIT)
-        st["providers"].append(s)
-    if with_procs:
-        st["processes"] = vram_processes()
-    return st
+    p = providers(cfg).get(e["provider"])
+    if p is None:
+        raise RuntimeError("%s is turned off" % e["provider"])
+    p.unload(e["model"])
+
+
+ARB = Arbiter()
+
+
+def full_state(with_procs):
+    return ARB.snapshot(with_procs)
 
 
 # --- assistant -----------------------------------------------------------------
@@ -683,6 +1174,16 @@ class Assistant:
             emit({"type": "reply", "id": rid, "done": True, "error": True,
                   "text": "%s sends what you say to the cloud. Allow cloud AI in Settings > AI first." % p.label})
             return
+        if not isinstance(p, AgentCli):
+            # A new request evicts idle models when its model needs the room.
+            key = pid if pid.startswith("service:") else "%s:%s" % (pid, model)
+            st = ARB.last or ARB.snapshot(False)
+            if key not in {e["key"] for e in st["loaded"]}:
+                size = next((i.get("size", 0) for i in st["installed"]
+                             if any(r["provider"] == pid and r["model"] == model for r in i["runners"])), 0)
+                need = ARB.need_for(key, size)
+                if st["gpu"] and st["gpu"]["free"] < need:
+                    ARB.make_room(need, exclude=(key,))
         messages = [{"role": "system", "content": system_prompt(req.get("context") or {})}]
         messages += req.get("history") or []
         messages.append({"role": "user", "content": req.get("text", "")})
@@ -728,23 +1229,61 @@ class Assistant:
 
 # --- main loop -------------------------------------------------------------------
 
+def parse_bytes(s):
+    m = re.match(r"^\s*([\d.]+)\s*([KMGT]?)i?B?\s*$", s, re.I)
+    if not m:
+        return None
+    return int(float(m.group(1)) * (1024 ** "BKMGT".index((m.group(2) or "B").upper())))
+
+
+def make_room_cli(arg):
+    """hearth-ai --make-room inkling-2-mini.service | 20G: evict idle models
+    until that much VRAM is free (a unit's need is its peak VRAM last time,
+    else its model file plus room for context). Always exits 0: a unit
+    must still start when nothing can be freed."""
+    need = parse_bytes(arg)
+    key = ""
+    if need is None:
+        unit = arg if arg.endswith(".service") else arg + ".service"
+        key = "service:" + unit
+        size = 0
+        for svc in hm.services():
+            if svc["unit"] == unit:
+                for f in glob.glob(re.sub(r"-00001-of-(\d+)\.gguf$", r"-*-of-\1.gguf", hm.service_model_path(svc))):
+                    size += os.path.getsize(f)
+        need = ARB.need_for(key, size)
+    free = ARB.make_room(need, exclude=(key,))
+    print("hearth-ai: %s free of %s needed" % (human_bytes(free), human_bytes(need)), file=sys.stderr)
+    ARB.mem.save(force=True)
+
+
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "--state":
         print(json.dumps(full_state(True), indent=1))
+        return
+    if len(sys.argv) > 2 and sys.argv[1] == "--make-room":
+        make_room_cli(sys.argv[2])
         return
     asst = Assistant()
     watching = {"on": False}
 
     def poller():
-        last = 0
+        # The memory manager looks every 5 s (2 s while a UI watches); the
+        # shell gets the state every 30 s unless it watches.
+        last = last_emit = 0
         while True:
             time.sleep(0.5)
             now = time.time()
-            period = 2 if watching["on"] else 30
+            period = 2 if watching["on"] else 5
             if now - last >= period:
                 last = now
                 try:
-                    emit(full_state(watching["on"]))
+                    st = ARB.snapshot(watching["on"], manage=True)
+                    while ARB.notices:
+                        emit(ARB.notices.pop(0))
+                    if watching["on"] or now - last_emit >= 30:
+                        last_emit = now
+                        emit(st)
                 except Exception as e:  # noqa: BLE001
                     log("state:", e)
 
@@ -753,6 +1292,160 @@ def main():
     def bg(fn, *a):
         threading.Thread(target=fn, args=a, daemon=True).start()
 
+    def find_key(key):
+        for fresh in (False, True):
+            st = ARB.snapshot(False) if fresh or not ARB.last else ARB.last
+            for e in st["loaded"]:
+                if e["key"] == key:
+                    return "loaded", e
+            for it in st["installed"]:
+                if it["key"] == key:
+                    return "installed", it
+        return None, None
+
+    def timed_load(p, pid, model, key, size, cfg):
+        """Load a model, making room first, and remember how long it took."""
+        need = ARB.need_for(key, size)
+        g = (ARB.last or {}).get("gpu")
+        if g and g["free"] < need:
+            emit({"type": "busy", "provider": pid, "model": model, "what": "making room"})
+            ARB.make_room(need, exclude=(key,))
+        emit({"type": "busy", "provider": pid, "model": model, "what": "loading"})
+        t0 = time.time()
+        p.load(model, int(cfg.get("keepAlive", 10)))
+        ARB.mem.note(key, loadSec=round(time.time() - t0, 1), loadMeasured=True, lastActive=time.time())
+        ARB.mem.save(force=True)
+
+    def keyed(req):
+        cmd, key = req["cmd"], req.get("key", "")
+        cfg, _ = settings()
+        name = key
+        try:
+            kind, item = find_key(key)
+            if item is None:
+                raise RuntimeError("that model is gone")
+            name = item.get("name", key)
+            if cmd == "unloadKey":
+                if kind != "loaded":
+                    raise RuntimeError("%s isn't loaded" % name)
+                ARB.unloading[key] = time.time()
+                unload_entry(item)
+            elif cmd == "loadKey":
+                runners = item.get("runners") or []
+                r = next((x for x in runners if x["provider"] == req.get("provider")), runners[0] if runners else None)
+                if not r:
+                    raise RuntimeError("nothing here can load %s" % name)
+                p = providers(cfg).get(r["provider"])
+                if p is None:
+                    raise RuntimeError("%s is turned off" % r["provider"])
+                lkey = r["provider"] + ":" + r["model"] if not r["provider"].startswith("service:") else r["provider"]
+                timed_load(p, r["provider"], r["model"], lkey, item.get("size", 0), cfg)
+            elif cmd == "remove":
+                if kind != "installed" or not item.get("deletable"):
+                    raise RuntimeError("%s can't be removed from here" % name)
+                via = item.get("deleteVia")
+                if via:
+                    p = providers(cfg).get(via["provider"])
+                    if p is None or not hasattr(p, "delete"):
+                        raise RuntimeError("%s can't delete models" % via["provider"])
+                    p.delete(via["model"])
+                else:
+                    hm.trash(item.get("deletePaths") or [])
+                ARB.inv = (0, [])
+            emit({"type": "done", "cmd": cmd, "key": key, "model": name})
+        except Exception as e:  # noqa: BLE001
+            emit({"type": "done", "cmd": cmd, "key": key, "model": name, "error": str(e)})
+        emit(ARB.snapshot(watching["on"]))
+
+    def pin(req):
+        cfg, data = settings()
+        pins = [k for k in (cfg.get("pinned") or []) if k != req.get("key")]
+        if req.get("on"):
+            pins.append(req.get("key"))
+        # The shell owns settings.json: ask it to write.
+        emit({"type": "setting", "path": "ai.pinned", "value": pins})
+
+    def catalog(req):
+        cat = req.get("category", "")
+        query = (req.get("query") or "").strip()
+        out = {"type": "catalog", "category": cat, "query": query, "picks": [], "search": [], "magnitude": []}
+        try:
+            sizes = hm.catalog_sizes()
+            for p in hm.PICKS:
+                if cat and p["category"] != cat:
+                    continue
+                if query and query.lower() not in (p["ref"] + " " + p["desc"]).lower():
+                    continue
+                s = sizes.get(p["provider"] + ":" + p["ref"], {})
+                out["picks"].append(dict(p, name=p["ref"].split("/", 1)[-1], size=s.get("size", 0),
+                                         sizeText=human_bytes(s["size"]) if s.get("size") else "",
+                                         gated=s.get("gated", False)))
+            if cat in ("", "llm") and hm.magnitude_installed() and hm.magnitude_running():
+                try:
+                    rec = json.loads(hm.magnitude("models", "recommend", "--json", timeout=20))
+                    for r in rec.get("models", []):
+                        m = r.get("model") or {}
+                        pres = m.get("presentation") or {}
+                        a = (m.get("servingState") or {}).get("assessment") or {}
+                        if query and query.lower() not in (pres.get("displayName", "") + pres.get("description", "")).lower():
+                            continue
+                        out["magnitude"].append({
+                            "provider": "magnitude", "ref": m.get("modelId", ""), "category": "llm",
+                            "name": "%s %s" % (pres.get("displayName", ""), pres.get("variantLabel", "")),
+                            "desc": pres.get("description", ""), "size": m.get("storageBytes", 0),
+                            "sizeText": human_bytes(m.get("storageBytes", 0)),
+                            "context": ((a.get("served") or {}).get("contextLength")) or 0,
+                            "fits": a.get("_tag", "")})
+                except (RuntimeError, ValueError, OSError, subprocess.SubprocessError) as e:
+                    log("magnitude recommend:", e)
+            if query or req.get("browse"):
+                out["search"] = hm.hf_search(query, cat)
+        except Exception as e:  # noqa: BLE001
+            out["error"] = str(e)
+        emit(out)
+
+    def install(req):
+        prov, model = req.get("provider", ""), req.get("model", "")
+
+        def prog(status, done, total, err):
+            emit({"type": "pull", "provider": prov, "model": model, "status": status,
+                  "completed": done, "total": total, "error": err})
+        try:
+            if prov == "hf":
+                hf = shutil.which("hf") or shutil.which("huggingface-cli")
+                if not hf:
+                    raise RuntimeError("the Hugging Face CLI (hf) isn't installed")
+                prog("downloading", 0, 0, "")
+                proc = subprocess.Popen([hf, "download", model], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                                        text=True, bufsize=1)
+                buf, err_tail = "", ""
+                while True:
+                    ch = proc.stderr.read(256)
+                    if not ch:
+                        break
+                    buf += ch
+                    parts = re.split(r"[\r\n]", buf)
+                    buf = parts.pop()
+                    for line in parts:
+                        if line.strip():
+                            err_tail = line.strip()
+                        m = re.search(r"(\d+)%", line)
+                        if m:
+                            prog("downloading", int(m.group(1)), 100, "")
+                if proc.wait() != 0:
+                    raise RuntimeError(err_tail or "download failed")
+            else:
+                cfg, _ = settings()
+                p = providers(cfg).get(prov)
+                if p is None or not hasattr(p, "pull"):
+                    raise RuntimeError("%s can't download models" % prov)
+                p.pull(model, prog)
+            emit({"type": "pull", "provider": prov, "model": model, "status": "success", "done": True})
+            ARB.inv = (0, [])
+        except Exception as e:  # noqa: BLE001
+            emit({"type": "pull", "provider": prov, "model": model, "status": "error", "error": str(e), "done": True})
+        emit(ARB.snapshot(watching["on"]))
+
     def act(req):
         cfg, _ = settings()
         provs = providers(cfg)
@@ -760,20 +1453,20 @@ def main():
         cmd = req["cmd"]
         try:
             if cmd == "unloadAll":
-                for p in provs.values():
-                    if hasattr(p, "unload"):
+                st = ARB.snapshot(False)
+                for e in st["loaded"]:
+                    if e["auto"] and not e["pinned"]:
                         try:
-                            for m in p.state()["loaded"]:
-                                p.unload(m["name"])
-                        except Exception as e:  # noqa: BLE001
-                            log("unload", p.id, e)
+                            unload_entry(e)
+                        except Exception as ex:  # noqa: BLE001
+                            log("unload", e["key"], ex)
             else:
                 p = provs.get(pid)
                 if p is None:
                     raise RuntimeError("%s is turned off" % pid)
                 if cmd == "load":
-                    emit({"type": "busy", "provider": pid, "model": model, "what": "loading"})
-                    p.load(model, int(cfg.get("keepAlive", 10)))
+                    size = next((m.get("size", 0) for m in (p.state().get("installed") or []) if m["name"] == model), 0)
+                    timed_load(p, pid, model, pid + ":" + model, size, cfg)
                 elif cmd == "unload":
                     p.unload(model)
                 elif cmd == "delete":
@@ -811,6 +1504,14 @@ def main():
                 bg(lambda: emit(full_state(True)))
         elif cmd in ("load", "unload", "unloadAll", "delete", "pull"):
             bg(act, req)
+        elif cmd in ("loadKey", "unloadKey", "remove"):
+            bg(keyed, req)
+        elif cmd == "pin":
+            pin(req)
+        elif cmd == "catalog":
+            bg(catalog, req)
+        elif cmd == "install":
+            bg(install, req)
         elif cmd == "server":
             bg(server, req)
         elif cmd == "ask":
