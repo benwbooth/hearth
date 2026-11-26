@@ -81,15 +81,24 @@ HEARTH_DIR = hearth_theme_dir(HEARTH_BASE)
 
 
 def accent_theme():
-    """~/.local/share/themes/Hearth-<accent>[-dark]: Hearth's files with the
-    accent redefined (a later @define-color wins; the theme draws every
-    accent from @accent_bg_color). A new name per accent, so running GTK apps
-    reload it live, as they do on any theme change. Older accent themes are
-    removed. Returns the theme's name."""
+    """~/.themes/Hearth-<accent>[-dark]: Hearth's files with the accent
+    redefined (a later @define-color wins; the theme draws every accent from
+    @accent_bg_color). A new name per accent, so running GTK apps reload it
+    live, as they do on any theme change. Older accent themes are removed.
+    Returns the theme's name.
+
+    ~/.themes, not ~/.local/share/themes, so Flatpak apps can see it too
+    (Flatpaks read ~/.themes when allowed to; their XDG data dir is their
+    own). GTK 3's files import Hearth from the host's path and from where
+    the org.gtk.Gtk3theme.Hearth[-dark] Flatpak extension puts it in a
+    sandbox (hearth-gtk-theme's flatpak/build.sh); the one that isn't there
+    is skipped with a warning."""
     import shutil
     hexa = HEARTH_ACCENT.lstrip("#")
     name = f"Hearth-{hexa}" + ("-dark" if DARK else "")
-    root = os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "themes")
+    root = os.path.expanduser("~/.themes")
+    # (Where they were written before 2026-11-26.)
+    old_root = os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "themes")
     # (By the stable system path, not the store path, so it survives rebuilds.)
     base = HEARTH_DIR
     files = {"index.theme": f"[Desktop Entry]\nType=X-GNOME-Metatheme\nName={name}\n"
@@ -97,8 +106,10 @@ def accent_theme():
                             f"[X-GNOME-Metatheme]\nGtkTheme={name}\n"}
     for ver in ("gtk-3.0", "gtk-4.0"):
         for css in ("gtk.css", "gtk-dark.css"):
-            files[f"{ver}/{css}"] = (f'@import url("file://{base}/{ver}/{css}");\n'
-                                     f"@define-color accent_bg_color {HEARTH_ACCENT};\n")
+            imports = f'@import url("file://{base}/{ver}/{css}");\n'
+            if ver == "gtk-3.0":
+                imports += f'@import url("file:///usr/share/runtime/share/themes/{HEARTH_BASE}/gtk-3.0/{css}");\n'
+            files[f"{ver}/{css}"] = imports + f"@define-color accent_bg_color {HEARTH_ACCENT};\n"
     d = os.path.join(root, name)
     for rel, text in files.items():
         path = os.path.join(d, rel)
@@ -116,10 +127,15 @@ def accent_theme():
         os.symlink(os.path.join(base, "gtk-2.0"), gtk2)
     # Only ours: Hearth-<6 hex digits>[-dark].
     import re
-    for old in os.listdir(root):
-        if old != name and re.fullmatch(r"Hearth-[0-9a-f]{6}(-dark)?", old) and \
-                old.endswith("-dark") == DARK:
-            shutil.rmtree(os.path.join(root, old), ignore_errors=True)
+    for r in (root, old_root):
+        try:
+            names = os.listdir(r)
+        except FileNotFoundError:
+            continue
+        for old in names:
+            if re.fullmatch(r"Hearth-[0-9a-f]{6}(-dark)?", old) and \
+                    (r == old_root or (old != name and old.endswith("-dark") == DARK)):
+                shutil.rmtree(os.path.join(r, old), ignore_errors=True)
     return name
 
 
