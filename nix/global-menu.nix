@@ -12,10 +12,12 @@
 #   the live socket and died with the test, leaving every new AT-SPI client
 #   with "connection refused" until a restart (2026-11-22). Clients find the
 #   bus by asking org.a11y.Bus, never by path.
-# - Flatpaks get an empty JAVA_TOOL_OPTIONS (with nix-flatpak): the session
-#   loads hearth's Java ATK bridge into every JVM (arbor/config.kdl), whose
-#   jar a sandbox can't see. Java apps listed in
-#   hearth.globalMenu.javaFlatpaks get the bridge instead (tested per app).
+# - Flatpaks get an empty JAVA_TOOL_OPTIONS: the session loads hearth's
+#   Java ATK bridge into every JVM (arbor/config.kdl), whose jar a sandbox
+#   can't see. Java apps listed in hearth.globalMenu.javaFlatpaks get the
+#   bridge instead (tested per app). Empty values go in the user's Flatpak
+#   overrides (hearth.flatpakBlankEnv): nix-flatpak drops every empty value
+#   from the system ones, so "" there never reached a Flatpak (2026-11-26).
 #
 # The rest lives with the session and the apps:
 # - arbor/config.kdl (hearth's session config): GTK_MODULES (appmenu-gtk-
@@ -25,7 +27,7 @@
 #   `hearth.lib.globalMenu.electronFlags` in their wrappers: Electron only
 #   builds its accessibility tree with it (or with a screen reader).
 self:
-{ config, lib, options, ... }:
+{ config, lib, options, pkgs, ... }:
 let
   jaw = "/run/current-system/sw/lib/java-atk-wrapper";
   javaToolOptions = "-Xbootclasspath/a:${jaw}/java-atk-wrapper.jar"
@@ -43,6 +45,17 @@ in
     description = "Flatpak ids of Java apps that load hearth's Java accessibility bridge.";
   };
 
+  # Session variables Flatpaks get empty: ones naming things a sandbox
+  # can't see. Set in the user's global Flatpak overrides at login (an
+  # app's own overrides still win). Taking one off the list leaves it
+  # blank until `flatpak override --user --unset-env=NAME`.
+  options.hearth.flatpakBlankEnv = lib.mkOption {
+    type = lib.types.listOf lib.types.str;
+    default = [ ];
+    example = [ "QT_QUICK_CONTROLS_STYLE" ];
+    description = "Environment variables set empty for every Flatpak (user overrides).";
+  };
+
   config = lib.mkMerge [
     {
       services.gnome.at-spi2-core.enable = true;
@@ -52,9 +65,21 @@ in
         Environment = "XDG_RUNTIME_DIR=%t/at-spi-live";
       };
     }
+    { hearth.flatpakBlankEnv = [ "JAVA_TOOL_OPTIONS" ]; }
+    (lib.mkIf (config.services.flatpak.enable && config.hearth.flatpakBlankEnv != [ ]) {
+      systemd.user.services.hearth-flatpak-blank-env = {
+        description = "Blank session variables Flatpaks can't use (user Flatpak overrides)";
+        wantedBy = [ "default.target" ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          ExecStart = "${pkgs.flatpak}/bin/flatpak override --user "
+            + lib.concatMapStringsSep " " (v: "--env=${v}=") config.hearth.flatpakBlankEnv;
+        };
+      };
+    })
     (lib.optionalAttrs (options ? services.flatpak.overrides) {
       services.flatpak.overrides = {
-        global.Environment.JAVA_TOOL_OPTIONS = "";
         # Every Flatpak may register its window's menu with hearth's
         # registrar: Electron, Chromium and Qt apps export dbusmenu menus
         # but most manifests don't ask for this name (the survey's
