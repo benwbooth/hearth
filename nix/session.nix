@@ -44,9 +44,14 @@ in
 {
   # The portal (dark mode, file dialogs, screenshots for apps) starts as soon
   # as the session does, not when the first app asks: arbor has imported
-  # WAYLAND_DISPLAY by then (graphical-session.target), and its backends
-  # are quick (grove claims its name before Qt starts, grove 35b9e78).
-  systemd.user.services.xdg-desktop-portal.wantedBy = [ "graphical-session.target" ];
+  # WAYLAND_DISPLAY by then, and its backends are quick (grove claims its
+  # name before Qt starts, grove 35b9e78). Pulled in by
+  # xdg-desktop-autostart.target, not graphical-session.target: a target is
+  # ordered after what it wants, and the portal waits at start for backends
+  # ordered after graphical-session.target (oo7-portal), so that deadlocked
+  # every login until D-Bus gave up after 25 s (boot VM test, 2026-11-26).
+  # Autostart apps still wait for it (hearth-ready).
+  systemd.user.services.xdg-desktop-portal.wantedBy = [ "xdg-desktop-autostart.target" ];
 
   systemd.user.services.hearth-ready = {
     description = "Wait until hearth's tray, notifications and global menu are up";
