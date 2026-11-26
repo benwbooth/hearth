@@ -469,7 +469,8 @@ CHROMIUM_APPS = (r"(?i)^(com\.anthropic\.claude|claude|brave-browser.*|chromium.
 
 def apply_arbor_popups():
     """~/.config/hearth/arbor-popups.kdl (included by hearth's arbor config):
-    the see-through colour follows light/dark."""
+    the see-through colour follows light/dark, and so do arbor's title bars
+    (macOS-style: the window's own background, a semibold title)."""
     key = "#26282b" if DARK else "#f9f9fa"
     text = f"""// Written by hearth-color-scheme (light/dark); edits here are replaced.
 // Chromium/Electron menus: their background colour see-through over arbor's
@@ -479,6 +480,12 @@ window-rule {{
     popups {{
         see-through-color "{key}"
         see-through-opacity 0.74
+    }}
+}}
+// Title bars arbor draws (server-side decorations) in hearth's mode.
+layout {{
+    title-bars {{
+        {"dark" if DARK else "light"}
     }}
 }}
 """
