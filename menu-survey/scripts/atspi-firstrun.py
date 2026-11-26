@@ -66,6 +66,21 @@ def app_of(pid, title=""):
     return byname[0] if len(byname) == 1 else None
 
 
+CONTROLS = {"minimize", "maximize", "restore", "minimise", "maximise", "unmaximize"}
+
+
+def window_control(o):
+    """A header bar's Close beside Minimize/Maximize: it would close the
+    app's own window (LACT: its daemon dialog's Close, then the window's)."""
+    try:
+        p = o.get_parent()
+        names = {(p.get_child_at_index(i).get_name() or "").strip().lower()
+                 for i in range(min(p.get_child_count(), 12))}
+        return bool(names & CONTROLS)
+    except Exception:
+        return False
+
+
 def buttons(app):
     R = Atspi.Role
     roles = {R.PUSH_BUTTON, R.BUTTON} if hasattr(R, "BUTTON") else {R.PUSH_BUTTON}
@@ -76,7 +91,8 @@ def buttons(app):
             if o.get_role() in roles:
                 name = (o.get_name() or "").strip()
                 st = o.get_state_set()
-                if name and st.contains(Atspi.StateType.SHOWING) and st.contains(Atspi.StateType.SENSITIVE):
+                if name and st.contains(Atspi.StateType.SHOWING) and st.contains(Atspi.StateType.SENSITIVE) \
+                        and not window_control(o):
                     found.append((name, o))
                 continue
             if d < 25:
