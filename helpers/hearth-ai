@@ -55,7 +55,8 @@ import urllib.error
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
-import hearth_ai_models as hm  # noqa: E402
+import hearth_ai_models as hm
+import hearth_ai_runtimes as rt  # noqa: E402
 
 HOME = os.path.expanduser("~")
 CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME") or os.path.join(HOME, ".config")
@@ -259,6 +260,9 @@ class LlamaCpp:
         st["installed"] += list(on_disk.values())
         return st
 
+    def chat_url(self):
+        return self.url + "/v1/chat/completions"
+
     def load(self, model, keep_minutes):
         http(self.url + "/models/load", {"model": model}, timeout=300)
 
@@ -269,7 +273,7 @@ class LlamaCpp:
         body = {"model": model, "messages": messages, "temperature": 0.2, "stream": False}
         if tools:
             body["tools"] = tools
-        r = http(self.url + "/v1/chat/completions", body, timeout=180)
+        r = http(self.chat_url(), body, timeout=180)
         msg = (r.get("choices") or [{}])[0].get("message") or {}
         calls = []
         for c in msg.get("tool_calls") or []:
@@ -480,6 +484,185 @@ class ModelService(LlamaCpp):
             raise RuntimeError((r.stderr or "couldn't stop %s" % self.unit).strip())
 
 
+class Runtime(LlamaCpp):
+    """Any other model server found listening here (hearth_ai_runtimes):
+    LM Studio, vLLM, SGLang, KoboldCpp, text-generation-webui, TabbyAPI,
+    LocalAI, llamafile, Lemonade, Jan, GPT4All, Docker Model Runner,
+    ComfyUI, or an unknown OpenAI-compatible one. Models come from its
+    OpenAI-style /models (and its own API where that says more: which are
+    loaded); load and unload use its own API or CLI; a one-model server
+    unloads by stopping (its user unit, else the process: only on request,
+    never automatically). Chat goes through its /chat/completions."""
+
+    def __init__(self, found):
+        self.rt = rt.BY_ID.get(found["runtime"], rt.GENERIC)
+        self.port = found["port"]
+        self.pid = found.get("pid") or 0
+        self.proc = found.get("proc") or {}
+        self.id = "runtime:%s:%d" % (self.rt["id"], self.port)
+        name = self.rt["label"]
+        if self.rt is rt.GENERIC and self.proc.get("comm"):
+            name = "%s (%s)" % (self.proc["comm"], self.rt["label"])
+        self.label = name
+        self.root = "http://127.0.0.1:%d" % self.port
+        self.url = self.root + self.rt["api"]
+        self.models_dir = ""
+        unit = hm._unit_of(self.pid) if self.pid else ""
+        # Its own user service (not an app scope): Stop stops the unit.
+        self.unit = unit if unit.endswith(".service") and not unit.startswith("app-") else ""
+        self.flavor = self.rt.get("flavor", "")
+
+    # -- reading
+    def _ids(self):
+        data = rt._models(self.url, timeout=2) or []
+        ids = [str(m.get("id") or m.get("name") or "") for m in data if isinstance(m, dict)]
+        # Placeholders some servers list with no model (KoboldCpp --nomodel: "inactive").
+        return [i for i in ids if i.lower() not in ("", "inactive", "none", "null", "no model")], data
+
+    def state(self):
+        st = {"id": self.id, "label": self.label, "kind": "local", "url": self.root, "running": True,
+              "runtime": self.rt["id"], "found": {"runtime": self.rt["id"], "pid": self.pid, "proc": self.proc}, "installed": [], "loaded": [], "error": "", "pid": self.pid,
+              "pids": rt.children(self.pid) if self.pid else [], "app": bool(self.rt.get("app")),
+              "multi": bool(self.rt.get("multi")), "runtimeUnit": self.unit,
+              # Stopped (not unloaded) and only on request: a one-model
+              # server, or an unknown one with no unload call, that hearth
+              # didn't start.
+              "external": not self.unit and not self.rt.get("app")
+                          and (not self.rt.get("multi") or self.rt is rt.GENERIC)}
+        f = self.flavor
+        try:
+            if f == "comfyui":
+                rt.get(self.root + "/system_stats", timeout=2)
+                st["loaded"] = [{"name": "ComfyUI", "label": "ComfyUI models", "vram": 0, "vramText": ""}]
+                return st
+            ids, data = self._ids()
+        except Exception as e:  # noqa: BLE001
+            st["running"] = False
+            st["error"] = "%s isn't answering (%s)" % (self.label, e)
+            return st
+        info = {}
+        loaded = set()
+        if f == "lmstudio":
+            try:
+                for m in (rt.get(self.root + "/api/v0/models", timeout=2) or {}).get("data", []):
+                    info[m.get("id", "")] = m
+                    if m.get("state") == "loaded":
+                        loaded.add(m.get("id", ""))
+                ids = list(info) or ids
+            except Exception:  # noqa: BLE001
+                pass
+        elif f == "textgen":
+            try:
+                cur = (rt.get(self.root + "/v1/internal/model/info", timeout=2) or {}).get("model_name", "")
+                if cur and cur != "None":
+                    loaded.add(cur)
+                ids = (rt.get(self.root + "/v1/internal/model/list", timeout=2) or {}).get("model_names", ids) or ids
+            except Exception:  # noqa: BLE001
+                pass
+        elif f == "tabby":
+            try:
+                cur = (rt.get(self.root + "/v1/model", timeout=2) or {}).get("id", "")
+                if cur:
+                    loaded.add(cur)
+                lst = (rt.get(self.root + "/v1/model/list", timeout=2) or {}).get("data", [])
+                ids = [m.get("id", "") for m in lst] or ids
+            except Exception:  # noqa: BLE001
+                pass
+        elif f == "localai":
+            try:
+                sysinfo = rt.get(self.root + "/system", timeout=2) or {}
+                for m in sysinfo.get("loaded_models", []) or []:
+                    loaded.add(m.get("id") or m.get("name") or "")
+            except Exception:  # noqa: BLE001
+                pass
+        elif f == "lemonade":
+            try:
+                h = rt.get(self.root + "/api/v1/health", timeout=2) or {}
+                for m in h.get("all_models_loaded", []) or []:
+                    loaded.add(m.get("model_name") or m.get("id") or "")
+                if h.get("model_loaded"):
+                    loaded.add(h["model_loaded"])
+            except Exception:  # noqa: BLE001
+                pass
+        elif f == "docker":
+            pass  # loads on first use; `docker model ps` would say, but needs the CLI
+        if not self.rt.get("multi"):
+            loaded = set(ids[:1])       # a one-model server holds its model while it runs
+        for i in ids:
+            if not i:
+                continue
+            m = info.get(i, {})
+            caps = []
+            typ = m.get("type", "")
+            if typ == "embeddings":
+                caps.append("embedding")
+            if typ == "vlm":
+                caps.append("vision")
+            st["installed"].append({"name": i, "size": 0, "sizeText": "", "params": "",
+                                    "quant": m.get("quantization", ""), "context": m.get("max_context_length", 0),
+                                    "capabilities": caps, "family": m.get("publisher", "")})
+        for i in ids:
+            if i in loaded:
+                st["loaded"].append({"name": i, "vram": 0, "vramText": ""})
+        return st
+
+    def chat_url(self):
+        return self.url + "/chat/completions"     # url already ends in its API base (/v1, /api/v1)
+
+    # -- changing
+    def _stop(self):
+        if self.unit:
+            r = subprocess.run(["systemctl", "--user", "stop", self.unit], capture_output=True, text=True, timeout=120)
+            if r.returncode:
+                raise RuntimeError((r.stderr or "couldn't stop %s" % self.unit).strip())
+        elif self.pid and not self.rt.get("app"):
+            os.kill(self.pid, 15)
+        else:
+            raise RuntimeError("%s manages its own models: unload them there" % self.label)
+
+    def load(self, model, keep_minutes):
+        f, root = self.flavor, self.root
+        if not self.rt.get("multi") or f == "comfyui":
+            return  # its model is in memory while it runs
+        if f == "lmstudio" and rt.lms_bin():
+            rt.run([rt.lms_bin(), "load", model, "-y"], timeout=900)
+        elif f == "textgen":
+            rt.post(root + "/v1/internal/model/load", {"model_name": model}, timeout=900)
+        elif f == "tabby":
+            rt.post(root + "/v1/model/load", {"model_name": model}, timeout=900,
+                    headers={"x-admin-key": rt.tabby_admin_key(self.proc.get("cwd", ""))})
+        elif f == "lemonade":
+            rt.post(root + "/api/v1/load", {"model_name": model}, timeout=900)
+        else:
+            # Everything else loads a model on its first request.
+            rt.post(self.url + "/chat/completions", {"model": model, "max_tokens": 1,
+                                                     "messages": [{"role": "user", "content": "hi"}]}, timeout=900)
+
+    def unload(self, model):
+        f, root = self.flavor, self.root
+        if f == "comfyui":
+            rt.post(root + "/free", {"unload_models": True, "free_memory": True}, timeout=60)
+        elif not self.rt.get("multi"):
+            self._stop()
+        elif f == "lmstudio" and rt.lms_bin():
+            rt.run([rt.lms_bin(), "unload", model], timeout=120)
+        elif f == "lmstudio":
+            rt.post(root + "/api/v1/models/unload", {"instance_id": model}, timeout=120)
+        elif f == "textgen":
+            rt.post(root + "/v1/internal/model/unload", {}, timeout=120)
+        elif f == "tabby":
+            rt.post(root + "/v1/model/unload", {}, timeout=120,
+                    headers={"x-admin-key": rt.tabby_admin_key(self.proc.get("cwd", ""))})
+        elif f == "localai":
+            rt.post(root + "/backend/shutdown", {"model": model}, timeout=120)
+        elif f == "lemonade":
+            rt.post(root + "/api/v1/unload", {"model_name": model}, timeout=120)
+        elif f == "docker" and shutil.which("docker"):
+            rt.run(["docker", "model", "unload", model], timeout=120)
+        else:
+            self._stop()
+
+
 def llama_instances(managed_url):
     out = []
     for cmdf in glob.glob("/proc/[0-9]*/cmdline"):
@@ -512,6 +695,25 @@ def llama_instances(managed_url):
 service_units = set()
 
 
+def _port_of(url):
+    m = re.search(r":(\d+)(?:/|$)", url or "")
+    return int(m.group(1)) if m else 0
+
+
+def runtime_servers(known):
+    """The other runtimes listening here (hearth_ai_runtimes.discover), minus
+    what the other providers cover: their ports, llama-server processes
+    (LlamaInstance), model units' processes, and Magnitude."""
+    skip = {_port_of(getattr(p, "url", "")) for p in known.values()} | {10100}
+    skip.discard(0)
+
+    def covered(pid):
+        argv0 = hm._read("/proc/%d/cmdline" % pid).split("\0")[0]
+        return argv0.endswith("llama-server") or hm._unit_of(pid) in service_units \
+            or hm._read("/proc/%d/comm" % pid).strip() in ("ollama", "magnitude")
+    return [Runtime(f) for f in rt.discover(skip, covered)]
+
+
 def providers(cfg):
     out = {}
     pc = cfg["providers"]
@@ -528,6 +730,9 @@ def providers(cfg):
             out[p.id] = p
     for inst in llama_instances(pc["llamacpp"].get("url", "")):
         out[inst.id] = inst
+    if pc.get("runtimes", {}).get("enabled", True):
+        for p in runtime_servers(out):
+            out[p.id] = p
     for pid in CLI:
         if pc.get(pid, {}).get("enabled"):
             out[pid] = AgentCli(pid, pc[pid])
@@ -677,12 +882,16 @@ class Arbiter:
                 it["source"] = "Magnitude"
             by_path[it["path"]] = it
             items.append(it)
-        lms = [os.path.join(HOME, ".lmstudio", "models"), os.path.join(HOME, ".cache", "lm-studio", "models")]
-        for it in hm.scan_gguf([d for d in lms if os.path.isdir(d)], "LM Studio") + \
-                hm.scan_gguf([os.path.join(hm.CACHE_HOME, "llama.cpp")], "llama.cpp cache"):
-            if it["path"] not in by_path:
-                by_path[it["path"]] = it
-                items.append(it)
+        # Every runtime's own model folders (hearth_ai_runtimes.RUNTIMES:
+        # LM Studio, Jan, GPT4All, text-generation-webui, TabbyAPI, LocalAI
+        # ...), whether it's running or not, and llama.cpp's download cache.
+        rdirs = rt.model_dirs([s["found"] for s in pstates.values() if s.get("found")])
+        extra = [(os.path.join(hm.CACHE_HOME, "llama.cpp"), "llama.cpp cache")] + rdirs
+        for d, label in extra:
+            for it in hm.scan_gguf([d], label) + hm.scan_weight_dirs([d], label):
+                if it["path"] not in by_path:
+                    by_path[it["path"]] = it
+                    items.append(it)
         items += hm.scan_hf()
         items += hm.scan_misc()
         # Server models.
@@ -719,6 +928,17 @@ class Arbiter:
                 if path and path in by_path:
                     by_path[path]["runners"].append(runner)
                     continue
+                if not path and s.get("runtime"):
+                    # A runtime names models by id ("publisher/file.gguf",
+                    # "Qwen3-8B-Q4_K_M"): the same model found on disk runs there.
+                    n = m["name"].lower().rsplit("/", 1)[-1]
+                    n = re.sub(r"\.(gguf|safetensors)$", "", n)
+                    same = next((i for i in items if n and (i.get("name", "").lower() == n or
+                                 os.path.splitext(os.path.basename(i.get("path", "")))[0].lower() == n or
+                                 (i.get("repo") or "").lower().endswith("/" + n))), None)
+                    if same:
+                        same["runners"].append(runner)
+                        continue
                 items.append({
                     "key": "%s:%s" % (pid, m["name"]), "name": m.get("label") or m["name"], "family": m.get("family", ""),
                     "category": model_category(m["name"], m.get("capabilities") or [], m.get("family", "")),
@@ -821,6 +1041,28 @@ class Arbiter:
                             self.mem.note(e["key"], loadSec=round((t1 - t0) / 1e6, 1), loadMeasured=True)
                     except ValueError:
                         pass
+                elif s.get("runtime"):
+                    # Its processes (the server and its model workers), split
+                    # between its loaded models by the model each has open
+                    # or names on its command line; the rest go to the first.
+                    names = [x["name"] for x in s["loaded"]]
+                    tree = [c for c in clients if c["pid"] in (s.get("pids") or [])]
+
+                    def holds(c, n):
+                        t = (c["cmd"] + " " + " ".join(c["models"])).lower()
+                        return n.lower().rsplit("/", 1)[-1].replace(".gguf", "") in t
+                    mine = [c["pid"] for c in tree if len(names) == 1 or holds(c, name)]
+                    if not mine and name == names[0]:
+                        mine = [c["pid"] for c in tree if not any(holds(c, n) for n in names)]
+                    single = not s.get("multi") and s.get("runtime") != "comfyui"
+                    entry(pid_ + ":" + name, m.get("label") or name, "image" if s.get("runtime") == "comfyui"
+                          else model_category(name), pid_, s, mine,
+                          extra={"unloadLabel": "Stop" if single else "Unload", "pid": s.get("pid", 0),
+                                 "external": bool(s.get("external")), "unit": s.get("runtimeUnit", ""),
+                                 # Never automatically: a server someone started by
+                                 # hand, or an app that manages its own models.
+                                 "auto": not s.get("external") and not s.get("app"),
+                                 "canUnload": not s.get("app")})
                 elif s.get("external"):
                     entry(pid_ + ":" + name, name, model_category(name), pid_, s, [s["pid"]],
                           extra={"unloadLabel": "Stop", "external": True, "pid": s["pid"]})
@@ -903,7 +1145,7 @@ class Arbiter:
             # Settings lists every server with Start / Stop from this, so a
             # new one (a model unit, Magnitude's service) needs no code.
             if ps.get("kind") == "local":
-                ps["controlUnit"] = provider_unit(ps["id"])
+                ps["controlUnit"] = provider_unit(ps["id"]) or ps.get("runtimeUnit", "")
         st = {"type": "state", "time": int(now), "providers": list(pstates.values()), "gpus": gs, "gpu": g,
               "allowCloud": bool(cfg.get("allowCloud")),
               "clis": [{"id": k, "label": v["label"], "installed": bool(shutil.which(v["bin"]))} for k, v in CLI.items()],
@@ -1529,7 +1771,7 @@ def main():
 
     def server(req):
         pid = req.get("provider") or "llamacpp"
-        unit = provider_unit(pid)
+        unit = provider_unit(pid) or getattr(providers(settings()[0]).get(pid), "unit", "")
         if not unit:
             emit({"type": "done", "cmd": "server", "provider": pid, "error": "hearth can't start or stop that server"})
             return

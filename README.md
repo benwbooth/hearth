@@ -640,8 +640,24 @@ One hub for every model the desktop uses: `helpers/hearth-ai`,
 - More backends: Magnitude (`magnitude serve` on :10100, its CLI for
   list/load/stop/pull) and model services: systemd user units that run
   one model each (`inkling-2-mini.service` and the like, found by their
-  `llama-server` run scripts; Load starts, Unload stops; units behind a
-  `*-proxy.socket` still start on demand).
+  run scripts: llama-server, vLLM, SGLang, KoboldCpp or llamafile; Load
+  starts, Unload stops; units behind a `*-proxy.socket` still start on
+  demand).
+- Every other runtime, found by what listens on a local port
+  (`helpers/hearth_ai_runtimes.py`): LM Studio, vLLM, SGLang, KoboldCpp,
+  text-generation-webui, TabbyAPI, LocalAI, llamafile, Lemonade, Jan,
+  GPT4All, Docker Model Runner and ComfyUI by their process (or, in a
+  container, their usual port and API), and any other server answering
+  the OpenAI-style `/v1/models`. Each lists its models and what's loaded;
+  load and unload use its own API or CLI (`lms`, text-generation-webui's
+  internal API, TabbyAPI's admin key, LocalAI's backend shutdown,
+  Lemonade's load/unload, ComfyUI's `/free`); a one-model server, or an
+  unknown one, is stopped instead, and only on request (never by the
+  memory manager) unless it runs as a user unit. Desktop apps that manage
+  their own models (Jan, GPT4All) are shown, not unloaded. Their model
+  folders join the inventory. Ports systemd holds for on-demand units are
+  never probed. A new runtime is one entry in `RUNTIMES`;
+  `scripts/test-ai-runtimes.py` checks them all against stand-ins.
 - Every installed model (`helpers/hearth_ai_models.py`), sorted into
   Language, Embeddings, Speech to text, Text to speech, Image generation,
   Video generation, Audio & music, Vision and Other: Ollama, Magnitude,

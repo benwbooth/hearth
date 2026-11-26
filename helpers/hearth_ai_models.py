@@ -321,6 +321,33 @@ def scan_hf():
     return out
 
 
+# --- model folders in Hugging Face layout ------------------------------------------
+
+def scan_weight_dirs(dirs, source):
+    """Model folders as text-generation-webui, TabbyAPI, vLLM and LocalAI keep
+    them: a directory with config.json and its weights (*.safetensors,
+    *.bin, EXL2 shards), one model each, one level down from each dir."""
+    out = []
+    for root in dirs:
+        for d in sorted(glob.glob(os.path.join(root, "*", "config.json")) +
+                        glob.glob(os.path.join(root, "*", "*", "config.json"))):
+            d = os.path.dirname(d)
+            files = [f for f in glob.glob(os.path.join(d, "*"))
+                     if re.search(r"\.(safetensors|bin|pt|pth)$", f) and os.path.isfile(f)]
+            if not files:
+                continue
+            size = sum(os.path.getsize(f) for f in files)
+            cfg = _json(os.path.join(d, "config.json"), {})
+            arch = ""
+            if isinstance(cfg, dict):
+                arch = ((cfg.get("architectures") or [""])[0]) or cfg.get("model_type", "") or ""
+            name = os.path.basename(d)
+            out.append({"key": "file:" + d, "name": name, "family": "", "category": classify(name, arch=arch, default="llm"),
+                        "source": source, "path": d, "size": size, "sizeText": human_bytes(size), "arch": arch,
+                        "deletable": True, "deletePaths": [d], "runners": []})
+    return out
+
+
 # --- other model folders -----------------------------------------------------------
 
 def comfy_roots():
@@ -485,6 +512,12 @@ def _systemctl(*args, timeout=5):
 _svc_cache = {"t": 0, "list": []}
 
 
+# Servers that run one model per process: a user unit running one of them
+# is a model unit (Load starts it, Unload stops it). Multi-model runtimes
+# in a unit (LocalAI, LM Studio...) are found by hearth_ai_runtimes instead.
+ONE_MODEL_SERVERS = r"llama-server|\bvllm\b|\bsglang\b|koboldcpp|llamafile"
+
+
 def services():
     """User units that each serve one model: a unit whose ExecStart runs
     llama-server (directly or from a run script) or calls itself an
@@ -512,7 +545,7 @@ def services():
                             script = tok
                 body = _read(script) if script and os.path.getsize(script) < 1 << 20 else ""
                 if not (re.search(r"inference|model server|llm server", desc, re.I)
-                        or "llama-server" in " ".join(execs) + body):
+                        or re.search(ONE_MODEL_SERVERS, " ".join(execs) + body)):
                     continue
                 envf = (re.search(r"^EnvironmentFile=-?(.*)$", text, re.M) or [None, ""])[1].replace("%h", HOME)
                 units.append({"unit": name, "desc": desc, "script": script, "env": envf, "body": body,
