@@ -663,8 +663,15 @@ One hub for every model the desktop uses: `helpers/hearth-ai`,
   Video generation, Audio & music, Vision and Other: Ollama, Magnitude,
   GGUF folders (llama.cpp's models folder, model services' folders,
   Magnitude's folders, `ai.modelDirs`, LM Studio), the Hugging Face cache,
-  ComfyUI, Piper, Whisper. Each shows what can run it ("Runs in"). Delete
-  moves files to the trash (provider models are deleted by the provider).
+  ComfyUI, Piper, Whisper. Each shows what can run it ("Runs in"). A GGUF
+  nothing is set up to run (an older quant beside a model unit's, a file
+  in a model folder) runs in its own llama-server (`GgufRunner`: a
+  transient `hearth-gguf-N.service` on a free port from 18400, 32K
+  context, with the llama.cpp build of a model unit whose model is in the
+  same folder, else one with the same architecture, else any); Load starts
+  it, Unload stops it, and the memory manager unloads it like any other.
+  Delete moves files to the trash (a server's own models, Ollama's or
+  Magnitude's, are deleted by it); both say Delete.
   Get More shows one section per source, as hearth-ai sends them (the
   menu has no list of its own): Magnitude's recommendations for this
   computer, hearth's picks per category, LM Studio's catalog (its
