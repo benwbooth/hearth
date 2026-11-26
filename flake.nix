@@ -60,6 +60,7 @@
       python
       xprop   # hearth-appmenu: X11 windows' menu properties (xwayland-satellite)
       xrestop # hearth-appmenu: an X11 window's pid when it sets no _NET_WM_PID (XRes)
+      tesseract # hearth_ocr_menu: popups no accessibility tree shows (Qt Quick menus), read off the screen
       # Portal backend (helpers/hearth-portal): org.gnome.* settings from
       # dconf, `gio launch` for the mail app.
       dconf glib
@@ -314,6 +315,8 @@
     # Spotlight's indexer and the AI hub's llama.cpp server as user units
     # (README "Spotlight", "AI").
     nixosModules.ai = import ./nix/ai.nix self;
+    # Apps start once hearth's tray, notifications and global menu are up.
+    nixosModules.session = import ./nix/session.nix self;
     # The boot menu and splash (README "Boot").
     nixosModules.boot = import ./nix/boot.nix self;
 
