@@ -255,6 +255,15 @@ def machine_row(r):
         status, solution = "done", f"general:{r['route_today']}"
     elif today == "burger":
         status, solution = "partial", f"general:{r['route_today']}-burger"
+    elif r["best"] == "full" and r["lever"] == "flatpak+registrar":
+        # Full menus once the Flatpak may talk to the registrar: the global
+        # Flatpak override in nix/global-menu.nix (2026-11-25).
+        status, solution = "done", "general:registrar+flatpak-override"
+    elif r["best"] == "full" and r["lever"] in ("chromium-a11y", "electron+libdbusmenu"):
+        # Full menus with a per-app switch the session doesn't give every
+        # Electron app: a wrapper flag (hearth.lib.globalMenu.electronFlags)
+        # or libdbusmenu on its library path.
+        status, solution = "todo", "todo"
     elif today == "none":
         status, solution = "todo", "todo"
     elif today == "terminal-only":
@@ -283,8 +292,11 @@ def rebuild():
     probes = load_probes()
     berrs = load_build_errors()
     cats = app_categories()
+    lever = {r["attr"]: r["lever"] for r in db.execute("select attr, lever from results where best = 'full'")}
     for r in rows:
-        if r["status"] != "done":
+        if r["status"] != "done" and lever.get(r["attr"]) in ("chromium-a11y", "electron+libdbusmenu"):
+            r["gap"] = "needs-switch:" + lever[r["attr"]]
+        elif r["status"] != "done":
             r["gap"] = gap_of(r["measured"], r["toolkit"], probes.get(r["attr"]))
             if r["status"] == "blocked" and not r["gap"]:
                 e = berrs.get(r["attr"], "")
@@ -328,7 +340,7 @@ def rebuild():
             # A hand-written gap stays while the app is still unsolved.
             if o.get("gap") and not r["gap"] and r["status"] not in ("done", "none-needed"):
                 r["gap"] = o["gap"]
-            if o.get("solution", "todo") not in ("todo", "") and not o["solution"].startswith("general:"):
+            if o.get("solution", "todo") not in ("todo", "") and not o["solution"].startswith(("general:", "none-needed")):
                 r["solution"] = o["solution"]
         out.append(r)
     # Apps a menu module covers (menus/*.yaml: its nixpkgs and flatpak
@@ -413,6 +425,8 @@ def markdown():
 
 
 GAP_NOTES = {
+    "needs-switch:chromium-a11y": "Electron/Chromium: full menus with --force-renderer-accessibility (hearth.lib.globalMenu.electronFlags in its wrapper)",
+    "needs-switch:electron+libdbusmenu": "Electron on X11: full menus with libdbusmenu on its library path (its wrapper)",
     "no-a11y:unknown": "No accessibility tree, toolkit not recognized (iced, egui, Slint, Flutter, own engines): menu modules from source (gen-module.py) or the local model",
     "no-a11y:custom-drawn": "Draws its own UI (GPU/canvas): menu modules from its key bindings",
     "no-a11y:java-swing": "Java: retest with the bridge (Flatpaks with the javaFlatpaks override); LWJGL games fall to the game rule",
