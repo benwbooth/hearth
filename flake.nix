@@ -329,6 +329,9 @@
     nixosModules.keyring = import ./nix/keyring.nix self;
     # The Hearth look for Qt, GTK and Flatpak apps.
     nixosModules.appearance = import ./nix/appearance.nix self;
+    # Per-user glue (home-manager): arbor's config include, Vicinae, satty,
+    # hyprlock, the GTK font.
+    homeManagerModules.default = import ./nix/home.nix self;
 
     # `nix develop`, then `quickshell -p shell` runs straight from the
     # checkout and hot-reloads on every save.
