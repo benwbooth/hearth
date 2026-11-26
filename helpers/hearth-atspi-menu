@@ -508,6 +508,13 @@ class AtspiMenu:
                         mb = self.search(A, f, self.is_menu_row, web=False)
                         if mb is not None:
                             kind = "kept"
+                        else:
+                            # AccessKit (egui: the ArtCraft apps): a "menu"
+                            # of title buttons; each opens a menu under its
+                            # button, as a page's menu bar does.
+                            mb = self.search(A, f, self.is_button_menu_row, web=False)
+                            if mb is not None:
+                                kind = "web"
                 trigger = None
                 toolbar = None
                 if kind is None:
@@ -628,6 +635,28 @@ class AtspiMenu:
 
     STD_TITLES = {"file", "edit", "view", "help", "tools", "go", "bookmarks", "history", "window",
                   "message", "insert", "format", "options", "settings"}
+
+    def is_button_menu_row(self, o, r):
+        """A menu bar of buttons: a "menu" container (not inside another
+        menu) of mostly titled buttons, one a standard title (File, Edit,
+        View...). AccessKit's egui menu bar looks like this."""
+        A = Atspi
+        if r != A.Role.MENU:
+            return False
+        try:
+            p = o.get_parent()
+            if p is not None and p.get_role() in (A.Role.MENU, A.Role.MENU_ITEM, A.Role.PUSH_BUTTON):
+                return False
+            n = o.get_child_count()
+            if n < 3 or n > 30:
+                return False
+            kids = [o.get_child_at_index(i) for i in range(n)]
+            btns = [k for k in kids if k is not None and k.get_role() == A.Role.PUSH_BUTTON
+                    and self.is_title(k.get_name() or "")]
+        except Exception:
+            return False
+        names = {(k.get_name() or "").strip().lower() for k in btns}
+        return len(btns) >= 3 and len(btns) * 2 >= n and bool(names & self.STD_TITLES)
 
     def is_menu_row(self, o, r):
         """A container whose children are mostly titled menus, one of them a
@@ -797,6 +826,12 @@ class AtspiMenu:
         kids = [k for k in kids if k]
         if not kids or any(k.get_role() in roles + (A.Role.SEPARATOR,) for k in kids):
             return kids
+        # AccessKit (egui) menus: their items are buttons ("New… Ctrl+N").
+        # (A search field may lead the menu: PhotoCraft's Help. Left out.)
+        btn = {A.Role.PUSH_BUTTON, A.Role.TOGGLE_BUTTON, A.Role.CHECK_BOX}
+        if menu.get_role() == A.Role.MENU and all(k.get_role() in btn | {A.Role.ENTRY} for k in kids) \
+                and any(k.get_role() in btn for k in kids):
+            return [k for k in kids if k.get_role() != A.Role.ENTRY]
         out, todo = [], [(k, 1) for k in reversed(kids)]
         while todo and len(out) < 300:
             o, d = todo.pop()
@@ -1098,8 +1133,9 @@ class AtspiMenu:
         accessible action for native widgets."""
         native = self.document(o) is None
         # GTK 4's buttons and menu items take the accessible action and do
-        # nothing (it reports success): they always get a real click.
-        if native and not self.gtk4 and self.act(o):
+        # nothing (it reports success): they always get a real click. So do
+        # AccessKit's (egui: its click action opens no menu).
+        if native and not self.gtk4 and self.toolkit != "AccessKit" and self.act(o):
             return True
         # A page element, or a native one without an accessible action
         # (GTK 4's buttons have none): a click through arbor.
@@ -1886,6 +1922,8 @@ class AtspiMenu:
 
     def click(self, nid):
         path = self.paths.get(nid)
+        if os.environ.get("HEARTH_OCR_DEBUG"):
+            err(f"click {nid}: path {path}, kind {self.kind}, busy {self.busy}")
         if not path or self.kind is None or len(path) < 2 and self.kind != "kept":
             return
         if self.kind == "kept":
@@ -1927,11 +1965,17 @@ class AtspiMenu:
             menu = self.open_chain(path[:-1])
             c = self.item_child(menu, path[-1]) if menu is not None else None
             name = self.item_label(c) if c else ""
+            if os.environ.get("HEARTH_OCR_DEBUG"):
+                err(f"click {nid} path {path}: menu {menu is not None}, item {name!r}, want {want!r}")
             if c is None or (want is not None and name != want):
                 self.close_all(path)  # the menu changed since: don't guess
                 if self.kind == "burger":
                     self.forget_tree()
                 return
+            if self.toolkit == "AccessKit":
+                # egui acts on a click only after it has drawn the menu a
+                # frame or two (an immediate click is lost).
+                time.sleep(0.4)
             self.press(c)
             self.burger_open = False  # choosing an item closes the menu
         finally:
