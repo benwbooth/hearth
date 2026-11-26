@@ -11,14 +11,19 @@ including Auto's 7:00/19:00 switch), so the whole desktop follows:
   portal backend (helpers/hearth-portal) serves from
   $XDG_STATE_HOME/hearth/appearance.json, written here; it announces the
   change itself when the file changes.
-- GTK 3/4: gtk-theme / color-scheme / icon-theme in dconf (GSettings) and
-  ~/.config/gtk-{3,4}.0/settings.ini; and in ~/.config/gtk-{3,4}.0/gtk.css a
-  block (between hearth's markers) that draws menus as hearth's apps do
-  (shared/app-menus/MacMenuStyle.qml): Chromium and Electron take their menu
-  colours from it too.
-- GTK 2 apps (gftp...): ~/.gtkrc-2.0, Adwaita (gnome-themes-extra) with
-  hearth's palette, accent and menu colour as its gtk-color-scheme, Breeze
-  icons, Inter; lines it doesn't set are kept.
+- GTK 3/4: the Hearth GTK theme (hearth-gtk-theme: hearth's palette, Mac
+  menus), Hearth or Hearth-dark, or for another accent a small
+  Hearth-<accent>[-dark] theme over it in ~/.local/share/themes (a new name,
+  so running apps reload); in dconf (GSettings) and
+  ~/.config/gtk-{3,4}.0/settings.ini. libadwaita apps take no theme: in
+  ~/.config/gtk-4.0/gtk.css, between hearth's markers, the theme's
+  libadwaita-user.css (both modes by media query, so they follow live).
+  Without the theme installed: Breeze or Adwaita, and the gtk.css block
+  draws menus as hearth's apps do (shared/app-menus/MacMenuStyle.qml).
+  Chromium and Electron take their menu colours from GTK 3 too.
+- GTK 2 apps (gftp...): ~/.gtkrc-2.0, Hearth (Adwaita's GTK 2 theme from
+  gnome-themes-extra) with hearth's palette, accent and menu colour as its
+  gtk-color-scheme, Breeze icons, Inter; lines it doesn't set are kept.
 - Qt 5/6 apps outside Plasma (QT_QPA_PLATFORMTHEME=qt5ct, set in the NixOS
   config): ~/.config/qt{5,6}ct/qt{5,6}ct.conf and a "hearth" colour scheme,
   hearth's own palette and accent (shell/Theme.qml), Breeze icons, Inter and
@@ -52,18 +57,92 @@ def data_dirs():
     return [home] + [d for d in rest.split(":") if d] + ["/run/current-system/sw/share"]
 
 
+def hearth_theme_dir(name):
+    """The installed Hearth GTK theme (hearth-gtk-theme, in the system's
+    share/themes), or None."""
+    # The system profile first: accent themes @import from it, and its path
+    # stays the same across rebuilds (a store path wouldn't).
+    for d in ["/run/current-system/sw/share"] + data_dirs()[1:]:
+        p = os.path.join(d, "themes", name)
+        if os.path.isfile(os.path.join(p, "gtk-3.0", "gtk.css")):
+            return p
+    return None
+
+
+# The accent hearth's theme is built with (Theme.qml: macOS's system blue, a
+# shade lighter in dark mode). Any other accent gets a small theme of its own
+# (accent_theme()).
+DEFAULT_ACCENT = "#0a84ff" if DARK else "#007aff"
+HEARTH_ACCENT = (ACCENT or DEFAULT_ACCENT).lower()
+if HEARTH_ACCENT == "#007aff" and DARK:
+    HEARTH_ACCENT = "#0a84ff"
+HEARTH_BASE = "Hearth-dark" if DARK else "Hearth"
+HEARTH_DIR = hearth_theme_dir(HEARTH_BASE)
+
+
+def accent_theme():
+    """~/.local/share/themes/Hearth-<accent>[-dark]: Hearth's files with the
+    accent redefined (a later @define-color wins; the theme draws every
+    accent from @accent_bg_color). A new name per accent, so running GTK apps
+    reload it live, as they do on any theme change. Older accent themes are
+    removed. Returns the theme's name."""
+    import shutil
+    hexa = HEARTH_ACCENT.lstrip("#")
+    name = f"Hearth-{hexa}" + ("-dark" if DARK else "")
+    root = os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "themes")
+    # (By the stable system path, not the store path, so it survives rebuilds.)
+    base = HEARTH_DIR
+    files = {"index.theme": f"[Desktop Entry]\nType=X-GNOME-Metatheme\nName={name}\n"
+                            f"Comment=Hearth with the accent {HEARTH_ACCENT} (written by hearth-color-scheme)\n\n"
+                            f"[X-GNOME-Metatheme]\nGtkTheme={name}\n"}
+    for ver in ("gtk-3.0", "gtk-4.0"):
+        for css in ("gtk.css", "gtk-dark.css"):
+            files[f"{ver}/{css}"] = (f'@import url("file://{base}/{ver}/{css}");\n'
+                                     f"@define-color accent_bg_color {HEARTH_ACCENT};\n")
+    d = os.path.join(root, name)
+    for rel, text in files.items():
+        path = os.path.join(d, rel)
+        try:
+            with open(path) as f:
+                if f.read() == text:
+                    continue
+        except FileNotFoundError:
+            pass
+        write_atomic(path, text)
+    gtk2 = os.path.join(d, "gtk-2.0")
+    if os.path.realpath(gtk2) != os.path.realpath(os.path.join(base, "gtk-2.0")):
+        if os.path.islink(gtk2) or os.path.exists(gtk2):
+            os.remove(gtk2)
+        os.symlink(os.path.join(base, "gtk-2.0"), gtk2)
+    # Only ours: Hearth-<6 hex digits>[-dark].
+    import re
+    for old in os.listdir(root):
+        if old != name and re.fullmatch(r"Hearth-[0-9a-f]{6}(-dark)?", old) and \
+                old.endswith("-dark") == DARK:
+            shutil.rmtree(os.path.join(root, old), ignore_errors=True)
+    return name
+
+
 def gtk_theme():
-    """Breeze when its GTK theme is installed, else GTK's own Adwaita (built
-    into GTK, always there). A theme that isn't installed left GTK on light
-    Adwaita whatever the mode (2026-11-25: Breeze went with Plasma)."""
+    """Hearth (hearth-gtk-theme: hearth's palette, Mac menus) when it is
+    installed, in hearth's accent; else Breeze if installed, else GTK's own
+    Adwaita (built into GTK, always there). A theme that isn't installed left
+    GTK on light Adwaita whatever the mode (2026-11-25: Breeze went with
+    Plasma)."""
+    if HEARTH_DIR:
+        if HEARTH_ACCENT == DEFAULT_ACCENT:
+            return HEARTH_BASE
+        try:
+            return accent_theme()
+        except OSError as e:
+            print(f"hearth-color-scheme: accent theme: {e}", file=sys.stderr)
+            return HEARTH_BASE
     name = "Breeze-Dark" if DARK else "Breeze"
     dirs = data_dirs() + [os.path.expanduser("~/.themes")]
     if any(os.path.isdir(os.path.join(d, "themes", name, "gtk-3.0")) or os.path.isdir(os.path.join(d, name, "gtk-3.0")) for d in dirs):
         return name
     return "Adwaita-dark" if DARK else "Adwaita"
 
-
-GTK_THEME = gtk_theme()
 
 
 def write_atomic(path, text):
@@ -225,8 +304,15 @@ def apply_settings_ini():
         before = render(sections)
         set_key(sections, "[Settings]", "gtk-application-prefer-dark-theme", "true" if DARK else "false")
         set_key(sections, "[Settings]", "gtk-icon-theme-name", ICONS)
-        if ver == "gtk-3.0":
+        if ver == "gtk-3.0" or HEARTH_DIR:
             set_key(sections, "[Settings]", "gtk-theme-name", GTK_THEME)
+        if HEARTH_DIR:
+            # hearth's font (as the Mac menus and GTK 2 use).
+            set_key(sections, "[Settings]", "gtk-font-name", "Inter 10")
+        if ver == "gtk-4.0":
+            # GTK 4.20+: what @media (prefers-color-scheme) sees (the
+            # libadwaita block in gtk.css follows it), if no portal says.
+            set_key(sections, "[Settings]", "gtk-interface-color-scheme", "dark" if DARK else "light")
         after = render(sections)
         if after != before:
             write_atomic(path, after)
@@ -329,6 +415,28 @@ messagedialog.csd .dialog-action-area button:last-child {{ border-bottom-right-r
 """
 
 
+def hearth_user_css(gtk4):
+    """What goes between hearth's markers in gtk.css. With the Hearth theme
+    installed, GTK 3 needs nothing (the theme draws the menus), and GTK 4
+    gets the theme's libadwaita-user.css: hearth's palette for both modes
+    (by media query, so running apps follow light/dark live) and its look,
+    the only way into libadwaita apps, which never load a GTK theme; plus
+    the accent when it isn't the theme's own. Without the theme: menus only
+    (menu_css)."""
+    if not HEARTH_DIR:
+        return menu_css(gtk4)
+    if not gtk4:
+        return "/* (the Hearth GTK theme draws menus and the rest) */\n"
+    try:
+        with open(os.path.join(HEARTH_DIR, "gtk-4.0", "libadwaita-user.css")) as f:
+            css = f.read()
+    except OSError:
+        return menu_css(gtk4)
+    if HEARTH_ACCENT != DEFAULT_ACCENT:
+        css += f"@define-color accent_bg_color {HEARTH_ACCENT};\n"
+    return css
+
+
 def apply_menu_css():
     """hearth's block in gtk.css: replaced in place, everything else kept."""
     for ver in ("gtk-3.0", "gtk-4.0"):
@@ -338,7 +446,7 @@ def apply_menu_css():
                 before = f.read()
         except FileNotFoundError:
             before = ""
-        block = MENU_BEGIN + "\n" + menu_css(ver == "gtk-4.0") + MENU_END + "\n"
+        block = MENU_BEGIN + "\n" + hearth_user_css(ver == "gtk-4.0") + MENU_END + "\n"
         if MENU_BEGIN in before and MENU_END in before:
             head, rest = before.split(MENU_BEGIN, 1)
             tail = rest.split(MENU_END, 1)[1].lstrip("\n")
@@ -480,7 +588,7 @@ def apply_gtkrc2():
     path = os.path.expanduser("~/.gtkrc-2.0")
     # (Always named: GTK 2 skips a theme that isn't installed and still
     # takes the colours, and this only runs when the mode changes.)
-    name = "Adwaita-dark" if DARK else "Adwaita"
+    name = GTK_THEME if HEARTH_DIR else "Adwaita-dark" if DARK else "Adwaita"
     accent = (ACCENT or ("#0a84ff" if DARK else "#007aff")).lower()
     if accent == "#007aff" and DARK:
         accent = "#0a84ff"
@@ -584,6 +692,8 @@ def apply_portal_state():
     changed.append("portal")
 
 
+# (After the helpers it uses are defined: it may write an accent theme.)
+GTK_THEME = gtk_theme()
 apply_portal_state()
 if apply_kdeglobals():
     notify_kde()
