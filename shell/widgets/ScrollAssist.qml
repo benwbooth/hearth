@@ -28,7 +28,6 @@ Item {
     readonly property real minY: flickable ? flickable.originY : 0
 
     // --- momentum ---------------------------------------------------------
-    property real velocity: 0      // content px/s, positive = scrolling down
     property real lastT: 0
     function clampY(y) { return Math.max(root.minY, Math.min(root.maxY, y)); }
     function clampFor(f, y) { return Math.max(f.originY, Math.min(Math.max(0, f.contentHeight - f.height) + f.originY, y)); }
@@ -36,8 +35,10 @@ Item {
     // pointer (x, y in this item) that can still move by dy, else ours.
     property var last: null
     function pick(x, y, dy) {
+        // (No direction yet, as a swipe's first event can be: any list that
+        // scrolls at all.)
         const canMove = f => f.contentHeight > f.height + 1
-            && (dy > 0 ? f.contentY < Math.max(0, f.contentHeight - f.height) + f.originY - 0.5 : dy < 0 ? f.contentY > f.originY + 0.5 : false);
+            && (dy === 0 ? true : dy > 0 ? f.contentY < Math.max(0, f.contentHeight - f.height) + f.originY - 0.5 : dy < 0 ? f.contentY > f.originY + 0.5 : false);
         let found = null;
         let item = root.flickable.contentItem;
         let p = root.mapToItem(item, x, y);
@@ -55,43 +56,73 @@ Item {
         return found || root.flickable;
     }
 
+    // Touchpad samples of this swipe [{t, dy}], and the glide it started on.
+    property var samples: []
+    property real carry: 0
+    // The swipe's speed (content px/s) from its last ~80 ms of events: the
+    // first event has no previous one to time against, so it isn't timed on
+    // its own (a quick swipe is only a few events).
+    function swipeVelocity(now) {
+        const s = root.samples.filter(e => now - e.t < 100);
+        if (!s.length) return 0;
+        let sum = 0;
+        for (const e of s) sum += e.dy;
+        const n = s.length;
+        const span = s[n - 1].t - s[0].t;
+        // n events cover n-1 gaps; one event alone: assume one 12 ms gap.
+        const dt = n > 1 && span > 0 ? span * n / (n - 1) : 12;
+        return sum / (Math.max(8, dt) / 1000);
+    }
+
+    // One wheel event: pixel deltas (touchpad), angle deltas (mouse), phase,
+    // at x, y in this item. (Split out of the handler so tests can replay
+    // real touchpad sequences with their timing.)
+    function wheel(x, y, pdy, ady, phase, now) {
+        const dir = pdy !== 0 ? -pdy : -ady;
+        // (A scroll in progress stays with its list until it pauses.)
+        const f = root.last && now - root.lastT < 200 && phase !== Qt.ScrollBegin ? root.last : root.pick(x, y, dir);
+        if (f !== root.last) { root.samples = []; root.carry = 0; root.lastT = 0; }
+        root.last = f;
+        if (pdy !== 0 || phase === Qt.ScrollBegin || phase === Qt.ScrollUpdate || phase === Qt.ScrollEnd) {
+            // Touchpad: follow the fingers. Touching stops a glide (as on a
+            // Mac), but a swipe the same way while it glided adds to it.
+            if (f.flicking) {
+                const glide = -f.verticalVelocity;
+                root.carry = Math.abs(glide) > 60 ? glide : 0;
+                f.cancelFlick();
+            }
+            if (root.lastT === 0 || now - root.lastT > 200) root.samples = [];
+            const dy = -pdy;
+            if (dy !== 0) {
+                f.contentY = root.clampFor(f, f.contentY + dy);
+                root.samples = root.samples.concat([{ t: now, dy: dy }]).slice(-12);
+            }
+            root.lastT = now;
+            // Fingers lifted: glide on.
+            if (phase === Qt.ScrollEnd) {
+                let v = root.swipeVelocity(now);
+                if (root.carry !== 0 && Math.sign(root.carry) === Math.sign(v)) v += root.carry;
+                if (Math.abs(v) > 60) f.flick(0, -v);
+                root.samples = [];
+                root.carry = 0;
+                root.lastT = 0;
+            }
+        } else if (ady !== 0) {
+            // Mouse wheel: a smooth glide per notch (120 = one notch),
+            // adding up while the wheel keeps turning.
+            const add = -ady / 120 * 1600;
+            const v = f.flicking && Math.sign(-f.verticalVelocity) === Math.sign(-add) ? -f.verticalVelocity : 0;
+            f.flick(0, -(v + add));
+        }
+        root.poke();
+    }
+
     WheelHandler {
         target: null
         enabled: root.scrollable
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
         onWheel: event => {
-            const dir = event.pixelDelta.y !== 0 ? -event.pixelDelta.y : -event.angleDelta.y;
-            // (A scroll in progress stays with its list until it pauses.)
-            const now = Date.now();
-            const f = root.last && now - root.lastT < 200 && event.phase !== Qt.ScrollBegin ? root.last : root.pick(point.position.x, point.position.y, dir);
-            if (f !== root.last) { root.velocity = 0; root.lastT = 0; }
-            root.last = f;
-            if (event.pixelDelta.y !== 0 || event.phase === Qt.ScrollUpdate || event.phase === Qt.ScrollEnd) {
-                // Touchpad: follow the fingers, remember how fast they went.
-                if (f.flicking) f.cancelFlick();
-                const dy = -event.pixelDelta.y;
-                if (dy !== 0) {
-                    f.contentY = root.clampFor(f, f.contentY + dy);
-                    const dt = Math.max(1, now - root.lastT) / 1000;
-                    const v = dy / dt;
-                    root.velocity = root.lastT && now - root.lastT < 100 ? root.velocity * 0.6 + v * 0.4 : v;
-                }
-                root.lastT = now;
-                // Fingers lifted: glide on.
-                if (event.phase === Qt.ScrollEnd) {
-                    if (Math.abs(root.velocity) > 60) f.flick(0, -root.velocity);
-                    root.velocity = 0;
-                    root.lastT = 0;
-                }
-            } else if (event.angleDelta.y !== 0) {
-                // Mouse wheel: a smooth glide per notch (120 = one notch),
-                // adding up while the wheel keeps turning.
-                const notches = -event.angleDelta.y / 120;
-                const add = notches * 1600;
-                const v = f.flicking && Math.sign(-f.verticalVelocity) === Math.sign(-add) ? -f.verticalVelocity : 0;
-                f.flick(0, -(v + add));
-            }
-            root.poke();
+            root.wheel(point.position.x, point.position.y, event.pixelDelta.y, event.angleDelta.y, event.phase, Date.now());
             event.accepted = true;
         }
     }

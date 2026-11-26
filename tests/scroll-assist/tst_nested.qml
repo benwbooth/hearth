@@ -13,7 +13,7 @@ Item {
         contentHeight: 1500
         Rectangle {
             y: 40; width: 300; height: 200; color: "grey"
-            ScrollAssist { flickable: list }
+            ScrollAssist { id: innerSA; flickable: list }
             ListView {
                 id: list
                 anchors.fill: parent
@@ -23,7 +23,7 @@ Item {
             }
         }
     }
-    ScrollAssist { flickable: page }
+    ScrollAssist { id: outerSA; flickable: page }
     TestCase {
         name: "nested"
         when: windowShown
@@ -42,6 +42,44 @@ Item {
             wait(50)
             mouseWheel(top, 150, 120, 0, -120)
             tryVerify(() => page.contentY > 50, 2000, "page scrolled once the list is at its end")
+        }
+
+        // Touchpad swipes replayed as they arrive (Wayland: ScrollBegin,
+        // updates every ~10 ms, ScrollEnd with no delta), through wheel().
+        function swipe(sa, x, y, dys) {
+            const t0 = Date.now();
+            sa.wheel(x, y, 0, 0, Qt.ScrollBegin, t0);
+            dys.forEach((d, i) => sa.wheel(x, y, -d, 0, Qt.ScrollUpdate, t0 + 10 * (i + 1)));
+            sa.wheel(x, y, 0, 0, Qt.ScrollEnd, t0 + 10 * dys.length + 5);
+        }
+        function test_swipe_glides_inner_list() {
+            swipe(outerSA, 150, 80, [10, 20, 30, 30, 30])
+            verify(list.flicking, "the list glides after the fingers lift")
+            const y = list.contentY
+            wait(80)
+            verify(list.contentY > y, "gliding down")
+            compare(page.contentY, 0, "page stayed")
+        }
+        function test_second_swipe_while_gliding_keeps_momentum() {
+            swipe(outerSA, 150, 80, [10, 20, 30, 30, 30])
+            wait(60)
+            verify(list.flicking)
+            const before = Math.abs(list.verticalVelocity)
+            // A quick second flick: only two events.
+            swipe(outerSA, 150, 80, [25, 30])
+            verify(list.flicking, "still gliding after a quick second swipe")
+            wait(30)
+            verify(Math.abs(list.verticalVelocity) > before * 0.8, "the second swipe adds to the glide (" + list.verticalVelocity + " vs " + before + ")")
+            compare(page.contentY, 0, "page stayed")
+        }
+        function test_swipe_back_stops_and_reverses() {
+            swipe(outerSA, 150, 80, [10, 20, 30, 30, 30])
+            wait(60)
+            swipe(outerSA, 150, 80, [-25, -30])
+            verify(list.flicking)
+            const y = list.contentY
+            wait(80)
+            verify(list.contentY < y, "gliding back up")
         }
     }
 }
