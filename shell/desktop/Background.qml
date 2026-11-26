@@ -29,7 +29,10 @@ PanelWindow {
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
     anchors { top: true; bottom: true; left: true; right: true }
-    color: "black"
+    // Clear until the picture is drawn: swaybg's still (arbor/config.kdl)
+    // shows through at login instead of this surface's black, and hearth's
+    // own picture fades in over it.
+    color: "transparent"
     // Wallpaper Engine draws its own surface; hide ours once it's running.
     visible: !(kind === "we" && we.up)
     mask: Region {}
