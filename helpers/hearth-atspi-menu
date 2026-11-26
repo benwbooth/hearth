@@ -257,14 +257,18 @@ def split_shortcut(label):
     """Electron appends the shortcut to the label: 'Save As... Ctrl+Shift+S',
     'Open Folder... [Ctrl+K Ctrl+O]'."""
     global SHORTCUT_RE
+    import re
     if SHORTCUT_RE is None:
-        import re
         mod = r"(?:Ctrl|Shift|Alt|Super|Meta|Cmd|Command|Option|AltGr)\+"
-        SHORTCUT_RE = re.compile(r"^(.*?\S)\s+(\[[^\]]+\]|(?:" + mod + r")+\S+|F\d{1,2}|Del|Ins|Esc|PgUp|PgDn|Backspace)$")
+        # Chromium spells some keys in two words ("Ctrl+Right Arrow",
+        # "Page Up"); "Space" alone (Spotify's Play).
+        key = r"(?:(?:Left|Right|Up|Down) Arrow|Page (?:Up|Down)|\S+)"
+        single = r"F\d{1,2}|Del|Ins|Esc|PgUp|PgDn|Backspace|Space|(?:Left|Right|Up|Down) Arrow"
+        SHORTCUT_RE = re.compile(r"^(.*?\S)\s+(\[[^\]]+\]|(?:" + mod + r")+" + key + "|" + single + r")$")
     m = SHORTCUT_RE.match(label)
     if not m:
         return label, ""
-    sc = m.group(2)
+    sc = re.sub(r"(Left|Right|Up|Down) Arrow", r"\1", m.group(2)).replace("Page Up", "PgUp").replace("Page Down", "PgDn")
     if sc.startswith("["):
         sc = sc[1:-1].replace(" ", ", ")
     return m.group(1), sc.replace("Super+", "Meta+")
@@ -400,6 +404,23 @@ class AtspiMenu:
             except Exception as e:
                 err(f"AT-SPI: {e}")
         if found:
+            if self.kind == "burger" and not self.burger and not self.tree_read \
+                    and not self.DRAWER.search(self.trigger.get_name() or ""):
+                # A ☰ never read (no cache for this app yet): read it now,
+                # unseen, and show its menus once read, never a "Menu" with
+                # only "…" first (Spotify: Menu, then File… Help a moment
+                # later). A drawer opens in the window, where the probe
+                # can't hide it: that one waits for the menu to be opened.
+                self.busy = True
+                self.probe(True)
+                try:
+                    self.learn_burger()
+                except Exception as e:
+                    err(f"AT-SPI: reading the ☰: {e}")
+                finally:
+                    self.probe(False)
+                    self.busy = False
+                self.refreshed = time.monotonic()
             self.emit()
             return
         if attempt == 0:
