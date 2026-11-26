@@ -13,5 +13,17 @@ self:
 {
   imports = [
     (import ./spotify.nix self)
+    (import ./antigravity.nix self)
+    (import ./brave.nix self)
+    (import ./chatgpt.nix self)
+    (import ./claude-desktop.nix self)
+    (import ./cursor.nix self)
+    (import ./google-chrome.nix self)
+    (import ./heroic.nix self)
+    (import ./mailspring.nix self)
+    (import ./slack.nix self)
+    (import ./teams-for-linux.nix self)
+    (import ./vscode.nix self)
+    (import ./zcode.nix self)
   ];
 }
