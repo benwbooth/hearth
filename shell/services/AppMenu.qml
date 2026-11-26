@@ -99,7 +99,7 @@ Singleton {
     // resolving from its first frame, whatever order bindings update in.
     property string settledKey: ""
     readonly property bool resolving: wanted !== "" && !current && settledKey !== wanted
-    onWantedChanged: resolveTimer.restart()
+    onWantedChanged: { resolveTimer.restart(); extrasAloneTimer.restart() }
     onCurrentChanged: if (current) settledKey = wanted
     Timer { id: resolveTimer; interval: 500; onTriggered: root.settledKey = root.wanted }
     // While the app's menu isn't here: the last one it had (a dialog of
@@ -109,9 +109,16 @@ Singleton {
     // Menus the helper adds to the window's own (MPRIS: a media player's
     // Playback), appended after them.
     property var extraMenus: null
+    // Not alone while the window's own menus may still come: Spotify's,
+    // read off its ☰ over AT-SPI, take a second or so, and the bar showed
+    // just Playback until then. Alone once the helper says the window has
+    // none, or after 3 s (a player with no menus of its own).
+    property string extrasAloneKey: ""
+    Timer { id: extrasAloneTimer; interval: 3000; onTriggered: root.extrasAloneKey = root.wanted }
     readonly property var tree: {
         const extra = extraMenus && extraMenus.key === wanted ? (extraMenus.menus || []) : [];
         if (!extra.length) return ownTree;
+        if (!ownTree && extrasAloneKey !== wanted && noneKey !== wanted) return null;
         const base = ownTree || { id: 0, label: "", children: [] };
         // An extra menu the window's own menus already have (a harvested
         // File next to a real File) is left out.

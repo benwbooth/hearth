@@ -1733,6 +1733,14 @@ class AtspiMenu:
         labels, subs = [], 0
         for c in self.items_of(root)[:60]:
             try:
+                # (Kept in place, unnamed, when the app hides it: the same
+                # rule as the items read below. Spotify keeps a hidden
+                # Develop menu in its ☰; named here, it became a menu of the
+                # menu bar that did nothing.)
+                st = c.get_state_set()
+                if not st.contains(Atspi.StateType.SHOWING) and not st.contains(Atspi.StateType.VISIBLE):
+                    labels.append("")
+                    continue
                 labels.append(split_shortcut(c.get_name() or "")[0] or self.labelled_by(c)
                               or (self.label_texts(c) or [""])[0])
                 if c.get_role() == Atspi.Role.MENU or c.get_state_set().contains(Atspi.StateType.HAS_POPUP):
