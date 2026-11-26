@@ -136,7 +136,8 @@ PanelWindow {
             }
             Connections {
                 target: Notifications
-                function onBannerShown(n) { if (n === banner.n) life.restart(); }
+                // A banner that stays until dismissed has no timer to restart.
+                function onBannerShown(n) { if (n === banner.n && banner.timeout > 0) life.restart(); }
             }
 
             // Swipe right to put it away (into Notification Center).

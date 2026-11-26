@@ -107,7 +107,13 @@ Singleton {
     function bannerTimeout(n) {
         if (n.urgency === NotificationUrgency.Critical) return 0;
         const base = Math.max(2, Number(cfg.timeout) || 6) * 1000;
-        if (n.expireTimeout > 0) return Math.max(2000, Math.min(n.expireTimeout, 60000));
+        // The app's own expiry. 0 = never (the spec; Whisper Typer's
+        // "Listening..." stays up until dictation stops and closes it), < 0 =
+        // the server's default. Quickshell reports seconds; a value this big
+        // can only be milliseconds.
+        const t = Number(n.expireTimeout);
+        if (t === 0) return 0;
+        if (t > 0) return Math.max(2000, Math.min(t < 600 ? t * 1000 : t, 60000));
         return n.urgency === NotificationUrgency.Low ? Math.round(base * 0.7) : base;
     }
     function showsBanner(n) {
