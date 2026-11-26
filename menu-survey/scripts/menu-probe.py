@@ -1505,8 +1505,10 @@ def main():
         for r in app_rows():
                 APPS[r["attr"]] = r
                 # Prebuilt only: nixpkgs from the binary cache, Flathub. Unfree
-                # nixpkgs packages are never in the cache: not a source.
-                want = ("flathub",) if a.flathub else tuple(x for x in a.sources.split(",") if x != "nixpkgs-unfree")
+                # nixpkgs packages are never in the cache: probe() measures
+                # their Flathub copy (they were skipped outright before, so 123
+                # unfree apps, Steam and Discord among them, went unmeasured).
+                want = ("flathub",) if a.flathub else tuple(a.sources.split(","))
                 if r["include"] != "1" or r["source"] not in want or int(r["rank"]) < a.start:
                     continue
                 todo.append(r["attr"])
