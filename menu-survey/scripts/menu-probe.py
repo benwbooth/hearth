@@ -1133,6 +1133,14 @@ def sandboxed(argv):
             args += ["--bind", sock, sock]
     if xnum and os.path.exists(f"/tmp/.X11-unix/X{xnum}"):
         args += ["--bind", f"/tmp/.X11-unix/X{xnum}", f"/tmp/.X11-unix/X{xnum}"]
+    # An FHS /bin/true: anylinux AppImages' fix-namespaces hook tests user
+    # namespaces with "unshare -r /bin/true" and, where that fails (NixOS
+    # has only /bin/sh), opens an xterm about Ubuntu's restriction instead
+    # of the app.
+    true = shutil.which("true")
+    if true:
+        args += ["--tmpfs", "/bin", "--ro-bind", os.path.realpath("/bin/sh"), "/bin/sh",
+                 "--ro-bind", os.path.realpath(true), "/bin/true"]
     return args + ["--"] + argv
 
 
