@@ -968,6 +968,10 @@ class Arbiter:
     def make_room(self, need, exclude=(), timeout=45):
         """Evict idle models (best victims first) until `need` bytes of VRAM
         are free. Returns the free bytes."""
+        if not self.prev_engine:
+            # GPU time needs two samples to tell a busy model from an idle one.
+            self.snapshot(False)
+            time.sleep(1.0)
         st = self.snapshot(False)
         g = st["gpu"]
         if not g:
