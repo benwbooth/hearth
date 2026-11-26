@@ -237,7 +237,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 236	kdePackages.kontact	nixpkgs	qt6-widgets	8.810	full	atspi	general:atspi	done		2026-11-22	
 237	parole	nixpkgs	gtk3	8.783	full	gtk	general:gtk	done		2026-11-22	
 238	flathub:org.vinegarhq.Sober	flathub	gtk4-adwaita?	8.752	none	x11	none-needed	none-needed		2026-11-26	
-239	lact	nixpkgs	gtk4-adwaita	8.740	burger	atspi	general:atspi-burger	partial	burger-only	2026-11-26	
+239	lact	nixpkgs	gtk4-adwaita	8.740	full	atspi	general:atspi	done		2026-11-26	
 240	kdePackages.audiotube	nixpkgs	qt6-mixed	8.730	full	atspi	general:atspi	done		2026-11-22	
 241	kdePackages.ksudoku	nixpkgs	qt6-widgets	8.710	full	dbusmenu	general:dbusmenu	done		2026-11-22	
 242	kdePackages.akonadiconsole	nixpkgs	qt6-widgets	8.710	full	atspi	general:atspi	done		2026-11-24	
@@ -477,7 +477,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 476	cinnamon-control-center	nixpkgs	gtk3	4.206	none	gtk	none-needed	none-needed		2026-11-26	
 477	systemdgenie	nixpkgs	qt6-widgets	4.200	full	atspi	general:atspi	done		2026-11-23	
 478	chiaki-ng	nixpkgs	qt6-mixed	4.199	full	atspi	general:atspi	done		2026-11-24	
-479	flathub:org.jdownloader.JDownloader	flathub	java-swing	4.185	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+479	flathub:org.jdownloader.JDownloader	flathub	java-swing	4.185	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 480	gnote	nixpkgs	gtk4-adwaita	4.132	full	atspi	general:atspi	done		2026-11-22	
 481	jadx	nixpkgs	java-swing	4.130	full	x11	general:x11	done		2026-11-24	
 482	authenticator	nixpkgs	gtk4-adwaita	4.113	full	atspi	general:atspi	done		2026-11-22	
@@ -1091,7 +1091,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 1090	kile	nixpkgs	qt6-widgets	2.260	full	dbusmenu	general:dbusmenu	done		2026-11-22	
 1091	flathub:app.go2tv.go2tv	flathub	unknown	2.259	full	atspi	general:atspi	done		2026-11-23	
 1092	flathub:io.github.alescdb.mailviewer	flathub	gtk4-adwaita?	2.259	full	atspi	general:atspi	done		2026-11-23	
-1093	whatip	nixpkgs	gtk4-adwaita	2.258	burger	atspi	general:atspi-burger	partial	burger-only	2026-11-26	
+1093	whatip	nixpkgs	gtk4-adwaita	2.258	untested		todo	retest	burger-only		
 1094	flowblade	nixpkgs-uncached	gtk3	2.257	full	x11	general:x11	done		2026-11-25	
 1095	flathub:io.speedofsound.SpeedOfSound	flathub	java-swing	2.257	full	atspi	general:atspi	done		2026-11-23	
 1096	flathub:org.notepadng.Notepadng	flathub	qt6-widgets	2.256	full	dbusmenu	general:dbusmenu	done		2026-11-23	
@@ -1155,7 +1155,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 1154	flathub:moe.kopuz.kopuz	flathub	gtk4-adwaita?	2.196	full	atspi	general:atspi	done		2026-11-23	
 1155	flathub:nl.andreasknoben.Laser	flathub	gtk4-adwaita?	2.194	full	atspi	general:atspi	done		2026-11-25	
 1156	bombsquad	nixpkgs-unfree	sdl-glfw	2.194	untested		todo	retest			
-1157	simulide	nixpkgs	qt5-widgets	2.193	burger	atspi	general:atspi-burger	partial	burger-only	2026-11-26	
+1157	simulide	nixpkgs	qt5-widgets	2.193	untested		todo	retest	burger-only		
 1158	flathub:io.github.sepehr_rs.Sudoku	flathub	gtk4-adwaita?	2.193	full	atspi	general:atspi	done		2026-11-23	
 1159	pokerth	nixpkgs	qt5-widgets	2.192	full	dbusmenu	general:dbusmenu	done		2026-11-22	
 1160	flathub:org.meshtastic.MeshtasticDesktop	flathub	java-swing	2.192	none	x11	none-needed	none-needed		2026-11-26	
@@ -1255,7 +1255,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 1254	flathub:io.github.shonebinu.Brief	flathub	gtk4-adwaita?	2.100	full	atspi	general:atspi	done		2026-11-23	
 1255	xpra	nixpkgs	gtk3	2.100	none	x11	none-needed	none-needed		2026-11-26	
 1256	lxqt.lxqt-session	nixpkgs	qt6-widgets	2.100	none	x11	none-needed	none-needed		2026-11-26	
-1257	coolercontrol.coolercontrol-gui	nixpkgs	qt6-mixed	2.100	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+1257	coolercontrol.coolercontrol-gui	nixpkgs	qt6-mixed	2.100	untested		todo	retest	kirigami-no-menu		
 1258	crosspipe	nixpkgs	gtk4-adwaita	2.099	full	atspi	general:atspi	done		2026-11-25	
 1259	discover-overlay	nixpkgs	gtk3	2.099	no-window		todo	retest	harness-no-window		
 1260	flathub:com.ktechpit.colorwall	flathub	qt6-widgets	2.098	none	x11	none-needed	none-needed		2026-11-26	
@@ -1279,7 +1279,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 1278	delfin	nixpkgs	gtk4-adwaita	2.078	full	atspi	general:atspi	done		2026-11-23	
 1279	flathub:io.github.hakuneko.HakuNeko	flathub	electron	2.077	none	x11	general:registrar+flatpak-override	done		2026-11-25	
 1280	goldendict-ng	nixpkgs	qt6-widgets	2.076	full	dbusmenu	general:dbusmenu	done		2026-11-22	
-1281	flathub:com.prof18.feedflow	flathub	java-swing	2.076	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+1281	flathub:com.prof18.feedflow	flathub	java-swing	2.076	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 1282	lxqt.lxqt-powermanagement	nixpkgs	qt6-widgets	2.072	none	x11	none-needed	none-needed		2026-11-26	
 1283	iconic	nixpkgs	gtk4-adwaita	2.071	full	atspi	general:atspi	done		2026-11-23	
 1284	pegasus-frontend	nixpkgs	qt5-widgets	2.071	none	x11	none-needed	none-needed		2026-11-26	
@@ -1314,7 +1314,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 1313	flathub:com.gitlab.adnan338.Nixwriter	flathub	unknown	2.046	none	x11	none-needed	none-needed		2026-11-26	
 1314	jazz2	nixpkgs	sdl-glfw	2.044	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 1315	flathub:jp.nonbili.nora	flathub	electron	2.044	none	x11	none-needed	done		2026-11-25	
-1316	contour	nixpkgs	qt6-mixed	2.043	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+1316	contour	nixpkgs	qt6-mixed	2.043	untested		todo	retest	kirigami-no-menu		
 1317	wiliwili	nixpkgs	tui	2.043	none	x11	todo	todo	no-a11y:tui	2026-11-26	
 1318	coulomb	nixpkgs	java-swing	2.041	none	x11	none-needed	none-needed		2026-11-26	
 1319	flathub:app.drey.Damask	flathub	gtk4-adwaita?	2.041	full	atspi	general:atspi	done		2026-11-23	
@@ -1346,7 +1346,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 1345	flathub:org.mpz_player.mpz	flathub	qt6-widgets	2.006	full	atspi	general:atspi	done		2026-11-23	
 1346	flathub:page.codeberg.elly_code.jorts	flathub	gtk4-adwaita?	2.005	full	atspi	general:atspi	done		2026-11-23	
 1347	flathub:org.kde.kaffeine	flathub	qt6-widgets	2.004	full	x11	general:x11	done		2026-11-23	
-1348	flathub:io.github.hvdwofl.jExifToolGUI	flathub	java-swing	2.003	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+1348	flathub:io.github.hvdwofl.jExifToolGUI	flathub	java-swing	2.003	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 1349	pencil2d	nixpkgs	qt5-widgets	2.002	full	dbusmenu	general:dbusmenu	done		2026-11-22	
 1350	gitnuro	nixpkgs	java-swing	2.002	none	x11	none-needed	none-needed		2026-11-26	
 1351	chromium-bsu	nixpkgs	sdl-glfw	2.002	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
@@ -1611,7 +1611,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 1610	flathub:com.github.sakya.corechess	flathub	unknown	1.807	none	x11	todo	todo	no-a11y:unknown	2026-11-26	game: menus are in-game
 1611	mednaffe	nixpkgs	gtk3	1.807	full	gtk	general:gtk	done		2026-11-22	
 1612	minigalaxy	nixpkgs	gtk4-adwaita	1.806	untested		todo	retest	blocked:not-prebuilt		
-1613	previewqt	nixpkgs	qt6-mixed	1.805	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+1613	previewqt	nixpkgs	qt6-mixed	1.805	untested		todo	retest	kirigami-no-menu		
 1614	flathub:org._2009scape.Launcher	flathub	java-swing	1.804	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 1615	flathub:com.iche2.gai	flathub	flutter	1.803	none	x11	none-needed	none-needed		2026-11-26	
 1616	sayonara	nixpkgs	qt5-widgets	1.801	full	dbusmenu	general:dbusmenu	done		2026-11-22	
@@ -1666,7 +1666,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 1665	wemeet	nixpkgs-unfree	unknown	1.766	untested		todo	retest			
 1666	mqttx	nixpkgs	gtk4-adwaita	1.766	untested		todo	blocked	blocked:not-prebuilt		
 1667	lincity-ng	nixpkgs	sdl-glfw	1.766	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
-1668	flare-signal	nixpkgs	gtk4-adwaita	1.765	burger	atspi	general:atspi-burger	partial	burger-only	2026-11-26	
+1668	flare-signal	nixpkgs	gtk4-adwaita	1.765	untested		todo	retest	burger-only		
 1669	flathub:com.github.gijsgoudzwaard.image-optimizer	flathub	gtk4-adwaita?	1.765	full	atspi	general:atspi	done		2026-11-24	
 1670	flathub:io.github.olaproeis.Ferrite	flathub	gtk4-adwaita	1.764	none	x11	todo	todo	flatpak-no-a11y	2026-11-26	
 1671	flathub:io.github.suchnsuch.Tangent	flathub	electron	1.763	none	x11	general:registrar+flatpak-override	done		2026-11-25	
@@ -1674,7 +1674,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 1673	seamly2d	nixpkgs	qt5-widgets	1.762	full	dbusmenu	general:dbusmenu	done		2026-11-22	
 1674	flathub:io.github.lavenderdotpet.LibreQuake	flathub	sdl-glfw	1.762	none	x11	none-needed	none-needed		2026-11-26	
 1675	sly	nixpkgs	flutter	1.761	none	x11	none-needed	none-needed		2026-11-26	
-1676	flathub:com.tonikelope.MegaBasterd	flathub	java-swing	1.761	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+1676	flathub:com.tonikelope.MegaBasterd	flathub	java-swing	1.761	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 1677	kopia	nixpkgs-uncached	unknown	1.761	none	x11	general:registrar+flatpak-override	done		2026-11-25	
 1678	redisinsight	nixpkgs-unfree	unknown	1.761	untested		todo	retest			
 1679	flathub:dev.andy128k.Hearts	flathub	gtk4-adwaita?	1.761	full	atspi	general:atspi	done		2026-11-24	
@@ -1855,7 +1855,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 1854	flathub:dev.gbstudio.gb-studio	flathub	electron	1.663	none	x11	none-needed	none-needed		2026-11-26	
 1855	flathub:io.github.vmkspv.netsleuth	flathub	gtk4-adwaita?	1.663	full	atspi	general:atspi	done		2026-11-26	
 1856	flathub:io.github.moonlight_mod.moonlight-installer	flathub	unknown	1.663	none	x11	todo	todo	flatpak-no-a11y	2026-11-26	
-1857	flathub:io.github.kovzol.geogebra-discovery	flathub	java-swing	1.662	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+1857	flathub:io.github.kovzol.geogebra-discovery	flathub	java-swing	1.662	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 1858	furnace	nixpkgs	sdl-glfw	1.659	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 1859	flathub:xyz.rescribe.rescribe	flathub	unknown	1.659	none	x11	none-needed	none-needed		2026-11-26	
 1860	iortcw	nixpkgs-uncached	unknown	1.655	none	x11	none-needed	none-needed		2026-11-26	
@@ -1950,7 +1950,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 1949	flathub:de.gonicus.bubbles	flathub	gtk4-adwaita?	1.608	none	x11	none-needed	none-needed		2026-11-26	
 1950	unvanquished	nixpkgs	gtk4-adwaita	1.607	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 1951	sview	nixpkgs	gtk4-adwaita	1.607	none	x11	todo	todo	no-a11y:gtk4-adwaita	2026-11-26	
-1952	serial-studio	nixpkgs	qt6-mixed	1.607	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+1952	serial-studio	nixpkgs	qt6-mixed	1.607	untested		todo	retest	kirigami-no-menu		
 1953	flathub:io.github.alamahant.Asteria	flathub	qt6-widgets	1.607	full	dbusmenu	general:dbusmenu	done		2026-11-24	
 1954	flathub:com.bolwarratechnologies.this_note	flathub	unknown	1.607	none	x11	none-needed	none-needed		2026-11-26	
 1955	flathub:io.frama.editide.editide	flathub	gtk4-adwaita?	1.607	full	gtk	general:gtk	done		2026-11-24	
@@ -2001,16 +2001,16 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 2000	flathub:org.libretrainsim.Libre-TrainSim	flathub	sdl-glfw	1.585	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 2001	flathub:app.inkdrop.Inkdrop	flathub	electron	1.585	full	atspi	general:atspi	done		2026-11-26	
 2002	flathub:io.sourceforge.pipewalker.PipeWalker	flathub	sdl-glfw	1.585	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
-2003	flathub:online.hatsune_miku.tachidesk-vaadinui	flathub	java-swing	1.585	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+2003	flathub:online.hatsune_miku.tachidesk-vaadinui	flathub	java-swing	1.585	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 2004	flathub:io.github.deaen.awesomecalculator	flathub	sdl-glfw	1.585	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 2005	pandora-launcher	nixpkgs	java-swing	1.584	none	x11	none-needed	none-needed		2026-11-26	
 2006	flathub:art.fatdawlf.Piccolo	flathub	gtk4-adwaita?	1.584	full	atspi	general:atspi	done		2026-11-24	
 2007	flathub:com.synology.synology-note-station	flathub	proprietary-bundle	1.584	none	x11	todo	todo	no-a11y:proprietary-bundle	2026-11-26	
 2008	flathub:com.github.taiko2k.avvie	flathub	gtk4-adwaita?	1.583	full	atspi	general:atspi	done		2026-11-24	
 2009	millisecond	nixpkgs	gtk4-adwaita	1.582	full	atspi	general:atspi	done		2026-11-23	
-2010	flathub:org.exbin.BinEd	flathub	java-swing	1.582	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+2010	flathub:org.exbin.BinEd	flathub	java-swing	1.582	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 2011	flathub:io.github.Cookiiieee.WSelector	flathub	gtk4-adwaita?	1.582	full	atspi	general:atspi	done		2026-11-24	
-2012	image-roll	nixpkgs	gtk4	1.580	burger	atspi	general:atspi-burger	partial	burger-only	2026-11-26	
+2012	image-roll	nixpkgs	gtk4	1.580	untested		todo	retest	burger-only		
 2013	firefoxpwa	nixpkgs	firefox-xul	1.580	no-window		todo	retest	harness-needs-arguments		
 2014	csound-qt	nixpkgs	qt6-widgets	1.580	full	dbusmenu	general:dbusmenu	done		2026-11-23	
 2015	flathub:org.subtitld.Subtitld	flathub	qt6-widgets	1.579	full	atspi	general:atspi	done		2026-11-25	
@@ -2042,7 +2042,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 2041	flathub:io.gitlab.daikhan.stable	flathub	gtk4-adwaita?	1.567	full	atspi	general:atspi	done		2026-11-24	
 2042	flathub:net.krafting.HexColordle	flathub	gtk4-adwaita?	1.567	full	atspi	general:atspi	done		2026-11-24	
 2043	aonsoku	nixpkgs	electron	1.566	none	x11	todo	todo	needs-switch:electron+libdbusmenu	2026-11-26	
-2044	flathub:org.davmail.DavMail	flathub	java-swing	1.566	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+2044	flathub:org.davmail.DavMail	flathub	java-swing	1.566	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 2045	airtame	nixpkgs-unfree	electron	1.566	untested		todo	retest			
 2046	flathub:io.github.mfat.jottr	flathub	qt6-widgets	1.566	full	atspi	general:atspi	done		2026-11-24	
 2047	flathub:org.archivekeep.ArchiveKeep	flathub	java-swing	1.566	none	x11	none-needed	none-needed		2026-11-26	
@@ -2172,7 +2172,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 2171	flathub:us.acei.AbsoluteInfinity	flathub	unknown	1.510	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 2172	flathub:io.github.fastrizwaan.WebkitWord	flathub	gtk4-adwaita?	1.510	full	atspi	general:atspi	done		2026-11-24	
 2173	flathub:com.alientrap.nexuiz-classic	flathub	sdl-glfw	1.508	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
-2174	flathub:io.github.java_decompiler.jd-gui	flathub	java-swing	1.508	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+2174	flathub:io.github.java_decompiler.jd-gui	flathub	java-swing	1.508	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 2175	flathub:page.codeberg.JakobDev.jdPixelUpscaler	flathub	qt6-widgets	1.508	full	dbusmenu	general:dbusmenu	done		2026-11-24	
 2176	flathub:io.github.doukutsu_rs.doukutsu-rs	flathub	proprietary-bundle	1.508	no-window		todo	retest	harness-no-window		game: menus are in-game
 2177	waycheck	nixpkgs	qt6-widgets	1.507	none	x11	none-needed	none-needed		2026-11-26	
@@ -2212,7 +2212,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 2211	picocrypt	nixpkgs	gtk3	1.493	none	x11	todo	todo	no-a11y:gtk3	2026-11-26	
 2212	flathub:com.yanklog.YankLog	flathub	gtk4-adwaita?	1.493	full	atspi	general:atspi	done		2026-11-25	
 2213	flathub:com.hylianmodding.modloader64	flathub	electron	1.493	none	x11	none-needed	none-needed		2026-11-26	
-2214	flathub:io.github.subhra74.Muon	flathub	java-swing	1.493	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+2214	flathub:io.github.subhra74.Muon	flathub	java-swing	1.493	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 2215	flathub:fi.csc.Elmer	flathub	qt6-widgets	1.492	full	dbusmenu	general:dbusmenu	done		2026-11-24	
 2216	flathub:de.hummdudel.Libellus	flathub	gtk4-adwaita?	1.492	full	atspi	general:atspi	done		2026-11-25	
 2217	flathub:io.github.sniper1720.khushu	flathub	gtk4-adwaita?	1.491	full	atspi	general:atspi	done		2026-11-24	
@@ -2244,7 +2244,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 2243	flathub:com.lixgame.Lix	flathub	unknown	1.482	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 2244	freeciv	nixpkgs	gtk3	1.480	none	x11	none-needed	none-needed		2026-11-26	
 2245	droidcam	nixpkgs	gtk3	1.480	none	x11	none-needed	none-needed		2026-11-26	
-2246	kdePackages.klevernotes	nixpkgs	qt6-mixed	1.479	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+2246	kdePackages.klevernotes	nixpkgs	qt6-mixed	1.479	untested		todo	retest	kirigami-no-menu		
 2247	CuboCore.corepdf	nixpkgs	qt6-widgets	1.479	none	x11	none-needed	none-needed		2026-11-26	
 2248	chess-clock	nixpkgs	gtk4-adwaita	1.479	full	atspi	general:atspi	done		2026-11-23	
 2249	flathub:hu.irl.sysex-controls	flathub	gtk4-adwaita?	1.479	full	atspi	general:atspi	done		2026-11-25	
@@ -2317,7 +2317,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 2316	flathub:com.endlessnetwork.fablemaker	flathub	unknown	1.450	none	x11	todo	todo	no-a11y:unknown	2026-11-26	
 2317	flathub:de.wger.flutter	flathub	flutter	1.450	none	x11	none-needed	none-needed		2026-11-26	
 2318	flathub:com.polydez.KeyVault	flathub	unknown	1.450	none	x11	none-needed	none-needed		2026-11-26	
-2319	flathub:io.github.TheThirdOne.rars	flathub	java-swing	1.448	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+2319	flathub:io.github.TheThirdOne.rars	flathub	java-swing	1.448	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 2320	flathub:de.informationsanarchistik.teapot.megamichi.berrypaper	flathub	gtk4-adwaita?	1.447	full	atspi	general:atspi	done		2026-11-25	
 2321	diodon	nixpkgs	gtk3	1.447	tray-only		none-needed:tray	none-needed			
 2322	flathub:com.inform7.IDE	flathub	gtk4-adwaita?	1.446	full	x11	general:x11	done		2026-11-25	
@@ -2375,7 +2375,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 2374	kaidan	nixpkgs	qt6-mixed	1.426	full	atspi	general:atspi	done		2026-11-23	
 2375	gtk4	nixpkgs	gtk4	1.426	no-window		todo	retest	harness-no-window		
 2376	collector	nixpkgs	gtk4-adwaita	1.426	full	atspi	general:atspi	done		2026-11-23	
-2377	flathub:net.emulicious.Emulicious	flathub	java-swing	1.426	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+2377	flathub:net.emulicious.Emulicious	flathub	java-swing	1.426	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 2378	flathub:page.codeberg.JakobDev.jdDesktopEntryEdit	flathub	qt6-widgets	1.426	full	dbusmenu	general:dbusmenu	done		2026-11-25	
 2379	gcstar	nixpkgs	gtk3	1.425	full	atspi	general:atspi	done		2026-11-22	
 2380	flathub:io.github.unicornyrainbow.secrets	flathub	gtk4-adwaita?	1.425	full	atspi	general:atspi	done		2026-11-25	
@@ -2408,9 +2408,9 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 2407	flathub:org.scantailor.ScanTailor	flathub	qt6-widgets?	1.411	none	x11	todo	todo	no-a11y:qt6-widgets?	2026-11-26	
 2408	flathub:dev.pantheum.janus	flathub	unknown	1.411	full	atspi	general:atspi	done		2026-11-25	
 2409	flathub:xyz.nokarin.aqloss	flathub	flutter	1.411	full	atspi	general:atspi	done		2026-11-25	
-2410	flathub:org.verapdf.veraPDF	flathub	java-swing	1.411	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+2410	flathub:org.verapdf.veraPDF	flathub	java-swing	1.411	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 2411	flathub:io.github.dxx_rebirth.dxx-rebirth	flathub	sdl-glfw	1.411	none	x11	none-needed	none-needed		2026-11-26	
-2412	flathub:org.keystore_explorer.KeyStoreExplorer	flathub	java-swing	1.411	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+2412	flathub:org.keystore_explorer.KeyStoreExplorer	flathub	java-swing	1.411	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 2413	gmrun	nixpkgs	gtk3	1.410	none	x11	none-needed	none-needed		2026-11-26	
 2414	flathub:io.gitlab.elescoute.spacelaunch	flathub	gtk4-adwaita?	1.410	full	atspi	general:atspi	done		2026-11-25	
 2415	share-preview	nixpkgs	gtk4-adwaita	1.408	full	atspi	general:atspi	done		2026-11-23	
@@ -2494,7 +2494,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 2493	hyprpwcenter	nixpkgs	tui	1.380	none	x11	todo	todo	no-a11y:tui	2026-11-26	
 2494	passes	nixpkgs	gtk4-adwaita	1.380	full	atspi	general:atspi	done		2026-11-23	
 2495	flathub:com.endlessnetwork.dragonsapprentice	flathub	unknown	1.380	none	x11	todo	todo	no-a11y:unknown	2026-11-26	
-2496	flathub:io.sourceforge.Pixelitor	flathub	java-swing	1.380	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+2496	flathub:io.sourceforge.Pixelitor	flathub	java-swing	1.380	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 2497	flathub:com.github.arminstraub.krop	flathub	qt6-widgets	1.380	full	atspi	general:atspi	done		2026-11-25	
 2498	flathub:io.github.eteran.edb-debugger	flathub	qt6-widgets	1.380	full	dbusmenu	general:dbusmenu	done		2026-11-25	
 2499	flathub:gay.brie.CheesePaper	flathub	unknown	1.380	none	x11	todo	todo	flatpak-no-a11y	2026-11-26	
@@ -2512,7 +2512,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 2511	flathub:org.openkj.OpenKJ	flathub	qt6-widgets	1.375	full	x11	general:x11	done		2026-11-25	
 2512	flathub:dev.vieb.Vieb	flathub	electron	1.375	none	x11	none-needed	none-needed		2026-11-26	
 2513	aaaaxy	nixpkgs	custom-drawn	1.373	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
-2514	flathub:dev.rotstein.SmashedPumpkin	flathub	java-swing	1.373	full	atspi	general:atspi+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+2514	flathub:dev.rotstein.SmashedPumpkin	flathub	java-swing	1.373	full	atspi	general:atspi+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 2515	flathub:com.gooseberrydevelopment.pinepods	flathub	gtk4-adwaita?	1.373	none	x11	none-needed	none-needed		2026-11-26	
 2516	parlatype	nixpkgs	gtk4-adwaita	1.372	full	atspi	general:atspi	done		2026-11-23	
 2517	geopard	nixpkgs	gtk4-adwaita	1.372	full	atspi	general:atspi	done		2026-11-23	
@@ -2620,7 +2620,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 2619	flathub:io.github.dynobo.sphereview	flathub	gtk4-adwaita?	1.334	full	atspi	general:atspi	done		2026-11-25	
 2620	flathub:com.iche2.fileshows	flathub	flutter	1.334	none	x11	none-needed	none-needed		2026-11-26	
 2621	flathub:app.tuneline.Tuneline	flathub	flutter	1.334	none	x11	none-needed	none-needed		2026-11-26	
-2622	flathub:io.github.hrniels.Eventix	flathub	java-swing	1.334	full	atspi	general:atspi+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+2622	flathub:io.github.hrniels.Eventix	flathub	java-swing	1.334	full	atspi	general:atspi+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 2623	flathub:net.sourceforge.btanks	flathub	sdl-glfw	1.332	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 2624	flathub:io.github.redddfoxxyy.samaya	flathub	gtk4-adwaita?	1.332	full	atspi	general:atspi	done		2026-11-25	
 2625	flathub:com.github.lxgr_linux.pokete	flathub	unknown	1.332	untested		todo	retest			
@@ -2690,7 +2690,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 2689	fmit	nixpkgs	qt6-widgets	1.305	full	atspi	none-needed	done		2026-11-24	
 2690	flathub:com.endlessnetwork.whitehouse	flathub	unknown	1.305	none	x11	todo	todo	no-a11y:unknown	2026-11-26	
 2691	hdfview	nixpkgs-uncached	unknown	1.305	full	atspi	general:atspi	done		2026-11-25	
-2692	flathub:ch.bailu.gtk_meteo	flathub	java-swing	1.305	full	atspi	general:atspi+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+2692	flathub:ch.bailu.gtk_meteo	flathub	java-swing	1.305	full	atspi	general:atspi+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 2693	flathub:com.francescogaglione.chronos	flathub	unknown	1.305	none	x11	todo	todo	flatpak-no-a11y	2026-11-26	
 2694	elektroid	nixpkgs	gtk3	1.303	full	atspi	none-needed	done		2026-11-24	
 2695	cdogs-sdl	nixpkgs	sdl-glfw	1.303	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
@@ -2699,13 +2699,13 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 2698	buckets	nixpkgs-unfree	unknown	1.303	untested		todo	retest			
 2699	cbconvert-gui	nixpkgs	gtk3	1.302	full	atspi	general:atspi	done		2026-11-25	
 2700	flathub:io.thp.numptyphysics	flathub	sdl-glfw	1.302	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
-2701	flathub:com.wireframesketcher.WireframeSketcher	flathub	java-swing	1.302	full	atspi	general:atspi+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+2701	flathub:com.wireframesketcher.WireframeSketcher	flathub	java-swing	1.302	full	atspi	general:atspi+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 2702	djview	nixpkgs	qt5-widgets	1.300	full	dbusmenu	general:dbusmenu	done		2026-11-23	
 2703	flathub:org.sugarlabs.Chess	flathub	gtk4-adwaita?	1.300	full	x11	general:x11	done		2026-11-25	
 2704	flathub:net.sf.metronomek	flathub	qt6-widgets	1.300	none	x11	none-needed	none-needed		2026-11-26	
 2705	flathub:com.bishwasaha.Koncentro	flathub	qt6-widgets	1.300	none	x11	none-needed	none-needed		2026-11-26	
 2706	flathub:io.github.dtsudo.SymbiosisChess	flathub	electron	1.300	none	x11	none-needed	none-needed		2026-11-26	
-2707	flathub:org.megamek.MegaMek	flathub	java-swing	1.298	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+2707	flathub:org.megamek.MegaMek	flathub	java-swing	1.298	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 2708	reqable	nixpkgs-unfree	gtk3	1.298	untested		todo	retest			
 2709	flathub:org.kde.kbibtex	flathub	qt6-widgets	1.296	full	dbusmenu	general:dbusmenu	done		2026-11-25	
 2710	flathub:org.cvfosammmm.Lemma	flathub	gtk4-adwaita?	1.296	full	atspi	general:atspi	done		2026-11-25	
@@ -2813,7 +2813,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 2812	flathub:org.duckdns.bugfreeblog.mldonkeynext	flathub	qt6-widgets	1.253	none	x11	none-needed	none-needed		2026-11-26	
 2813	flathub:chat.moin.moin	flathub	flutter	1.253	none	x11	none-needed	none-needed		2026-11-26	
 2814	flathub:org.kde.vvave	flathub	qt6-widgets	1.253	full	atspi	general:atspi	done		2026-11-25	
-2815	flathub:com.netxms.NetXMSClient62	flathub	java-swing	1.253	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+2815	flathub:com.netxms.NetXMSClient62	flathub	java-swing	1.253	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 2816	flathub:io.github.hypengw.Qcm	flathub	qt6-widgets	1.253	full	atspi	general:atspi	done		2026-11-25	
 2817	jflap	nixpkgs-unfree	java-swing	1.253	untested		todo	retest			
 2818	flathub:com.netxms.NetXMSClient	flathub	java-swing	1.253	none	x11	todo	todo	no-a11y:java-swing	2026-11-26	
@@ -2894,7 +2894,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 2893	flathub:com.besoeasy.gupt	flathub	gtk4-adwaita	1.224	none	x11	none-needed	none-needed		2026-11-26	
 2894	flathub:io.github.voxelcubes.hand-tex	flathub	qt6-widgets	1.224	full	atspi	general:atspi	done		2026-11-26	
 2895	wfview	nixpkgs	qt6-widgets	1.221	full	atspi	general:atspi	done		2026-11-25	
-2896	symbolic-preview	nixpkgs	gtk4-adwaita	1.221	burger	atspi	general:atspi-burger	partial	burger-only	2026-11-26	
+2896	symbolic-preview	nixpkgs	gtk4-adwaita	1.221	untested		todo	retest	burger-only		
 2897	flathub:com.qzandronum.Q-Zandronum	flathub	qt6-widgets	1.221	full	dbusmenu	general:dbusmenu	done		2026-11-25	
 2898	flathub:com.nickgirga.webready	flathub	gtk4-adwaita?	1.221	none	x11	none-needed	none-needed		2026-11-26	
 2899	flathub:io.qt.Linguist	flathub	qt6-widgets	1.219	full	dbusmenu	general:dbusmenu	done		2026-11-25	
@@ -2936,7 +2936,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 2935	flathub:io.github.rabbitgramdesktop.rabbitgramdesktop	flathub	gtk4-adwaita?	1.201	full	dbusmenu	general:dbusmenu	done		2026-11-25	
 2936	mtpaint	nixpkgs	gtk3	1.200	full	x11	general:x11	done		2026-11-23	
 2937	klassy	nixpkgs	qt6-widgets	1.200	none	x11	todo	todo	menu-button-not-read	2026-11-26	
-2938	vnote	nixpkgs	qt6-mixed	1.199	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+2938	vnote	nixpkgs	qt6-mixed	1.199	untested		todo	retest	kirigami-no-menu		
 2939	flathub:org.gottcode.Tanglet	flathub	qt6-widgets	1.199	full	atspi	general:atspi	done		2026-11-25	
 2940	flathub:net.biniou.LeBiniou	flathub	unknown	1.199	untested		todo	retest			
 2941	flathub:io.github.hafmed.TP-Labo-Hyd	flathub	qt6-widgets	1.199	full	atspi	general:atspi	done		2026-11-25	
@@ -2961,7 +2961,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 2960	flathub:io.gitlab.jazztickets.emptyclip	flathub	unknown	1.194	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 2961	flathub:com.longbridgeapp.LongbridgePro	flathub	gtk4-adwaita?	1.194	none	x11	todo	todo	flatpak-no-a11y	2026-11-26	
 2962	flathub:ci.not.Rune	flathub	flutter	1.194	none	x11	none-needed	none-needed		2026-11-26	
-2963	flathub:io.github.ADG_Foundation.Java-Geometry-Expert	flathub	java-swing	1.194	full	atspi	general:atspi+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+2963	flathub:io.github.ADG_Foundation.Java-Geometry-Expert	flathub	java-swing	1.194	full	atspi	general:atspi+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 2964	flathub:com.inventwithpython.flippy	flathub	sdl-glfw	1.192	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 2965	flathub:com.ranfdev.Lobjur	flathub	gtk4-adwaita?	1.192	full	atspi	general:atspi	done		2026-11-25	
 2966	flathub:space.nouspiro.tenmon	flathub	qt6-widgets	1.192	full	dbusmenu	general:dbusmenu	done		2026-11-25	
@@ -3006,7 +3006,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 3005	flathub:io.github.vinser.burnfix	flathub	unknown	1.178	none	x11	todo	todo	no-a11y:unknown	2026-11-26	
 3006	flathub:io.github.garrett_webb.terminalpolyominos	flathub	gtk4-adwaita	1.178	none	x11	none-needed	none-needed		2026-11-26	
 3007	eiskaltdcpp	nixpkgs	qt5-widgets	1.175	full	registrar	general:registrar	done		2026-11-22	
-3008	flathub:io.github.nearinfinitybrowser.nearinfinity	flathub	java-swing	1.175	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+3008	flathub:io.github.nearinfinitybrowser.nearinfinity	flathub	java-swing	1.175	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 3009	flathub:xyz.slothlife.Jogger	flathub	gtk4-adwaita?	1.175	full	atspi	general:atspi	done		2026-11-25	
 3010	flathub:com.voxdsp.TempleDriver	flathub	sdl-glfw	1.175	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 3011	tev	nixpkgs	custom-drawn	1.173	none	x11	todo	todo	no-a11y:custom-drawn	2026-11-26	
@@ -3086,7 +3086,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 3085	flathub:dev.project516.titledgames.microwave-man	flathub	sdl-glfw	1.145	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 3086	flathub:de.syping.gta5view	flathub	qt6-widgets	1.145	full	dbusmenu	general:dbusmenu	done		2026-11-25	
 3087	flathub:org.rolisteam.rolisteam	flathub	qt6-widgets	1.145	none	x11	todo	blocked	blocked:needs-account	2026-11-26	
-3088	flathub:org.deidentifier.arx	flathub	java-swing	1.145	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+3088	flathub:org.deidentifier.arx	flathub	java-swing	1.145	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 3089	flathub:com.voxdsp.VoxelPaintPro	flathub	sdl-glfw	1.145	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 3090	flathub:page.codeberg.JakobDev.jdDBusDebugger	flathub	qt6-widgets	1.145	full	dbusmenu	general:dbusmenu	done		2026-11-25	
 3091	flathub:io.github.vinser.pixyne	flathub	unknown	1.145	none	x11	todo	todo	no-a11y:unknown	2026-11-26	
@@ -3096,7 +3096,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 3095	flathub:dev.mooday.squared	flathub	unknown	1.142	none	x11	todo	todo	flatpak-no-a11y	2026-11-26	
 3096	flathub:place.derpy.ketchup	flathub	qt6-widgets	1.142	full	atspi	general:atspi	done		2026-11-25	
 3097	flathub:nl.v0yd.Capsule	flathub	gtk4-adwaita?	1.142	full	atspi	general:atspi	done		2026-11-26	
-3098	flathub:tr.gov.uyap.Editor	flathub	java-swing	1.142	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+3098	flathub:tr.gov.uyap.Editor	flathub	java-swing	1.142	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 3099	flathub:xyz.woxel.Woxel	flathub	sdl-glfw	1.142	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 3100	flathub:io.github.tomluchowski.OpenDungeonsPlus	flathub	unknown	1.142	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 3101	flathub:com.clustta.clustta	flathub	gtk4-adwaita?	1.142	no-window		todo	retest	harness-no-window		
@@ -3106,10 +3106,10 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 3105	srain	nixpkgs	gtk3	1.140	full	atspi	general:atspi	done		2026-11-23	
 3106	flathub:page.codeberg.JakobDev.jdAnimatedImageEditor	flathub	qt6-widgets	1.140	full	dbusmenu	general:dbusmenu	done		2026-11-25	
 3107	flathub:io.github.FailurePoint.RandomNumberFive	flathub	gtk4-adwaita?	1.140	full	atspi	general:atspi	done		2026-11-25	
-3108	flathub:fr.sgued.ten_forward	flathub	gtk4-adwaita?	1.140	burger	atspi	general:atspi-burger	partial	burger-only	2026-11-26	
+3108	flathub:fr.sgued.ten_forward	flathub	gtk4-adwaita?	1.140	full	atspi	general:atspi	done		2026-11-26	
 3109	flathub:io.github.simoonas.marca	flathub	gtk4-adwaita?	1.140	none	x11	none-needed	none-needed		2026-11-26	
 3110	flathub:com.popcornfx.PopcornFXEditor	flathub	qt6-widgets?	1.140	full	x11	general:x11	done		2026-11-25	
-3111	flathub:ch.bailu.aat	flathub	java-swing	1.140	full	atspi	general:atspi+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+3111	flathub:ch.bailu.aat	flathub	java-swing	1.140	full	atspi	general:atspi+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 3112	unnamed-sdvx-clone	nixpkgs	unknown	1.137	none	x11	todo	todo	no-a11y:unknown	2026-11-26	game: menus are in-game
 3113	aurea	nixpkgs	gtk4-adwaita	1.137	full	atspi	general:atspi	done		2026-11-23	
 3114	flathub:uk.me.doof.Lander	flathub	sdl-glfw	1.137	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
@@ -3125,7 +3125,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 3124	flathub:com.infochunk.OpenMadoola	flathub	sdl-glfw	1.134	full	atspi	general:atspi	done		2026-11-25	
 3125	flathub:net.sourceforge.Ri-li	flathub	sdl-glfw	1.132	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 3126	flathub:io.github.essentialist_app.essentialist	flathub	unknown	1.132	none	x11	none-needed	none-needed		2026-11-26	
-3127	flathub:cat.xtec.clic.JClic	flathub	java-swing	1.132	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+3127	flathub:cat.xtec.clic.JClic	flathub	java-swing	1.132	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 3128	flathub:com.rabbit_company.passky	flathub	electron	1.132	none	x11	none-needed	done		2026-11-25	
 3129	flathub:dev.schlaubi.Tonbrett	flathub	unknown	1.132	none	x11	todo	todo	no-a11y:unknown	2026-11-26	
 3130	flathub:fr.inria.corese.CoreseGui	flathub	java-swing	1.132	none	x11	none-needed	none-needed		2026-11-26	
@@ -3189,7 +3189,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 3188	flathub:io.github.savantsavior.t-story	flathub	sdl-glfw	1.110	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 3189	flathub:systems.tranquil.Map	flathub	gtk4-adwaita?	1.110	full	atspi	general:atspi	done		2026-11-25	
 3190	flathub:io.github.hafmed.Thakir-Prayer-Times	flathub	qt6-widgets	1.110	none	x11	none-needed	none-needed		2026-11-26	
-3191	flathub:org.sil.keyboard-app-builder	flathub	java-swing	1.110	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+3191	flathub:org.sil.keyboard-app-builder	flathub	java-swing	1.110	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 3192	flathub:io.github.sss_says_snek.diurnals	flathub	gtk4-adwaita?	1.110	full	atspi	general:atspi	done		2026-11-25	
 3193	flathub:page.codeberg.maerchenfeeimgarten.AntiBillard	flathub	sdl-glfw	1.110	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 3194	flathub:io.github.herve4m.Hexkudo	flathub	gtk4-adwaita?	1.110	full	atspi	general:atspi	done		2026-11-25	
@@ -3199,7 +3199,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 3198	flathub:io.gitlab.jazztickets.irrlamb	flathub	unknown	1.107	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 3199	flathub:com.cerebralnomad.recipescribe	flathub	qt6-widgets	1.107	full	dbusmenu	general:dbusmenu	done		2026-11-25	
 3200	flathub:com.mastropaolo.www.tabela	flathub	gtk4-adwaita?	1.107	full	atspi	general:atspi	done		2026-11-25	
-3201	flathub:com.netxms.NetXMSClient61	flathub	java-swing	1.107	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+3201	flathub:com.netxms.NetXMSClient61	flathub	java-swing	1.107	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 3202	flathub:io.github.Rangi42.tilemap-studio	flathub	unknown	1.104	none	x11	todo	todo	no-a11y:unknown	2026-11-26	
 3203	flathub:org.kde.SymbolEditor	flathub	qt6-widgets	1.104	full	dbusmenu	general:dbusmenu	done		2026-11-25	
 3204	flathub:page.codeberg.ilijaculap.snux	flathub	sdl-glfw	1.104	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
@@ -3208,7 +3208,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 3207	flathub:org.gottcode.Simsu	flathub	qt6-widgets	1.101	full	dbusmenu	general:dbusmenu	done		2026-11-25	
 3208	flathub:de.turtle_coding_gbr.turtlements	flathub	gtk4-adwaita?	1.101	none	x11	none-needed	none-needed		2026-11-26	
 3209	flathub:com.xiaoyaocz.simple_live	flathub	unknown	1.101	none	x11	todo	todo	flatpak-no-a11y	2026-11-26	
-3210	flathub:com.ckardaris.Klisi	flathub	java-swing	1.098	full	atspi	general:atspi+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+3210	flathub:com.ckardaris.Klisi	flathub	java-swing	1.098	full	atspi	general:atspi+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 3211	flathub:org.genivi.DLTViewer	flathub	qt6-widgets	1.098	full	dbusmenu	general:dbusmenu	done		2026-11-25	
 3212	flathub:org.blackfennec.app	flathub	gtk4-adwaita?	1.098	full	atspi	general:atspi	done		2026-11-25	
 3213	polyglot	nixpkgs-uncached	java-swing	1.098	none	x11	todo	todo	no-a11y:java-swing	2026-11-26	
@@ -3234,7 +3234,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 3233	flathub:net.danigm.timetrack	flathub	gtk4-adwaita?	1.089	full	atspi	general:atspi	done		2026-11-25	
 3234	flathub:me.njean.shootingpactris	flathub	sdl-glfw	1.089	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 3235	flathub:se.manyver.Manyverse	flathub	electron	1.089	none	x11	none-needed	done		2026-11-25	
-3236	flathub:org.sil.dictionary-app-builder	flathub	java-swing	1.089	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+3236	flathub:org.sil.dictionary-app-builder	flathub	java-swing	1.089	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 3237	flathub:info.puredata.Pd-extended	flathub	sdl-glfw	1.086	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 3238	flathub:vet.rsc.OpenRSC.Launcher	flathub	java-swing	1.086	none	x11	none-needed	none-needed		2026-11-26	
 3239	flathub:io.github.leolost2605.gradebook	flathub	gtk4-adwaita?	1.086	full	atspi	general:atspi	done		2026-11-25	
@@ -3253,7 +3253,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 3252	flathub:org.sugarlabs.Pippy	flathub	gtk4-adwaita	1.080	full	x11	general:x11	done		2026-11-25	
 3253	flathub:io.github.savantsavior.lettersfall	flathub	sdl-glfw	1.080	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 3254	flathub:page.codeberg.JakobDev.jdProcessFileWatcher	flathub	qt6-widgets	1.080	full	dbusmenu	general:dbusmenu	done		2026-11-25	
-3255	flathub:org.sil.scripture-app-builder	flathub	java-swing	1.080	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+3255	flathub:org.sil.scripture-app-builder	flathub	java-swing	1.080	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 3256	flathub:gg.gameglass.hub	flathub	electron	1.080	none	x11	none-needed	none-needed		2026-11-26	
 3257	flathub:org.freedesktop.GstDebugViewer	flathub	gtk4-adwaita?	1.077	full	atspi	general:atspi	done		2026-11-25	
 3258	flathub:de.sesu8642.feudaltactics	flathub	java-swing	1.077	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
@@ -3301,7 +3301,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 3300	flathub:ca.hamaluik.Timecop	flathub	unknown	1.058	none	x11	none-needed	none-needed		2026-11-26	
 3301	flathub:io.github.sharkwouter.oceanpop	flathub	sdl-glfw	1.058	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 3302	flathub:io.github.tlcfem.suanPan	flathub	unknown	1.058	untested		todo	retest			
-3303	flathub:io.github.am2r_community_developers.Atomic	flathub	java-swing	1.058	full	atspi	general:atspi+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+3303	flathub:io.github.am2r_community_developers.Atomic	flathub	java-swing	1.058	full	atspi	general:atspi+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 3304	flathub:io.github.nostar.DroidStar	flathub	qt6-widgets	1.058	none	x11	none-needed	none-needed		2026-11-26	
 3305	flathub:org.syntalos.syntalos	flathub	qt6-widgets?	1.058	full	x11	general:x11	done		2026-11-25	
 3306	qctools	nixpkgs	qt5-widgets	1.055	full	dbusmenu	general:dbusmenu	done		2026-11-22	
@@ -3331,7 +3331,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 3330	flathub:org.seul.crimson	flathub	sdl-glfw	1.045	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 3331	flathub:com.voxdsp.Snowling	flathub	sdl-glfw	1.045	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 3332	flathub:mobi.snowball.Snowball	flathub	unknown	1.045	none	x11	none-needed	none-needed		2026-11-26	
-3333	flathub:org.sil.reading-app-builder	flathub	java-swing	1.045	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+3333	flathub:org.sil.reading-app-builder	flathub	java-swing	1.045	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 3334	flathub:de.desy.constellation	flathub	qt6-widgets	1.045	no-window		todo	retest	harness-no-window		
 3335	flathub:dev.invrs.oxide	flathub	unknown	1.041	none	x11	todo	todo	flatpak-no-a11y	2026-11-26	
 3336	flathub:eu.planete_kraus.Tarot	flathub	unknown	1.041	none	x11	none-needed	none-needed		2026-11-26	
@@ -3402,13 +3402,13 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 3401	flathub:io.github.TTimo.GtkRadiant	flathub	unknown	1.006	none	x11	todo	todo	no-a11y:unknown	2026-11-26	
 3402	flathub:io.github.adenlall.salatok-gtk	flathub	gtk4-adwaita?	1.006	full	atspi	general:atspi	done		2026-11-25	
 3403	flathub:uk.co.studiopond.spiderbro	flathub	unknown	1.006	none	x11	todo	todo	no-a11y:unknown	2026-11-26	
-3404	flathub:it.unibo.tuprolog.ide	flathub	java-swing	1.006	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+3404	flathub:it.unibo.tuprolog.ide	flathub	java-swing	1.006	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 3405	flathub:uk.co.cappsy.Tesseract	flathub	unknown	1.006	none	x11	todo	todo	flatpak-no-a11y	2026-11-26	
 3406	flathub:vc.dion.Dion	flathub	electron	1.006	none	x11	none-needed	done		2026-11-25	
 3407	flathub:org.sugarlabs.Memorize	flathub	gtk4-adwaita?	1.002	full	x11	general:x11	done		2026-11-25	
 3408	flathub:io.gitlab.jazztickets.openflap	flathub	unknown	1.002	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 3409	flathub:page.codeberg.JakobDev.jdReplace	flathub	qt6-widgets	1.002	none	x11	none-needed	none-needed		2026-11-26	
-3410	flathub:io.github.GoldenGnu.jEveAssets	flathub	java-swing	1.002	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+3410	flathub:io.github.GoldenGnu.jEveAssets	flathub	java-swing	1.002	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 3411	flathub:io.github.brunoanc.eternalmodmanager	flathub	gtk4-adwaita?	1.002	none	x11	none-needed	none-needed		2026-11-26	
 3412	flathub:org.sugarlabs.Falabracman	flathub	gtk4-adwaita?	1.002	none	x11	todo	todo	no-a11y:gtk4-adwaita?	2026-11-26	
 3413	flathub:net.nmlgc.rec98.sh01	flathub	unknown	1.002	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
@@ -3507,7 +3507,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 3506	flathub:io.github.unrud.RecentFilter	flathub	gtk4-adwaita?	0.945	no-window		todo	retest	harness-no-window		
 3507	flathub:io.github.julian_hochhaus.LG4X_V2	flathub	qt6-widgets	0.945	full	dbusmenu	general:dbusmenu	done		2026-11-25	
 3508	flathub:io.github.brainstormtrooper.facteur	flathub	gtk4-adwaita?	0.945	full	atspi	general:atspi	done		2026-11-25	
-3509	flathub:com.netxms.NetXMSClient51	flathub	java-swing	0.945	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+3509	flathub:com.netxms.NetXMSClient51	flathub	java-swing	0.945	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 3510	flathub:io.github.alamahant.Sadhana	flathub	qt6-quick	0.945	full	dbusmenu	general:dbusmenu	done		2026-11-26	
 3511	flathub:space.fips.Fips	flathub	qt6-widgets	0.941	full	atspi	general:atspi	done		2026-11-25	
 3512	flathub:net.line72.campcounselor	flathub	gtk4-adwaita?	0.941	full	atspi	general:atspi	done		2026-11-25	
@@ -3526,7 +3526,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 3525	konbucase	nixpkgs	gtk4-adwaita	0.927	full	atspi	general:atspi	done		2026-11-23	
 3526	gobby	nixpkgs	gtk3	0.927	full	gtk	general:gtk	done		2026-11-23	
 3527	flathub:au.edu.uq.esys.escript	flathub	unknown	0.927	untested		todo	retest			
-3528	flathub:se.trixon.Mapollage	flathub	java-swing	0.927	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+3528	flathub:se.trixon.Mapollage	flathub	java-swing	0.927	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 3529	flathub:org.sugarlabs.ColorDeducto	flathub	gtk4-adwaita?	0.922	full	x11	general:x11	done		2026-11-25	
 3530	flathub:tech.keyforge.keyforge_master	flathub	electron	0.922	none	x11	none-needed	done		2026-11-25	
 3531	flathub:io.itch.domestique_baston.kindergarten_massaker	flathub	sdl-glfw	0.922	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
@@ -3549,7 +3549,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 3548	ettercap	nixpkgs	gtk3	0.910	no-window		todo	retest	harness-no-window		
 3549	flathub:net.mediaarea.DVAnalyzer	flathub	qt6-widgets	0.908	full	dbusmenu	general:dbusmenu	done		2026-11-25	
 3550	flathub:org.sugarlabs.FractionBounce	flathub	gtk4-adwaita?	0.908	full	x11	general:x11	done		2026-11-25	
-3551	flathub:com.itextpdf.RUPS	flathub	java-swing	0.908	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
+3551	flathub:com.itextpdf.RUPS	flathub	java-swing	0.908	full	x11	general:x11+java-flatpak+java-flatpak+java-flatpak+java-flatpak+java-flatpak	done		2026-11-25	
 3552	flathub:cz.nic.mobile-datovka	flathub	qt6-widgets	0.908	full	atspi	general:atspi	done		2026-11-25	
 3553	flathub:org.kekikakademi.eFatura	flathub	gtk4-adwaita?	0.908	none	x11	none-needed	none-needed		2026-11-26	
 3554	flathub:org.simondalvai.pocket-broomball	flathub	sdl-glfw	0.908	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
@@ -3790,13 +3790,13 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 3789	alvr	nixpkgs	gtk4-adwaita	0.330	none	x11	none-needed	none-needed		2026-11-26	
 3790	sgt-puzzles	nixpkgs	gtk3	0.321	full	gtk	general:gtk	done		2026-11-23	
 3791	rsibreak	nixpkgs	qt6-widgets	0.320	none	x11	none-needed	none-needed		2026-11-26	
-3792	mcpelauncher-ui-qt	nixpkgs	qt6-mixed	0.320	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+3792	mcpelauncher-ui-qt	nixpkgs	qt6-mixed	0.320	untested		todo	retest	kirigami-no-menu		
 3793	figma-linux	nixpkgs	electron	0.320	none	x11	todo	todo	needs-switch:electron+libdbusmenu	2026-11-26	
 3794	deskreen	nixpkgs	gtk4-adwaita	0.320	untested		todo	retest			
 3795	blobwars	nixpkgs	sdl-glfw	0.320	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 3796	tuxclocker-without-unfree	nixpkgs	qt5-widgets	0.310	untested		todo	blocked	blocked:not-prebuilt		
 3797	wayfirePlugins.wcm	nixpkgs	gtk3	0.300	none	x11	none-needed	none-needed		2026-11-26	
-3798	riseup-vpn	nixpkgs	qt6-mixed	0.300	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+3798	riseup-vpn	nixpkgs	qt6-mixed	0.300	untested		todo	retest	kirigami-no-menu		
 3799	onedrivegui	nixpkgs	qt6-widgets	0.300	full	atspi	general:atspi	done		2026-11-26	
 3800	hmcl	nixpkgs	java-swing	0.300	none	x11	none-needed	none-needed		2026-11-26	
 3801	gpa	nixpkgs	gtk3	0.300	full	gtk	general:gtk	done		2026-11-23	
@@ -4127,7 +4127,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 4126	jamin	nixpkgs	gtk3	0.043	full	gtk	general:gtk	done		2026-11-24	
 4127	maptool	nixpkgs	javafx	0.043	full	x11	general:x11	done		2026-11-24	
 4128	kopia-ui	nixpkgs	electron	0.043	none	x11	todo	todo	needs-switch:electron+libdbusmenu	2026-11-26	
-4129	lomiri-qt6.morph-browser	nixpkgs	qt6-mixed	0.042	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+4129	lomiri-qt6.morph-browser	nixpkgs	qt6-mixed	0.042	untested		todo	retest	kirigami-no-menu		
 4130	pympress	nixpkgs	java-swing	0.041	full	gtk	general:gtk	done		2026-11-23	
 4131	veroroute	nixpkgs	qt6-widgets	0.039	full	dbusmenu	general:dbusmenu	done		2026-11-23	
 4132	colmap	nixpkgs	qt5-widgets	0.039	full	dbusmenu	general:dbusmenu	done		2026-11-23	
@@ -4151,7 +4151,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 4150	klystrack	nixpkgs	sdl-glfw	0.022	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 4151	gretl	nixpkgs	gtk3	0.022	no-window		todo	retest	harness-no-window		
 4152	hivelytracker	nixpkgs	gtk3	0.020	none	x11	todo	todo	no-a11y:gtk3	2026-11-26	
-4153	kdePackages.plasma-dialer	nixpkgs	qt6-quick	0.020	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+4153	kdePackages.plasma-dialer	nixpkgs	qt6-quick	0.020	untested		todo	retest	kirigami-no-menu		
 4154	espanso	nixpkgs	wx-gtk3	0.020	untested		todo	retest			
 4155	lomiri.lomiri-terminal-app	nixpkgs	qt5-widgets	0.019	none	x11	none-needed	none-needed		2026-11-26	
 4156	lomiri.lomiri-content-hub	nixpkgs	qt5-widgets	0.019	no-window		todo	retest	harness-no-window		
@@ -4162,25 +4162,25 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 4161	gnome-pass-search-provider	nixpkgs	gtk3	0.019	untested		todo	retest			
 4162	lomiri.lomiri	nixpkgs	qt5-widgets	0.018	none	x11	none-needed	none-needed		2026-11-26	
 4163	kcollectd	nixpkgs	qt6-widgets	0.018	full	atspi	general:atspi	done		2026-11-23	
-4164	lomiri.lomiri-calculator-app	nixpkgs	qt5-quick	0.017	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+4164	lomiri.lomiri-calculator-app	nixpkgs	qt5-quick	0.017	untested		todo	retest	kirigami-no-menu		
 4165	lomiri.lomiri-camera-app	nixpkgs	qt5-quick	0.017	no-window		todo	retest	harness-no-window		
-4166	lomiri.lomiri-filemanager-app	nixpkgs	qt5-quick	0.017	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+4166	lomiri.lomiri-filemanager-app	nixpkgs	qt5-quick	0.017	untested		todo	retest	kirigami-no-menu		
 4167	lomiri.lomiri-mediaplayer-app	nixpkgs	qt5-widgets	0.017	none	x11	none-needed	none-needed		2026-11-26	
-4168	lomiri.lomiri-clock-app	nixpkgs	qt5-quick	0.017	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+4168	lomiri.lomiri-clock-app	nixpkgs	qt5-quick	0.017	untested		todo	retest	kirigami-no-menu		
 4169	lomiri.lomiri-music-app	nixpkgs	qt5-widgets	0.017	none	x11	none-needed	none-needed		2026-11-26	
 4170	lomiri.lomiri-gallery-app	nixpkgs	qt5-widgets	0.017	none	x11	none-needed	none-needed		2026-11-26	
 4171	evilwm	nixpkgs	custom-drawn	0.017	no-window		todo	retest	harness-no-window		
 4172	webtorrent_desktop	nixpkgs	electron	0.016	full	atspi	general:atspi	done		2026-11-23	
-4173	kdePackages.plasma-phonebook	nixpkgs	qt6-mixed	0.016	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+4173	kdePackages.plasma-phonebook	nixpkgs	qt6-mixed	0.016	untested		todo	retest	kirigami-no-menu		
 4174	megapixels	nixpkgs	gtk4	0.016	full	atspi	general:atspi	done		2026-11-24	
 4175	phosh-mobile-settings	nixpkgs	gtk4-adwaita	0.016	full	atspi	general:atspi	done		2026-11-24	
-4176	lomiri.lomiri-calendar-app	nixpkgs	qt5-quick	0.016	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+4176	lomiri.lomiri-calendar-app	nixpkgs	qt5-quick	0.016	untested		todo	retest	kirigami-no-menu		
 4177	equalx	nixpkgs	qt5-widgets	0.015	full	dbusmenu	general:dbusmenu	done		2026-11-23	
 4178	cosmic-term	nixpkgs	custom-drawn	0.015	full	atspi	module:com.system76.CosmicTerm.yaml	done		2026-11-24	
 4179	brewtarget	nixpkgs	qt6-widgets	0.015	full	atspi	general:atspi	done		2026-11-23	
 4180	antimony	nixpkgs	qt5-widgets	0.015	full	dbusmenu	general:dbusmenu	done		2026-11-23	
 4181	tulip	nixpkgs	qt5-widgets	0.015	none	x11	none-needed	none-needed		2026-11-26	
-4182	lomiri.lomiri-docviewer-app	nixpkgs	qt5-quick	0.015	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+4182	lomiri.lomiri-docviewer-app	nixpkgs	qt5-quick	0.015	untested		todo	retest	kirigami-no-menu		
 4183	qosmic	nixpkgs	qt5-widgets	0.015	full	dbusmenu	general:dbusmenu	done		2026-11-23	
 4184	cosmic-edit	nixpkgs	custom-drawn	0.015	full	atspi	module:com.system76.CosmicEdit.yaml	done		2026-11-24	
 4185	t3code	nixpkgs	electron	0.014	untested		todo	retest	blocked:not-prebuilt		
@@ -4222,7 +4222,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 4221	hyperhdr	nixpkgs	qt6-widgets	0.006	untested		todo	retest			
 4222	fpm2	nixpkgs	gtk3	0.006	none	x11	none-needed	none-needed		2026-11-26	
 4223	dcpomatic	nixpkgs	wx-gtk3	0.006	untested		todo	blocked	blocked:not-in-nixpkgs		
-4224	bitbox	nixpkgs	qt6-mixed	0.006	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+4224	bitbox	nixpkgs	qt6-mixed	0.006	untested		todo	retest	kirigami-no-menu		
 4225	giara	nixpkgs	gtk4-adwaita	0.005	full	atspi	general:atspi	done		2026-11-23	
 4226	gsender	nixpkgs	gtk4-adwaita	0.005	untested		todo	blocked	blocked:not-prebuilt		
 4227	structorizer	nixpkgs	java-swing	0.005	no-window		todo	retest	harness-no-window		
@@ -4269,7 +4269,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 4268	muffon	nixpkgs	gtk4-adwaita	0.002	untested		todo	blocked	blocked:not-prebuilt		
 4269	indicator-sound-switcher	nixpkgs	gtk3	0.002	tray-only		none-needed:tray	none-needed			
 4270	firebird-emu	nixpkgs	qt5-widgets	0.002	full	dbusmenu	general:dbusmenu	done		2026-11-23	
-4271	cctv-viewer	nixpkgs	qt5-quick	0.002	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+4271	cctv-viewer	nixpkgs	qt5-quick	0.002	untested		todo	retest	kirigami-no-menu		
 4272	antares	nixpkgs	electron	0.002	full	dbusmenu	none-needed	done		2026-11-25	
 4273	alliance	nixpkgs	custom-drawn	0.002	no-window		todo	retest	harness-no-window		
 4274	mpsolve	nixpkgs	qt5-widgets	0.002	full	x11	general:x11	done		2026-11-23	
@@ -4336,7 +4336,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 4335	athas	nixpkgs	cef	0.001	untested		todo	blocked	blocked:not-in-nixpkgs		
 4336	zecwallet-lite	nixpkgs	gtk4-adwaita	0.000	untested		todo	blocked	blocked:not-prebuilt		
 4337	yarg	nixpkgs	game-engine	0.000	none	x11	todo	todo	no-a11y:game-engine	2026-11-26	game: menus are in-game
-4338	waytrogen	nixpkgs	gtk4	0.000	burger	atspi	general:atspi-burger	partial	burger-only	2026-11-26	
+4338	waytrogen	nixpkgs	gtk4	0.000	untested		todo	retest	burger-only		
 4339	vkdt	nixpkgs	sdl-glfw	0.000	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 4340	uvtools	nixpkgs	dotnet	0.000	untested		todo	blocked	blocked:not-in-nixpkgs		
 4341	swingsane	nixpkgs	java-swing	0.000	no-window		todo	retest	harness-no-window		
@@ -4450,7 +4450,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 4449	sweethome3d.textures-editor	nixpkgs	java-swing	0.000	none	x11	none-needed	none-needed		2026-11-26	
 4450	themechanger	nixpkgs	gtk3	0.000	none	x11	none-needed	none-needed		2026-11-26	
 4451	terracotta	nixpkgs	unknown	0.000	full	atspi	general:atspi	done		2026-11-25	
-4452	tensor	nixpkgs	qt5-quick	0.000	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+4452	tensor	nixpkgs	qt5-quick	0.000	untested		todo	retest	kirigami-no-menu		
 4453	terra-station	nixpkgs	electron	0.000	no-window		todo	retest	harness-no-window		
 4454	lomiri.teleports	nixpkgs	qt5-widgets	0.000	none	x11	none-needed	none-needed		2026-11-26	
 4455	taterclient-ddnet	nixpkgs	sdl-glfw	0.000	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
@@ -4635,7 +4635,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 4634	minesector	nixpkgs	sdl-glfw	0.000	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 4635	michabo	nixpkgs	qt5-widgets	0.000	none	x11	none-needed	none-needed		2026-11-26	
 4636	metamorphose2	nixpkgs	wx-gtk3	0.000	full	atspi	general:atspi	done		2026-11-25	
-4637	mfaomp	nixpkgs	qt6-mixed	0.000	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+4637	mfaomp	nixpkgs	qt6-mixed	0.000	untested		todo	retest	kirigami-no-menu		
 4638	mepo	nixpkgs	sdl-glfw	0.000	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 4639	melonloader-installer	nixpkgs	unknown	0.000	none	x11	todo	todo	no-a11y:unknown	2026-11-26	
 4640	me3	nixpkgs	wine	0.000	untested		todo	blocked	blocked:not-prebuilt		
@@ -4644,7 +4644,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 4643	marble-marcher-ce	nixpkgs	custom-drawn	0.000	none	x11	todo	todo	no-a11y:custom-drawn	2026-11-26	game: menus are in-game
 4644	malcontent-ui	nixpkgs	gtk4-adwaita	0.000	full	atspi	general:atspi	done		2026-11-25	
 4645	lumina.lumina-pdf	nixpkgs	qt5-widgets	0.000	full	registrar	general:registrar	done		2026-11-25	
-4646	lumina.lumina	nixpkgs	qt5-widgets	0.000	burger	atspi	general:atspi-burger	partial	burger-only	2026-11-26	
+4646	lumina.lumina	nixpkgs	qt5-widgets	0.000	untested		todo	retest	burger-only		
 4647	lufus	nixpkgs	qt6-widgets	0.000	none	x11	none-needed	none-needed		2026-11-26	
 4648	lumina.lumina-calculator	nixpkgs	qt5-widgets	0.000	none	x11	none-needed	none-needed		2026-11-26	
 4649	lookapp	nixpkgs	gtk3	0.000	untested		todo	blocked	blocked:not-in-nixpkgs		
@@ -4658,7 +4658,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 4657	libresplit	nixpkgs	gtk4	0.000	none	x11	none-needed	none-needed		2026-11-26	
 4658	librevna	nixpkgs	qt6-widgets	0.000	untested		todo	blocked	blocked:not-in-nixpkgs		
 4659	librum	nixpkgs	qt6-mixed	0.000	no-window		todo	retest	harness-no-window		
-4660	librepods	nixpkgs	qt6-mixed	0.000	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+4660	librepods	nixpkgs	qt6-mixed	0.000	untested		todo	retest	kirigami-no-menu		
 4661	libgda5	nixpkgs	gtk3	0.000	none	x11	none-needed	none-needed		2026-11-26	
 4662	liberation-circuit	nixpkgs	gtk3	0.000	none	x11	todo	todo	no-a11y:gtk3	2026-11-26	game: menus are in-game
 4663	libfm	nixpkgs	gtk3	0.000	none	x11	none-needed	none-needed		2026-11-26	
@@ -4669,15 +4669,15 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 4668	legendsviewer-next	nixpkgs	unknown	0.000	full	atspi	general:atspi	done		2026-11-25	
 4669	kohighlights	nixpkgs	qt5-widgets	0.000	full	atspi	general:atspi	done		2026-11-25	
 4670	knossosnet	nixpkgs	dotnet	0.000	none	x11	todo	todo	no-a11y:dotnet	2026-11-26	game: menus are in-game
-4671	kitsas	nixpkgs	qt6-mixed	0.000	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+4671	kitsas	nixpkgs	qt6-mixed	0.000	untested		todo	retest	kirigami-no-menu		
 4672	kdePackages.kirigami-gallery	nixpkgs	qt6-mixed	0.000	full	atspi	general:atspi	done		2026-11-25	
 4673	kirimoto	nixpkgs	gtk4-adwaita	0.000	untested		todo	blocked	blocked:not-prebuilt		
 4674	khronos	nixpkgs	gtk4-adwaita	0.000	full	atspi	general:atspi	done		2026-11-25	
 4675	kide	nixpkgs	unknown	0.000	none	x11	none-needed	none-needed		2026-11-26	
-4676	kikoplay	nixpkgs	qt6-mixed	0.000	burger	atspi	general:atspi-burger	partial	burger-only	2026-11-26	
+4676	kikoplay	nixpkgs	qt6-mixed	0.000	untested		todo	retest	burger-only		
 4677	keyspersecond	nixpkgs	java-swing	0.000	none	x11	none-needed	none-needed		2026-11-26	
 4678	kemai	nixpkgs	qt6-widgets	0.000	full	dbusmenu	general:dbusmenu	done		2026-11-25	
-4679	kdePackages.kdeconnect-kde	nixpkgs	qt6-mixed	0.000	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+4679	kdePackages.kdeconnect-kde	nixpkgs	qt6-mixed	0.000	untested		todo	retest	kirigami-no-menu		
 4680	kakoune-cr	nixpkgs	tui	0.000	no-window		todo	retest	harness-no-window		
 4681	kakounePlugins.connect-kak	nixpkgs	unknown	0.000	untested		todo	retest			
 4682	jpexs	nixpkgs	java-swing	0.000	none	x11	none-needed	none-needed		2026-11-26	
@@ -4839,7 +4839,7 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 4838	ccemux	nixpkgs	java-swing	0.000	none	x11	none-needed	none-needed		2026-11-26	
 4839	catppuccinifier-gui	nixpkgs	gtk3	0.000	none	x11	none-needed	none-needed		2026-11-26	
 4840	cavalcade	nixpkgs	gtk3	0.000	none	x11	none-needed	none-needed		2026-11-26	
-4841	calyx-vpn	nixpkgs	qt6-mixed	0.000	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+4841	calyx-vpn	nixpkgs	qt6-mixed	0.000	untested		todo	retest	kirigami-no-menu		
 4842	cables	nixpkgs	gtk4-adwaita	0.000	untested		todo	blocked	blocked:not-prebuilt		
 4843	cadzinho	nixpkgs	sdl-glfw	0.000	none	x11	none-needed:game	none-needed		2026-11-26	game: menus are in-game
 4844	caerbannog	nixpkgs	gtk3	0.000	full	atspi	general:atspi	done		2026-11-25	
@@ -4869,11 +4869,11 @@ rank	attr	source	toolkit	pop	measured	route	solution	status	gap	checked	notes
 4868	anomaly-hex	nixpkgs	tui	0.000	untested		todo	blocked	blocked:not-in-nixpkgs		
 4869	antimatter-dimensions	nixpkgs	electron	0.000	none	x11	todo	todo	needs-switch:electron+libdbusmenu	2026-11-26	
 4870	android-mic	nixpkgs	custom-drawn	0.000	none	x11	none-needed	none-needed		2026-11-26	
-4871	anilibria-winmaclinux	nixpkgs	qt6-quick	0.000	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+4871	anilibria-winmaclinux	nixpkgs	qt6-quick	0.000	untested		todo	retest	kirigami-no-menu		
 4872	ansel	nixpkgs	gtk3	0.000	full	atspi	general:atspi	done		2026-11-25	
 4873	amphetype	nixpkgs	qt5-widgets	0.000	none	x11	none-needed	none-needed		2026-11-26	
 4874	amule-gui	nixpkgs	wx-gtk3	0.000	none	x11	todo	blocked	blocked:needs-account	2026-11-26	
-4875	amnezia-vpn	nixpkgs	qt6-mixed	0.000	none	x11	todo	todo	kirigami-no-menu	2026-11-26	
+4875	amnezia-vpn	nixpkgs	qt6-mixed	0.000	untested		todo	retest	kirigami-no-menu		
 4876	alkimia	nixpkgs	qt6-widgets	0.000	full	dbusmenu	general:dbusmenu	done		2026-11-25	
 4877	alisthelper	nixpkgs	flutter	0.000	none	x11	none-needed	none-needed		2026-11-26	
 4878	alloy6	nixpkgs	java-swing	0.000	full	x11	general:x11	done		2026-11-25	
