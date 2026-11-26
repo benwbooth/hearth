@@ -228,6 +228,17 @@ ColumnLayout {
                         color: Theme.good
                         font.pointSize: Theme.smallFontSize
                     }
+                    // Its context window, for a model hearth runs itself.
+                    Dropdown {
+                        visible: !!ir.runner && ir.runner.provider === "gguf"
+                        // "Default" follows Settings > AI; Auto fits graphics memory.
+                        // Takes effect the next time it loads.
+                        implicitWidth: 96
+                        options: [{ value: -1, label: "Default ctx" }, { value: 0, label: "Auto ctx" }]
+                            .concat(Ai.contextOptions.filter(n => n).map(n => ({ value: n, label: Ai.contextLabel(n) + " ctx" })))
+                        value: Ai.contextFor(ir.modelData.path)
+                        onPicked: v => Ai.setContextFor(ir.modelData.path, v)
+                    }
                     Dropdown {
                         id: pick
                         visible: ir.modelData.runners.length > 1 && !ir.modelData.loaded

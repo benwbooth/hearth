@@ -17,6 +17,10 @@ idle=60
 if [ "$(jq -r '.ai.autoUnload' "$settings" 2>/dev/null)" = false ]; then
   idle=$(get .ai.idleMinutes); idle=${idle:-5}
 fi
+# Context: Settings > AI "Context window" (0 = automatic: llama.cpp's --fit
+# sizes it to the free graphics memory).
+ctx=$(jq -r '.ai.contextSize // 0' "$settings" 2>/dev/null || echo 0)
+if [ "${ctx:-0}" -gt 0 ] 2>/dev/null; then sizing=(-c "$ctx"); else sizing=(--fit on --fit-target 1536 --fit-ctx 4096); fi
 mkdir -p "$dir"
 exec llama-server --host 127.0.0.1 --port "$port" --models-dir "$dir" --models-max "$max" \
-  --sleep-idle-seconds "$((idle * 60))" --jinja
+  --sleep-idle-seconds "$((idle * 60))" --jinja "${sizing[@]}"

@@ -24,6 +24,8 @@ HEARTH_VOICE_INPUT=file.wav replaces the microphone (tests).
 """
 
 import json
+import re
+import glob
 import math
 import os
 import struct
@@ -111,6 +113,11 @@ class Listener:
 
     def run(self):
         cfg = settings()
+        muted = mic_muted()
+        if muted:
+            emit({"type": "error", "mic": "muted", "message": muted})
+            emit({"type": "state", "state": "idle"})
+            return
         try:
             from websockets.sync.client import connect
         except ImportError:
@@ -261,8 +268,14 @@ class Speaker:
         cfg = settings()
         voice = cfg["piperVoice"]
         model = os.path.join(VOICES, voice + ".onnx")
-        if not os.path.exists(model):
-            emit({"type": "error", "message": "No voice downloaded yet: Settings > Voice > Download."})
+        if not os.path.exists(model) and not adopt_voice(voice):
+            # Not here or anywhere else on this computer: fetch it (~60-120 MB)
+            # and speak once it's in, instead of failing.
+            def fetch_then_speak():
+                download(voice)
+                if os.path.exists(model):
+                    self.speak(text)
+            threading.Thread(target=fetch_then_speak, daemon=True).start()
             return
         rate = 22050
         try:
@@ -289,6 +302,54 @@ class Speaker:
             emit({"type": "speaking", "on": False})
 
         threading.Thread(target=run, daemon=True).start()
+
+
+def mic_muted():
+    """Why listening would only hear silence, or "": the default microphone
+    muted, or its volume at zero (wpctl, PipeWire)."""
+    if os.environ.get("HEARTH_VOICE_INPUT"):
+        return ""
+    try:
+        out = subprocess.run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SOURCE@"], capture_output=True,
+                             text=True, timeout=3).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    if "MUTED" in out:
+        return "Your microphone is muted. Unmute it (Sound in the menu bar) and try again."
+    m = re.search(r"Volume:\s*([\d.]+)", out)
+    if m and float(m.group(1)) == 0:
+        return "Your microphone's volume is at zero. Turn it up (Sound in the menu bar) and try again."
+    return ""
+
+
+def voice_elsewhere(voice):
+    """The same Piper voice another app already has (GameBuddy, piper's own
+    folder, the Hugging Face cache of rhasspy/piper-voices)."""
+    home = os.path.expanduser("~")
+    pats = [os.path.join(DATA_HOME, "*", "piper", voice + ".onnx"),
+            os.path.join(DATA_HOME, "*", "models", "piper", voice + ".onnx"),
+            os.path.join(DATA_HOME, "piper*", voice + ".onnx"),
+            os.path.join(DATA_HOME, "piper*", "**", voice + ".onnx"),
+            os.path.join(home, ".cache", "huggingface", "hub", "models--rhasspy--piper-voices", "snapshots", "*",
+                         "**", voice + ".onnx")]
+    for pat in pats:
+        for f in glob.glob(pat, recursive=True):
+            if os.path.exists(f + ".json") and os.path.getsize(f) > 1 << 20 and not f.startswith(VOICES):
+                return f
+    return ""
+
+
+def adopt_voice(voice):
+    """Link a copy found elsewhere into hearth's voices folder (no download)."""
+    src = voice_elsewhere(voice)
+    if not src:
+        return False
+    os.makedirs(VOICES, exist_ok=True)
+    for ext in (".onnx", ".onnx.json"):
+        dest = os.path.join(VOICES, voice + ext)
+        if not os.path.exists(dest):
+            os.symlink(os.path.realpath(src[:-5] + ext), dest)
+    return True
 
 
 def voices():

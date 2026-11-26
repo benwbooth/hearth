@@ -75,6 +75,12 @@ DEFAULTS = {
     "evictOnPressure": True,
     "pinned": [],
     "modelDirs": [],
+    # Context window for the llama-servers hearth starts (its llama.cpp
+    # server, GgufRunner): 0 = automatic (llama.cpp's --fit: the model's own
+    # context, shrunk until it fits the free graphics memory), else tokens.
+    # modelContext: {model file path: tokens} overrides it per model.
+    "contextSize": 0,
+    "modelContext": {},
     "providers": {
         "ollama": {"enabled": True, "url": "http://127.0.0.1:11434"},
         "llamacpp": {"enabled": True, "url": "http://127.0.0.1:8181", "modelsDir": "~/models"},
@@ -485,6 +491,38 @@ class ModelService(LlamaCpp):
             raise RuntimeError((r.stderr or "couldn't stop %s" % self.unit).strip())
 
 
+def context_for(cfg, path):
+    """Tokens of context for a model hearth starts: its own choice in
+    modelContext, else contextSize; 0 = automatic."""
+    per = cfg.get("modelContext") or {}
+    v = per.get(path, per.get(os.path.realpath(path), None)) if isinstance(per, dict) else None
+    if v is None:
+        v = cfg.get("contextSize", 0)
+    try:
+        return max(0, int(v or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+_ctx_cache = {}   # (port, unit) -> n_ctx
+
+
+def served_context(port, unit=""):
+    """The context a running llama-server actually got (its /props), so an
+    automatic choice shows what it came to."""
+    k = (port, unit)
+    if _ctx_cache.get(k):
+        return _ctx_cache[k]
+    try:
+        p = http("http://127.0.0.1:%d/props" % port, timeout=1)
+        n = int((p.get("default_generation_settings") or {}).get("n_ctx") or p.get("n_ctx") or 0)
+    except (OSError, ValueError, AttributeError, TypeError):
+        n = 0
+    if n:
+        _ctx_cache[k] = n
+    return n
+
+
 class GgufRunner(LlamaCpp):
     """Runs a GGUF nothing else is set up to run (a model file in a folder,
     an older quant beside a model unit's): its own llama-server in a
@@ -525,26 +563,23 @@ class GgufRunner(LlamaCpp):
               "gguf": True, "installed": [], "loaded": [], "error": ""}
         for r in self.running():
             st["loaded"].append({"name": r["path"], "label": os.path.splitext(os.path.basename(r["path"]))[0],
-                                 "unit": r["unit"], "port": r["port"], "pid": r["pid"], "vram": 0, "vramText": ""})
+                                 "unit": r["unit"], "port": r["port"], "pid": r["pid"], "vram": 0, "vramText": "",
+                                 "context": served_context(r["port"], r["unit"])})
         return st
 
-    def load(self, model, keep_minutes):
-        path = model
-        if any(r["path"] == path for r in self.running()):
-            return
-        exe = hm.pick_llama_server(path)
-        if not exe:
-            raise RuntimeError("no llama-server here can run it")
+    def _start(self, exe, path, extra):
+        """Start its llama-server with these sizing args; wait until it answers.
+        Returns the unit."""
         used = {r["port"] for r in self.running()}
         port = next(p for p in range(18400, 18500) if p not in used and not rt.port_open(p))
         n = 1
         while hm.unit_info("%s%d.service" % (self.PREFIX, n)).get("ActiveState") in ("active", "activating"):
             n += 1
         unit = "%s%d.service" % (self.PREFIX, n)
-        args = [exe, "-m", path, "--host", "127.0.0.1", "--port", str(port), "-ngl", "999", "--jinja",
-                "-c", str(int(self.cfg.get("context", 32768) or 32768))]
+        args = [exe, "-m", path, "--host", "127.0.0.1", "--port", str(port), "--jinja"] + extra
         if model_category(path) == "embedding":
             args.append("--embeddings")
+        since = time.strftime("%Y-%m-%d %H:%M:%S")
         r = subprocess.run(["systemd-run", "--user", "--unit", unit, "--collect", "--quiet",
                             "--description", "hearth: %s on :%d" % (path, port), "-p", "KillMode=mixed"] + args,
                            capture_output=True, text=True, timeout=30)
@@ -555,16 +590,67 @@ class GgufRunner(LlamaCpp):
             # Only a definite answer counts (systemctl can time out while the
             # GPU is busy loading, which reads as no state at all).
             if hm.unit_info(unit).get("ActiveState") in ("inactive", "failed"):
-                log_tail = subprocess.run(["journalctl", "--user", "-u", unit, "-n", "3", "--no-pager", "-o", "cat"],
-                                          capture_output=True, text=True, timeout=10).stdout.strip()
-                raise RuntimeError("llama-server stopped: " + (log_tail.splitlines() or ["see its log"])[-1])
+                log_tail = subprocess.run(["journalctl", "--user", "-u", unit, "--since", since, "-n", "3",
+                                           "--no-pager", "-o", "cat"], capture_output=True, text=True, timeout=10).stdout
+                raise RuntimeError("llama-server stopped: " + (log_tail.strip().splitlines() or ["see its log"])[-1])
             try:
                 if http("http://127.0.0.1:%d/health" % port, timeout=2).get("status") == "ok":
-                    return
+                    return unit
             except (OSError, ValueError, AttributeError):
                 pass
             time.sleep(1)
+        subprocess.run(["systemctl", "--user", "stop", unit], capture_output=True, timeout=60)
         raise RuntimeError("llama-server didn't come up in 15 minutes")
+
+    def _spill(self, unit):
+        """Bytes it holds in system RAM through the GPU (GTT): a buffer that
+        didn't fit in graphics memory."""
+        time.sleep(2)
+        return sum(c["gtt"] for c in hm.gpu_clients() if c["unit"] == unit)
+
+    def load(self, model, keep_minutes):
+        path = model
+        if any(r["path"] == path for r in self.running()):
+            return
+        exe = hm.pick_llama_server(path)
+        if not exe:
+            raise RuntimeError("no llama-server here can run it")
+        ctx = context_for(self.cfg, path)
+        if ctx:   # the user's size: as asked, all on the GPU
+            self._start(exe, path, ["-c", str(ctx), "-ngl", "999"])
+            return
+        # Automatic: llama.cpp's --fit sizes what's left unset (the context
+        # first, then layers) to the free graphics memory with a margin. It
+        # can still miss a compute buffer that grows with context x
+        # micro-batch (Inkling's relative-position bias), which then lands in
+        # system RAM and slows everything: so check, and retry with a smaller
+        # micro-batch, then half the context. What worked is remembered.
+        fit = ["--fit", "on", "--fit-target", "1536", "--fit-ctx", "4096"]
+        key = "gguf:" + path
+        known = ARB.mem.get(key).get("ggufArgs")
+        tries = [known] if known else [[], ["-ub", "128"], ["-ub", "32"]]
+        limit = 1 << 30
+        for extra in tries:
+            unit = self._start(exe, path, fit + extra)
+            if known or self._spill(unit) < limit:
+                ARB.mem.note(key, ggufArgs=extra)
+                return
+            subprocess.run(["systemctl", "--user", "stop", unit], capture_output=True, timeout=120)
+        # Still spilling at the smallest micro-batch: halve the context it got.
+        ctx = 0
+        for _ in range(3):
+            unit = self._start(exe, path, fit + ["-ub", "32"] + (["-c", str(ctx)] if ctx else []))
+            got = 0
+            for r in self.running():
+                if r["unit"] == unit:
+                    got = served_context(r["port"], unit)
+            if self._spill(unit) < limit:
+                ARB.mem.note(key, ggufArgs=["-ub", "32"] + (["-c", str(ctx)] if ctx else []))
+                return
+            subprocess.run(["systemctl", "--user", "stop", unit], capture_output=True, timeout=120)
+            ctx = max(4096, (got or 32768) // 2)
+        unit = self._start(exe, path, fit + ["-ub", "32", "-c", str(ctx)])
+        log("gguf: %s still spills into system RAM at %d context" % (path, ctx))
 
     def unload(self, model):
         for r in self.running():
@@ -837,8 +923,13 @@ def runtime_servers(known):
 
     def covered(pid):
         argv0 = hm._read("/proc/%d/cmdline" % pid).split("\0")[0]
-        return argv0.endswith("llama-server") or hm._unit_of(pid) in service_units \
-            or hm._read("/proc/%d/comm" % pid).strip() in ("ollama", "magnitude")
+        unit = hm._unit_of(pid)
+        # A model unit's on-demand proxy (inkling-2-mini-proxy.service running
+        # systemd-socket-proxyd) forwards to that unit: it is the unit.
+        proxied = unit.endswith("-proxy.service") and unit.replace("-proxy.service", ".service") in service_units
+        return argv0.endswith("llama-server") or unit in service_units or proxied \
+            or hm._read("/proc/%d/comm" % pid).strip() in ("ollama", "magnitude") \
+            or os.path.basename(argv0) == "systemd-socket-proxyd"
     return [Runtime(f) for f in rt.discover(skip, covered)]
 
 
@@ -856,7 +947,7 @@ def providers(cfg):
             p = ModelService(svc)
             service_units.add(p.unit)
             out[p.id] = p
-    out["gguf"] = GgufRunner(pc.get("gguf", {}))
+    out["gguf"] = GgufRunner(cfg)
     for inst in llama_instances(pc["llamacpp"].get("url", "")):
         out[inst.id] = inst
     if pc.get("runtimes", {}).get("enabled", True):
@@ -1100,7 +1191,10 @@ class Arbiter:
         gs = gpus()
         g = main_gpu(gs)
         now = time.time()
-        clients = hm.gpu_clients()
+        # The main GPU's clients only: a process with a context on both the
+        # card and the integrated GPU has an entry for each, and by_pid kept
+        # whichever came last (Inkling's 19.8 GB showed as the iGPU's 12 KB).
+        clients = [c for c in hm.gpu_clients() if not g or not c.get("pci") or c["pci"] == g.get("pci")]
         active_pids = set()
         alive = set()
         for c in clients:
@@ -1185,7 +1279,8 @@ class Arbiter:
                     except OSError:
                         pass
                     entry("gguf:" + name, m.get("label") or name, model_category(name), pid_, s, sp,
-                          extra={"unit": m["unit"], "path": name, "size": size, "model": name})
+                          extra={"unit": m["unit"], "path": name, "size": size, "model": name,
+                                 "context": m.get("context", 0)})
                 elif s.get("runtime"):
                     # Its processes (the server and its model workers), split
                     # between its loaded models by the model each has open
@@ -1285,6 +1380,12 @@ class Arbiter:
                 ("%s:%s" % (r["provider"], r["model"]) in held) or
                 (r["provider"].startswith("service:") and r["provider"] in held) for r in it["runners"])
         model_vram = sum(e["vram"] for e in loaded)
+        # What no process here accounts for: buffers apps share with the
+        # compositor (counted in no one's own memory), the kernel's, and
+        # processes of other users (Ollama's runner, as root, is counted
+        # from Ollama's API instead).
+        own = sum(c["vram"] for c in clients) + sum(e["vram"] for e in loaded if e.get("provider") == "ollama")
+        other_vram = max(0, (g["used"] if g else 0) - own)
         for ps in pstates.values():
             # The user unit that runs this server, when there is one:
             # Settings lists every server with Start / Stop from this, so a
@@ -1296,7 +1397,8 @@ class Arbiter:
               "clis": [{"id": k, "label": v["label"], "installed": bool(shutil.which(v["bin"]))} for k, v in CLI.items()],
               "loaded": loaded, "installed": inv,
               "apps": sorted([a for a in apps.values() if a["vram"] >= 16 << 20], key=lambda a: -a["vram"]),
-              "modelVram": model_vram, "categories": [{"id": k, "label": v} for k, v in hm.CATEGORIES],
+              "modelVram": model_vram, "otherVram": other_vram, "otherVramText": human_bytes(other_vram),
+              "categories": [{"id": k, "label": v} for k, v in hm.CATEGORIES],
               "policy": {"autoUnload": bool(cfg.get("autoUnload", True)), "idleMinutes": idle_min,
                          "evictOnPressure": bool(cfg.get("evictOnPressure", True))}}
         for a in st["apps"]:
@@ -1392,7 +1494,10 @@ class Arbiter:
         """VRAM a model is expected to take: its peak last time, else its
         size plus some room for context."""
         h = self.mem.get(key)
-        return h.get("peakVram") or int(size * 1.1 + (768 << 20))
+        # The larger of the two: a peak noted while the model was still
+        # loading (or misattributed) once read 24 KB for Inkling, and nothing
+        # was unloaded to make room for its 19 GB.
+        return max(h.get("peakVram") or 0, int(size * 1.1 + (768 << 20)) if size else 0) or (1 << 30)
 
 
 def unload_entry(e):

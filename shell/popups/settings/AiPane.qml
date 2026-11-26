@@ -108,6 +108,18 @@ ColumnLayout {
         }
         SettingsDivider {}
         SettingsRow {
+            label: "Context window"
+            note: "How much text a model hearth starts can keep in mind. Automatic uses as much as fits in graphics memory."
+            tip: "For models hearth runs itself (its llama.cpp server, and model files that run in their own server). Automatic starts from the model's own maximum and shrinks it until the model fits in the free graphics memory, keeping a margin; a loaded model shows what it got. Bigger windows use more memory and read long prompts slower. A model can have its own size in the list below. Takes effect the next time a model loads."
+            Dropdown {
+                implicitWidth: 160
+                options: Ai.contextOptions.map(n => ({ value: n, label: Ai.contextLabel(n) + (n ? " tokens" : "") }))
+                value: Number(pane.cfg.contextSize) || 0
+                onPicked: v => Settings.set("ai.contextSize", v)
+            }
+        }
+        SettingsDivider {}
+        SettingsRow {
             label: "Show GPU use in the menu bar"
             note: "GPU busy % and graphics memory % next to the AI icon."
             Toggle { checked: pane.cfg.menuBarStats !== false; onToggled: c => Settings.set("ai.menuBarStats", c) }

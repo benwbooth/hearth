@@ -27,6 +27,11 @@ Singleton {
         evictOnPressure: true,
         pinned: [],                     // keys never unloaded automatically
         modelDirs: [],                  // extra folders with GGUF models
+        // Context window of the llama-servers hearth starts: 0 = automatic
+        // (as much as fits in graphics memory); modelContext overrides it
+        // per model file.
+        contextSize: 0,
+        modelContext: ({}),
         providers: {
             ollama: { enabled: true, url: "http://127.0.0.1:11434" },
             llamacpp: { enabled: true, url: "http://127.0.0.1:8181", modelsDir: "~/models", modelsMax: 1 },
@@ -105,6 +110,18 @@ Singleton {
     function unloadKey(key) { markBusy(key, "unloading"); send({ cmd: "unloadKey", key: key }); }
     function removeKey(key) { markBusy(key, "removing"); send({ cmd: "remove", key: key }); }
     function pin(key, on) { send({ cmd: "pin", key: key, on: on }); }
+    // Context options: 0 = automatic, else tokens.
+    readonly property var contextOptions: [0, 4096, 8192, 16384, 32768, 65536, 131072, 262144]
+    function contextLabel(n) { return n ? (n >= 1024 ? Math.round(n / 1024) + "K" : n) : "Automatic"; }
+    function contextFor(path) {
+        const per = cfg.modelContext || {};
+        return per[path] !== undefined ? Number(per[path]) : -1;   // -1: the default
+    }
+    function setContextFor(path, n) {
+        const per = Object.assign({}, cfg.modelContext || {});
+        if (n < 0) delete per[path]; else per[path] = n;
+        Settings.set("ai.modelContext", per);
+    }
     function isPinned(key) { return (cfg.pinned || []).indexOf(key) >= 0; }
     function install(provider, model) {
         const p = Object.assign({}, pulls); p[provider + "/" + model] = { status: "starting", completed: 0, total: 0 }; pulls = p;
