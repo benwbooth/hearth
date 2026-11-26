@@ -10,7 +10,8 @@ import ".."
 //              with its VRAM, when it was last used and when it unloads by
 //              itself; Unload / Stop, and a pin to keep it loaded.
 //   Installed  every model on this computer, by category, with Load and
-//              Move to Trash.
+//              Delete (files go to the trash; a server's own models are
+//              deleted by it).
 //   Get More   models to install, one section per source hearth-ai offers:
 //              Magnitude's picks for this computer, hearth's picks, LM
 //              Studio's catalog, a running LocalAI's gallery, Hugging Face.
@@ -20,7 +21,7 @@ ColumnLayout {
     spacing: 8
     property string tab: Ai.loaded.length ? "loaded" : "installed"
     property string category: ""
-    property string confirmKey: ""      // "Move to Trash?" asked for this key
+    property string confirmKey: ""      // "Delete?" asked for this key
     property int listHeight: 330
 
     function dur(s) {
@@ -217,7 +218,7 @@ ColumnLayout {
                     sub2: {
                         const m = modelData;
                         if (Ai.busyKeys[m.key] === "loading") return "Loading… (making room first if needed)";
-                        if (Ai.busyKeys[m.key] === "removing") return "Moving to the trash…";
+                        if (Ai.busyKeys[m.key] === "removing") return "Deleting…";
                         if (!m.runners.length) return m.family ? m.family : "";
                         return "Runs in " + m.runners.map(r => r.label + (r.fits === "DoesNotFit" ? " (doesn't fit)" : "")).join(", ");
                     }
@@ -246,15 +247,15 @@ ColumnLayout {
                         visible: ir.modelData.deletable && root.confirmKey !== ir.modelData.key
                         text: "…"
                         implicitWidth: 28
-                        tooltip: ir.modelData.deleteVia ? "Delete this model from " + ir.modelData.source : "Move this model's files to the trash"
+                        tooltip: "Delete this model"
                         onClicked: root.confirmKey = ir.modelData.key
                     }
                     PushButton {
                         visible: root.confirmKey === ir.modelData.key
                         destructive: true
-                        text: ir.modelData.deleteVia ? "Delete " + ir.modelData.sizeText : "Trash " + ir.modelData.sizeText
+                        text: "Delete " + ir.modelData.sizeText
                         tooltip: ir.modelData.deleteVia ? "Deletes it from " + ir.modelData.source
-                                 : "Moves " + (ir.modelData.deletePaths || []).length + " file(s) to the trash; empty the trash to get the space back"
+                                 : "Moves its files to the trash (restore them from there; empty the trash to get the space back)"
                         onClicked: { root.confirmKey = ""; Ai.removeKey(ir.modelData.key); }
                     }
                 }

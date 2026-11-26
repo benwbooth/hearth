@@ -512,6 +512,47 @@ def _systemctl(*args, timeout=5):
 _svc_cache = {"t": 0, "list": []}
 
 
+def service_server_bin(svc):
+    """The llama-server a model unit runs (its own llama.cpp build beside its
+    run script, e.g. ~/.local/share/inkling-2-mini/llama.cpp/bin/llama-server)."""
+    d = os.path.dirname(svc.get("script") or "")
+    if not d:
+        return ""
+    for c in glob.glob(os.path.join(d, "*", "bin", "llama-server")) + glob.glob(os.path.join(d, "bin", "llama-server")):
+        if os.access(c, os.X_OK):
+            return c
+    for tok in re.findall(r"(/[^\s\"']*/llama-server)\b", svc.get("body", "")):
+        if os.access(tok, os.X_OK):
+            return tok
+    return ""
+
+
+def pick_llama_server(path):
+    """The llama-server to run a GGUF nothing else runs: the build of a model
+    unit whose model sits in the same folder (a newer quant of the same
+    model needs the same build), else one whose model has the same
+    architecture, else the newest unit build or one on PATH. "" if none."""
+    arch = gguf_meta(path).get("general.architecture", "")
+    folder = os.path.dirname(os.path.realpath(path))
+    same_dir, same_arch, any_bin = "", "", []
+    for svc in services():
+        b = service_server_bin(svc)
+        if not b:
+            continue
+        any_bin.append(b)
+        mp = service_model_path(svc)
+        if mp and os.path.dirname(os.path.realpath(mp)) == folder:
+            same_dir = same_dir or b
+        elif arch and mp and gguf_meta(mp).get("general.architecture", "") == arch:
+            same_arch = same_arch or b
+    if same_dir or same_arch:
+        return same_dir or same_arch
+    if any_bin:
+        return max(any_bin, key=lambda b: os.path.getmtime(os.path.realpath(b)))
+    from shutil import which
+    return which("llama-server") or ""
+
+
 # Servers that run one model per process: a user unit running one of them
 # is a model unit (Load starts it, Unload stops it). Multi-model runtimes
 # in a unit (LocalAI, LM Studio...) are found by hearth_ai_runtimes instead.

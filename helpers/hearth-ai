@@ -485,6 +485,104 @@ class ModelService(LlamaCpp):
             raise RuntimeError((r.stderr or "couldn't stop %s" % self.unit).strip())
 
 
+class GgufRunner(LlamaCpp):
+    """Runs a GGUF nothing else is set up to run (a model file in a folder,
+    an older quant beside a model unit's): its own llama-server in a
+    transient user unit, hearth-gguf-<n>.service, on a free local port,
+    with the llama.cpp build hm.pick_llama_server chooses. Load starts it,
+    Unload stops it; the memory manager treats it like a model unit."""
+    id = "gguf"
+    label = "llama.cpp"
+    PREFIX = "hearth-gguf-"
+
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.url = ""
+        self.models_dir = ""
+
+    def running(self):
+        """[{unit, path, port, pid}] of the servers it started."""
+        r = subprocess.run(["systemctl", "--user", "list-units", "--plain", "--no-legend", "--all",
+                            self.PREFIX + "*.service"], capture_output=True, text=True, timeout=10)
+        out = []
+        for line in r.stdout.splitlines():
+            unit = line.split()[0] if line.split() else ""
+            if not unit.startswith(self.PREFIX):
+                continue
+            info = hm.unit_info(unit)
+            if info.get("ActiveState") not in ("active", "activating"):
+                continue
+            d = subprocess.run(["systemctl", "--user", "show", "-p", "Description", "--value", unit],
+                               capture_output=True, text=True, timeout=10).stdout.strip()
+            m = re.match(r"hearth: (.+) on :(\d+)$", d)
+            if m:
+                out.append({"unit": unit, "path": m.group(1), "port": int(m.group(2)),
+                            "pid": int(info.get("MainPID") or 0), "state": info.get("ActiveState")})
+        return out
+
+    def state(self):
+        st = {"id": self.id, "label": self.label, "kind": "local", "url": "", "running": True,
+              "gguf": True, "installed": [], "loaded": [], "error": ""}
+        for r in self.running():
+            st["loaded"].append({"name": r["path"], "label": os.path.splitext(os.path.basename(r["path"]))[0],
+                                 "unit": r["unit"], "port": r["port"], "pid": r["pid"], "vram": 0, "vramText": ""})
+        return st
+
+    def load(self, model, keep_minutes):
+        path = model
+        if any(r["path"] == path for r in self.running()):
+            return
+        exe = hm.pick_llama_server(path)
+        if not exe:
+            raise RuntimeError("no llama-server here can run it")
+        used = {r["port"] for r in self.running()}
+        port = next(p for p in range(18400, 18500) if p not in used and not rt.port_open(p))
+        n = 1
+        while hm.unit_info("%s%d.service" % (self.PREFIX, n)).get("ActiveState") in ("active", "activating"):
+            n += 1
+        unit = "%s%d.service" % (self.PREFIX, n)
+        args = [exe, "-m", path, "--host", "127.0.0.1", "--port", str(port), "-ngl", "999", "--jinja",
+                "-c", str(int(self.cfg.get("context", 32768) or 32768))]
+        if model_category(path) == "embedding":
+            args.append("--embeddings")
+        r = subprocess.run(["systemd-run", "--user", "--unit", unit, "--collect", "--quiet",
+                            "--description", "hearth: %s on :%d" % (path, port), "-p", "KillMode=mixed"] + args,
+                           capture_output=True, text=True, timeout=30)
+        if r.returncode:
+            raise RuntimeError((r.stderr or "couldn't start llama-server").strip())
+        t0 = time.time()
+        while time.time() - t0 < 900:
+            # Only a definite answer counts (systemctl can time out while the
+            # GPU is busy loading, which reads as no state at all).
+            if hm.unit_info(unit).get("ActiveState") in ("inactive", "failed"):
+                log_tail = subprocess.run(["journalctl", "--user", "-u", unit, "-n", "3", "--no-pager", "-o", "cat"],
+                                          capture_output=True, text=True, timeout=10).stdout.strip()
+                raise RuntimeError("llama-server stopped: " + (log_tail.splitlines() or ["see its log"])[-1])
+            try:
+                if http("http://127.0.0.1:%d/health" % port, timeout=2).get("status") == "ok":
+                    return
+            except (OSError, ValueError, AttributeError):
+                pass
+            time.sleep(1)
+        raise RuntimeError("llama-server didn't come up in 15 minutes")
+
+    def unload(self, model):
+        for r in self.running():
+            if r["path"] == model:
+                subprocess.run(["systemctl", "--user", "stop", r["unit"]], capture_output=True, timeout=120)
+
+    def chat_url(self):
+        return self._chat
+
+    def chat(self, model, messages, tools, keep_minutes):
+        r = next((x for x in self.running() if x["path"] == model), None)
+        if not r:
+            self.load(model, keep_minutes)
+            r = next((x for x in self.running() if x["path"] == model), None)
+        self._chat = "http://127.0.0.1:%d/v1/chat/completions" % r["port"]
+        return LlamaCpp.chat(self, model, messages, tools, keep_minutes)
+
+
 class Runtime(LlamaCpp):
     """Any other model server found listening here (hearth_ai_runtimes):
     LM Studio, vLLM, SGLang, KoboldCpp, text-generation-webui, TabbyAPI,
@@ -713,8 +811,8 @@ def llama_instances(managed_url):
         if managed_url.endswith(":%d" % port):
             continue
         pid = cmdf.split("/")[2]
-        if hm._unit_of(pid) in service_units:
-            continue  # shown as its model service
+        if hm._unit_of(pid) in service_units or hm._unit_of(pid).startswith(GgufRunner.PREFIX):
+            continue  # shown as its model service, or one hearth started for a GGUF
         ppid = (re.search(r"^PPid:\s*(\d+)", hm._read("/proc/%s/status" % pid), re.M) or [None, "0"])[1]
         if "ollama" in hm._read("/proc/%s/cmdline" % ppid) or "/ollama/" in opt("--model", "-m"):
             continue  # Ollama's own runner: shown as the Ollama model
@@ -758,6 +856,7 @@ def providers(cfg):
             p = ModelService(svc)
             service_units.add(p.unit)
             out[p.id] = p
+    out["gguf"] = GgufRunner(pc.get("gguf", {}))
     for inst in llama_instances(pc["llamacpp"].get("url", "")):
         out[inst.id] = inst
     if pc.get("runtimes", {}).get("enabled", True):
@@ -976,6 +1075,13 @@ class Arbiter:
                     "params": m.get("params", ""), "quant": m.get("quant", ""), "path": path,
                     "deletable": pid == "ollama", "deleteVia": runner if pid == "ollama" else None,
                     "runners": [runner], "capabilities": m.get("capabilities") or []})
+        # A GGUF nothing runs gets its own llama-server (GgufRunner).
+        if "gguf" in pstates:
+            for it in items:
+                p = it.get("path", "")
+                if not it["runners"] and p.endswith(".gguf") and it["category"] in ("llm", "embedding", "vision") \
+                        and not re.search(r"mmproj|-0000[2-9]-of-", os.path.basename(p).lower()):
+                    it["runners"].append({"provider": "gguf", "model": p, "label": "llama.cpp"})
         for it in items:
             it["categoryLabel"] = hm.CATEGORY_LABEL.get(it["category"], "Other")
             it["loadable"] = bool(it["runners"])
@@ -1071,6 +1177,15 @@ class Arbiter:
                             self.mem.note(e["key"], loadSec=round((t1 - t0) / 1e6, 1), loadMeasured=True)
                     except ValueError:
                         pass
+                elif s.get("gguf"):
+                    sp = [c["pid"] for c in clients if c["unit"] == m["unit"]]
+                    size = 0
+                    try:
+                        size = os.path.getsize(name)
+                    except OSError:
+                        pass
+                    entry("gguf:" + name, m.get("label") or name, model_category(name), pid_, s, sp,
+                          extra={"unit": m["unit"], "path": name, "size": size, "model": name})
                 elif s.get("runtime"):
                     # Its processes (the server and its model workers), split
                     # between its loaded models by the model each has open
