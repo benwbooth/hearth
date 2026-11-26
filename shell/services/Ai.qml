@@ -70,7 +70,7 @@ Singleton {
     property var categories: []         // [{ id, label }]
     property int modelVram: 0
     property var evicted: []            // the last few automatic unloads: [{ name, reason, vramText, time }]
-    property var catalog: ({ picks: [], magnitude: [], search: [], category: "", query: "", loading: false })
+    property var catalog: ({ sections: [], category: "", query: "", loading: false })
     signal tabRequested(string tab, string category)
     function provider(id) { return providers.find(p => p.id === id) || null; }
     function isLoaded(pid, model) {

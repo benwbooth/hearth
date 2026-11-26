@@ -665,8 +665,13 @@ One hub for every model the desktop uses: `helpers/hearth-ai`,
   Magnitude's folders, `ai.modelDirs`, LM Studio), the Hugging Face cache,
   ComfyUI, Piper, Whisper. Each shows what can run it ("Runs in"). Delete
   moves files to the trash (provider models are deleted by the provider).
-  Get More installs from Ollama, Magnitude's recommendations for this
-  computer, hearth's picks per category, or a Hugging Face search by
+  Get More shows one section per source, as hearth-ai sends them (the
+  menu has no list of its own): Magnitude's recommendations for this
+  computer, hearth's picks per category, LM Studio's catalog (its
+  lmstudio-community GGUF builds, when LM Studio is installed: one GGUF,
+  Q4_K_M or nearest plus any vision projector, downloaded into LM
+  Studio's publisher/repo folder), each running LocalAI's gallery
+  (installed through its `/models/apply`), and a Hugging Face search by
   category (`hf download` into the Hugging Face cache).
 - Graphics memory: GPU busy % and VRAM used/total per GPU from amdgpu's
   sysfs (also next to the AI icon), GTT spill, and per process from DRM

@@ -11,8 +11,9 @@ import ".."
 //              itself; Unload / Stop, and a pin to keep it loaded.
 //   Installed  every model on this computer, by category, with Load and
 //              Move to Trash.
-//   Get More   models to install: Magnitude's picks for this computer,
-//              hearth's picks per category, and a Hugging Face search.
+//   Get More   models to install, one section per source hearth-ai offers:
+//              Magnitude's picks for this computer, hearth's picks, LM
+//              Studio's catalog, a running LocalAI's gallery, Hugging Face.
 // Category chips filter all three.
 ColumnLayout {
     id: root
@@ -266,11 +267,9 @@ ColumnLayout {
                 color: Theme.fgSecondary
             }
             Repeater {
-                model: root.tab === "more" && !Ai.catalog.loading ? [
-                    { title: "Recommended by Magnitude for this computer", items: Ai.catalog.magnitude || [] },
-                    { title: "hearth's picks", items: Ai.catalog.picks || [] },
-                    { title: Ai.catalog.query ? "Hugging Face results" : "Most downloaded on Hugging Face", items: Ai.catalog.search || [] }
-                ] : []
+                // One section per source hearth-ai sends (Magnitude, hearth's
+                // picks, LM Studio, each LocalAI's gallery, Hugging Face...).
+                model: root.tab === "more" && !Ai.catalog.loading ? (Ai.catalog.sections || []) : []
                 ColumnLayout {
                     id: sec
                     required property var modelData
@@ -292,13 +291,11 @@ ColumnLayout {
                             m: modelData
                             readonly property string pullKey: modelData.provider + "/" + modelData.ref
                             readonly property var pull: Ai.pulls[pullKey] || null
-                            readonly property bool have: Ai.installed.some(i => i.key === "hf:" + cr.modelData.ref
-                                || i.key === "ollama:" + cr.modelData.ref || i.key === "ollama:" + cr.modelData.ref + ":latest"
-                                || (i.runners || []).some(r => r.provider === "magnitude" && r.model === cr.modelData.ref))
+                            readonly property bool have: !!cr.modelData.installed
                             title: modelData.name
                             sub: {
                                 const m = modelData;
-                                const parts = [{ ollama: "Ollama", magnitude: "Magnitude", hf: "Hugging Face" }[m.provider]];
+                                const parts = [m.source || m.provider];
                                 if (m.sizeText) parts.push(m.sizeText);
                                 if (m.context) parts.push(root.ctxText(m.context) + " context");
                                 if (m.downloads) parts.push(m.downloads.toLocaleString(Qt.locale(), "f", 0) + " downloads");

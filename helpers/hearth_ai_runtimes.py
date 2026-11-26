@@ -352,3 +352,136 @@ def port_open(port):
         return s.connect_ex(("127.0.0.1", port)) == 0
     finally:
         s.close()
+
+
+# --- catalogs (Settings > AI and the AI menu's Get More) ---------------------------------
+
+LMSTUDIO_PUBLISHER = "lmstudio-community"   # LM Studio's own GGUF builds of its catalog
+
+
+def lmstudio_present():
+    return bool(lms_bin()) or os.path.isdir(os.path.join(HOME, ".lmstudio"))
+
+
+def lmstudio_models_dir():
+    for d in (os.path.join(HOME, ".lmstudio", "models"), os.path.join(HOME, ".cache", "lm-studio", "models")):
+        if os.path.isdir(d):
+            return d
+    return os.path.join(HOME, ".lmstudio", "models")
+
+
+def lmstudio_catalog(query, category, classify, limit=20):
+    """LM Studio's catalog: its lmstudio-community GGUF builds on Hugging
+    Face, most downloaded first ([{ref, name, downloads, tag, category}]).
+    Many have no task tag, so the category comes from classify(name, tag)."""
+    import urllib.parse
+    q = {"author": LMSTUDIO_PUBLISHER, "filter": "gguf", "sort": "downloads", "direction": "-1", "limit": "100"}
+    if query:
+        q["search"] = query
+    res = get("https://huggingface.co/api/models?" + urllib.parse.urlencode(q), timeout=10) or []
+    out = []
+    for m in res:
+        rid = m.get("id") or m.get("modelId") or ""
+        if not rid or "mlx" in rid.lower():
+            continue
+        tag = m.get("pipeline_tag", "") or ""
+        cat = classify(rid, tag)
+        if category and cat != category:
+            continue
+        out.append({"ref": rid, "name": rid.split("/", 1)[-1], "downloads": m.get("downloads", 0),
+                    "tag": tag, "category": cat})
+        if len(out) >= limit:
+            break
+    return out
+
+
+def pick_gguf(repo):
+    """The GGUF to download from a repo: Q4_K_M (the usual default), else the
+    nearest 4- or 5-bit, else the smallest; a split model's every part.
+    Returns ([filenames], total bytes)."""
+    import urllib.parse
+    d = get("https://huggingface.co/api/models/%s?blobs=true" % urllib.parse.quote(repo, safe="/"), timeout=15) or {}
+    files = [(s["rfilename"], s.get("size") or 0) for s in d.get("siblings", [])
+             if s.get("rfilename", "").endswith(".gguf") and "mmproj" not in s["rfilename"].lower()]
+    if not files:
+        raise RuntimeError("%s has no GGUF files" % repo)
+    for pat in (r"q4_k_m", r"q4_k_s|iq4_xs|q4_0", r"q5_k_m|q5_k_s", r"q6_k|q8_0"):
+        hit = [f for f in files if re.search(pat, f[0].lower())]
+        if hit:
+            break
+    else:
+        hit = [min(files, key=lambda f: f[1])]
+    first = hit[0][0]
+    m = re.search(r"-0000\d-of-(\d+)\.gguf$", first)
+    if m:   # a split model: all its parts
+        stem = first[:m.start()]
+        hit = [f for f in files if f[0].startswith(stem)]
+    else:
+        hit = [hit[0]]
+    # The vision projector, when the repo has one (LM Studio loads it beside the model).
+    proj = [(s["rfilename"], s.get("size") or 0) for s in d.get("siblings", [])
+            if "mmproj" in s.get("rfilename", "").lower() and s["rfilename"].endswith(".gguf")]
+    if proj:
+        hit.append(min(proj, key=lambda f: f[1]))
+    return [f[0] for f in hit], sum(f[1] for f in hit)
+
+
+def localai_catalog(root, query, category, classify, limit=25):
+    """A running LocalAI's model gallery ([{ref, name, desc, category, installed}]):
+    GET /api/models (newer, with term/tag) or GET /models/available."""
+    import urllib.parse
+    items = None
+    try:
+        r = get(root + "/api/models?" + urllib.parse.urlencode({"term": query or "", "collapse_variants": "true"}),
+                timeout=15)
+        items = r.get("models") if isinstance(r, dict) else None
+    except Exception:  # noqa: BLE001
+        items = None
+    if items is None:
+        items = get(root + "/models/available", timeout=30) or []
+    tagcat = [(r"text-to-speech|\btts\b", "tts"), (r"speech|whisper|\bstt\b|transcri", "stt"),
+              (r"embedding|rerank", "embedding"), (r"image-gen|stablediffusion|diffusers|flux|text-to-image", "image"),
+              (r"video", "video"), (r"music|audio", "audio"), (r"vision|multimodal|vlm", "vision"),
+              (r"\bllm\b|gguf|chat|instruct", "llm")]
+    out = []
+    q = (query or "").lower()
+    for m in items:
+        if not isinstance(m, dict):
+            continue
+        name = m.get("name") or m.get("id") or ""
+        tags = " ".join(str(t) for t in (m.get("tags") or [])).lower()
+        desc = (m.get("description") or "").strip().split("\n")[0][:200]
+        if q and q not in (name + " " + tags + " " + desc).lower():
+            continue
+        cat = next((c for pat, c in tagcat if re.search(pat, tags)), "") or classify(name)
+        if category and cat != category:
+            continue
+        gallery = ((m.get("gallery") or {}).get("name") if isinstance(m.get("gallery"), dict) else "") or "localai"
+        ref = m["id"] if "@" in str(m.get("id", "")) else "%s@%s" % (gallery, name)
+        out.append({"ref": ref, "name": name, "desc": desc, "category": cat,
+                    "installed": bool(m.get("installed"))})
+        if len(out) >= limit:
+            break
+    return out
+
+
+def localai_install(root, ref, progress):
+    """POST /models/apply {"id": "gallery@name"}, then follow /models/jobs/<uuid>."""
+    r = post(root + "/models/apply", {"id": ref}, timeout=60) or {}
+    uid = r.get("uuid") or ""
+    if not uid:
+        raise RuntimeError("LocalAI didn't start the install")
+    while True:
+        time.sleep(1.5)
+        j = get(root + "/models/jobs/" + uid, timeout=15) or {}
+        if j.get("error"):
+            raise RuntimeError(str(j["error"]))
+        pct = j.get("progress")
+        if isinstance(pct, (int, float)):
+            progress("downloading", int(pct), 100, "")
+        elif j.get("totalBytes"):
+            progress("downloading", int(j.get("currentBytes") or 0), int(j["totalBytes"]), "")
+        else:
+            progress(j.get("message") or "downloading", 0, 0, "")
+        if j.get("processed"):
+            return

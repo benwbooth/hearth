@@ -29,6 +29,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 flavor, port, log = sys.argv[1], int(sys.argv[2]), sys.argv[3]
 models = ["alpha-7b-Q4_K_M", "beta-embed"]
 loaded = {"alpha-7b-Q4_K_M"}
+jobs = {}
 def note(*a):
     with open(log, "a") as f:
         f.write(json.dumps(a) + "\n")
@@ -44,6 +45,18 @@ class H(BaseHTTPRequestHandler):
         if p == api + "/models":
             ms = models[:1] if flavor in ("vllm", "koboldcpp") else models
             return self.send({"object": "list", "data": [{"id": m, "object": "model"} for m in ms]})
+        if flavor == "lmstudio" and p == "/api/v1/models":
+            return self.send({"models": [{"key": m, "type": "embedding" if "embed" in m else "llm",
+                                          "publisher": "lmstudio-community", "size_bytes": 4 << 30,
+                                          "quantization": {"name": "Q4_K_M", "bits_per_weight": 4},
+                                          "loaded_instances": [{"id": m + ":1"}] if m in loaded else [],
+                                          "max_context_length": 32768} for m in models]})
+        if flavor == "localai" and p == "/api/models":
+            return self.send({"models": [{"name": "whisper-base", "tags": ["stt", "whisper"], "description": "Speech"},
+                                         {"name": "qwen3-8b", "tags": ["llm", "gguf"], "description": "Chat model"}]})
+        if flavor == "localai" and p.startswith("/models/jobs/"):
+            jobs["polls"] = jobs.get("polls", 0) + 1
+            return self.send({"error": None, "processed": jobs["polls"] >= 2, "message": "downloading", "progress": 50})
         if flavor == "lmstudio" and p == "/api/v0/models":
             return self.send({"data": [{"id": m, "type": "embeddings" if "embed" in m else "llm",
                                         "state": "loaded" if m in loaded else "not-loaded",
@@ -65,6 +78,8 @@ class H(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length") or 0)
         body = json.loads(self.rfile.read(n) or b"{}")
         note("POST", self.path, body, self.headers.get("x-admin-key", ""))
+        if self.path == "/models/apply":
+            return self.send({"uuid": "job-1", "status": "http://x/models/jobs/job-1"})
         if "unload" in self.path or "shutdown" in self.path:
             loaded.clear()
         if self.path.endswith("/load"):
@@ -154,7 +169,7 @@ def main():
             p.load("beta-embed", 5)
             calls = [json.loads(line) for line in open(logs[flavor])] if os.path.exists(logs[flavor]) else []
             paths = [c[1] for c in calls]
-            exp = {"lmstudio": ["/api/v1/models/unload", "/v1/chat/completions"],
+            exp = {"lmstudio": ["/api/v1/models/unload", "/api/v1/models/load"],
                    "textgen": ["/v1/internal/model/unload", "/v1/internal/model/load"],
                    "tabby": ["/v1/model/unload", "/v1/model/load"],
                    "localai": ["/backend/shutdown", "/v1/chat/completions"],
@@ -170,6 +185,20 @@ def main():
             st = p.state()
             if flavor in ("textgen", "tabby", "lemonade", "lmstudio"):
                 check("beta-embed" in [m["name"] for m in st["loaded"]], "%s reports the newly loaded model" % name)
+
+        # LocalAI's gallery and its install job.
+        p = provs.get(18234)
+        if p:
+            items = rt.localai_catalog(p.root, "", "", lambda n: "llm")
+            check([(m["ref"], m["category"]) for m in items] == [("localai@whisper-base", "stt"), ("localai@qwen3-8b", "llm")],
+                  "LocalAI gallery listed by category (%s)" % [(m["ref"], m["category"]) for m in items])
+            check([m["ref"] for m in rt.localai_catalog(p.root, "", "stt", lambda n: "llm")] == ["localai@whisper-base"],
+                  "LocalAI gallery filtered to speech to text")
+            seen = []
+            rt.localai_install(p.root, "localai@qwen3-8b", lambda *a: seen.append(a))
+            calls = [json.loads(line) for line in open(logs["localai"])]
+            check(any(c[1] == "/models/apply" and c[2] == {"id": "localai@qwen3-8b"} for c in calls) and seen,
+                  "LocalAI install applied and followed its job (%d progress updates)" % len(seen))
 
         # The assistant talks to a runtime through its own API base
         # (Lemonade's is /api/v1).

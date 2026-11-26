@@ -32,7 +32,8 @@ JSON lines on stdin/stdout, so the shell never waits:
       -> {"type": "reply", "id": 3, "text": "...", "done": true}
   {"cmd": "cancel", "id": 3}
   {"cmd": "catalog", "category": "tts", "query": ""}  -> {"type": "catalog", ...}
-  {"cmd": "install", "provider": "hf"|"ollama"|"magnitude", "model": "..."}  -> {"type": "pull", ...}
+  {"cmd": "install", "provider": "hf"|"ollama"|"magnitude"|"lmstudio"|"runtime:localai:<port>", "model": "..."}
+      -> {"type": "pull", ...}
   {"cmd": "remove", "key": "<installed key>"}          (provider delete, or files to the trash)
   {"cmd": "loadKey"|"unloadKey", "key": "<installed or loaded key>"}
   {"cmd": "pin", "key": "...", "on": true}              never unload it automatically
@@ -543,14 +544,31 @@ class Runtime(LlamaCpp):
         info = {}
         loaded = set()
         if f == "lmstudio":
+            # REST v1 (key, loaded_instances, size); older builds: v0 (id, state).
             try:
-                for m in (rt.get(self.root + "/api/v0/models", timeout=2) or {}).get("data", []):
-                    info[m.get("id", "")] = m
-                    if m.get("state") == "loaded":
-                        loaded.add(m.get("id", ""))
-                ids = list(info) or ids
+                for m in (rt.get(self.root + "/api/v1/models", timeout=2) or {}).get("models", []):
+                    k = m.get("key", "")
+                    q = m.get("quantization") or {}
+                    info[k] = {"type": {"embedding": "embeddings"}.get(m.get("type"), m.get("type", "")),
+                               "quantization": q.get("name", "") if isinstance(q, dict) else str(q),
+                               "max_context_length": m.get("max_context_length", 0),
+                               "publisher": m.get("publisher", ""), "size": m.get("size_bytes", 0),
+                               "vision": bool((m.get("capabilities") or {}).get("vision")),
+                               "instances": [i.get("id", "") for i in m.get("loaded_instances") or []]}
+                    if info[k]["instances"]:
+                        loaded.add(k)
             except Exception:  # noqa: BLE001
                 pass
+            if not info:
+                try:
+                    for m in (rt.get(self.root + "/api/v0/models", timeout=2) or {}).get("data", []):
+                        info[m.get("id", "")] = m
+                        if m.get("state") == "loaded":
+                            loaded.add(m.get("id", ""))
+                except Exception:  # noqa: BLE001
+                    pass
+            ids = list(info) or ids
+            self._lms_info = info
         elif f == "textgen":
             try:
                 cur = (rt.get(self.root + "/v1/internal/model/info", timeout=2) or {}).get("model_name", "")
@@ -596,9 +614,10 @@ class Runtime(LlamaCpp):
             typ = m.get("type", "")
             if typ == "embeddings":
                 caps.append("embedding")
-            if typ == "vlm":
+            if typ == "vlm" or m.get("vision"):
                 caps.append("vision")
-            st["installed"].append({"name": i, "size": 0, "sizeText": "", "params": "",
+            size = m.get("size", 0) or 0
+            st["installed"].append({"name": i, "size": size, "sizeText": human_bytes(size) if size else "", "params": "",
                                     "quant": m.get("quantization", ""), "context": m.get("max_context_length", 0),
                                     "capabilities": caps, "family": m.get("publisher", "")})
         for i in ids:
@@ -624,8 +643,12 @@ class Runtime(LlamaCpp):
         f, root = self.flavor, self.root
         if not self.rt.get("multi") or f == "comfyui":
             return  # its model is in memory while it runs
-        if f == "lmstudio" and rt.lms_bin():
-            rt.run([rt.lms_bin(), "load", model, "-y"], timeout=900)
+        if f == "lmstudio":
+            try:
+                rt.post(root + "/api/v1/models/load", {"model": model}, timeout=900)
+            except Exception:  # noqa: BLE001 (older LM Studio: it loads on first request)
+                rt.post(self.url + "/chat/completions", {"model": model, "max_tokens": 1,
+                                                         "messages": [{"role": "user", "content": "hi"}]}, timeout=900)
         elif f == "textgen":
             rt.post(root + "/v1/internal/model/load", {"model_name": model}, timeout=900)
         elif f == "tabby":
@@ -644,10 +667,17 @@ class Runtime(LlamaCpp):
             rt.post(root + "/free", {"unload_models": True, "free_memory": True}, timeout=60)
         elif not self.rt.get("multi"):
             self._stop()
-        elif f == "lmstudio" and rt.lms_bin():
-            rt.run([rt.lms_bin(), "unload", model], timeout=120)
         elif f == "lmstudio":
-            rt.post(root + "/api/v1/models/unload", {"instance_id": model}, timeout=120)
+            # Every loaded instance of it (REST v1), else its CLI.
+            try:
+                self.state()
+                ids = (getattr(self, "_lms_info", {}).get(model) or {}).get("instances") or [model]
+                for iid in ids:
+                    rt.post(root + "/api/v1/models/unload", {"instance_id": iid}, timeout=120)
+            except Exception:  # noqa: BLE001
+                if not rt.lms_bin():
+                    raise
+                rt.run([rt.lms_bin(), "unload", model], timeout=120)
         elif f == "textgen":
             rt.post(root + "/v1/internal/model/unload", {}, timeout=120)
         elif f == "tabby":
@@ -1653,21 +1683,26 @@ def main():
         emit({"type": "setting", "path": "ai.pinned", "value": pins})
 
     def catalog(req):
+        """Get More: one section per source, each [{provider, ref, name, ...,
+        installed}]. The menu draws whatever sections come back, so a new
+        catalog is a section here and nothing in QML."""
         cat = req.get("category", "")
         query = (req.get("query") or "").strip()
-        out = {"type": "catalog", "category": cat, "query": query, "picks": [], "search": [], "magnitude": []}
+        browse = bool(query or req.get("browse"))
+        sections = []
+        out = {"type": "catalog", "category": cat, "query": query, "sections": sections}
+        if not ARB.inv[1]:
+            ARB.snapshot(False)      # the inventory, to mark what's installed already
+        inv = ARB.inv[1] or []
+        keys = {i["key"] for i in inv}
+        runs = {(r["provider"], r["model"]) for i in inv for r in i.get("runners", [])}
+
+        def section(sid, title, items):
+            if items:
+                sections.append({"id": sid, "title": title, "items": items})
         try:
-            sizes = hm.catalog_sizes()
-            for p in hm.PICKS:
-                if cat and p["category"] != cat:
-                    continue
-                if query and query.lower() not in (p["ref"] + " " + p["desc"]).lower():
-                    continue
-                s = sizes.get(p["provider"] + ":" + p["ref"], {})
-                out["picks"].append(dict(p, name=p["ref"].split("/", 1)[-1], size=s.get("size", 0),
-                                         sizeText=human_bytes(s["size"]) if s.get("size") else "",
-                                         gated=s.get("gated", False)))
             if cat in ("", "llm") and hm.magnitude_installed() and hm.magnitude_running():
+                mags = []
                 try:
                     rec = json.loads(hm.magnitude("models", "recommend", "--json", timeout=20))
                     for r in rec.get("models", []):
@@ -1676,17 +1711,59 @@ def main():
                         a = (m.get("servingState") or {}).get("assessment") or {}
                         if query and query.lower() not in (pres.get("displayName", "") + pres.get("description", "")).lower():
                             continue
-                        out["magnitude"].append({
-                            "provider": "magnitude", "ref": m.get("modelId", ""), "category": "llm",
+                        ref = m.get("modelId", "")
+                        mags.append({
+                            "provider": "magnitude", "source": "Magnitude", "ref": ref, "category": "llm",
                             "name": "%s %s" % (pres.get("displayName", ""), pres.get("variantLabel", "")),
                             "desc": pres.get("description", ""), "size": m.get("storageBytes", 0),
                             "sizeText": human_bytes(m.get("storageBytes", 0)),
                             "context": ((a.get("served") or {}).get("contextLength")) or 0,
-                            "fits": a.get("_tag", "")})
+                            "fits": a.get("_tag", ""), "installed": ("magnitude", ref) in runs})
                 except (RuntimeError, ValueError, OSError, subprocess.SubprocessError) as e:
                     log("magnitude recommend:", e)
-            if query or req.get("browse"):
-                out["search"] = hm.hf_search(query, cat)
+                section("magnitude", "Recommended by Magnitude for this computer", mags)
+            sizes = hm.catalog_sizes()
+            picks = []
+            for p in hm.PICKS:
+                if cat and p["category"] != cat:
+                    continue
+                if query and query.lower() not in (p["ref"] + " " + p["desc"]).lower():
+                    continue
+                sz = sizes.get(p["provider"] + ":" + p["ref"], {})
+                have = ("hf:" + p["ref"]) in keys if p["provider"] == "hf" else \
+                    any(k in keys for k in ("ollama:" + p["ref"], "ollama:" + p["ref"] + ":latest"))
+                picks.append(dict(p, name=p["ref"].split("/", 1)[-1], size=sz.get("size", 0),
+                                  source={"ollama": "Ollama", "hf": "Hugging Face"}.get(p["provider"], p["provider"]),
+                                  sizeText=human_bytes(sz["size"]) if sz.get("size") else "",
+                                  gated=sz.get("gated", False), installed=have))
+            section("picks", "hearth's picks", picks)
+            if browse and rt.lmstudio_present():
+                base = rt.lmstudio_models_dir()
+                lms = []
+                for m in rt.lmstudio_catalog(query, cat, lambda n, t: hm.classify(n, tag=t, default="llm")):
+                    dest = os.path.join(base, m["ref"])
+                    lms.append({"provider": "lmstudio", "source": "LM Studio", "ref": m["ref"], "name": m["name"],
+                                "category": m["category"],
+                                "downloads": m["downloads"], "desc": "",
+                                "installed": bool(glob.glob(os.path.join(dest, "*.gguf")))})
+                section("lmstudio", "LM Studio catalog", lms)
+            if browse:
+                cfg, _ = settings()
+                for pv in providers(cfg).values():
+                    if getattr(pv, "flavor", "") != "localai":
+                        continue
+                    try:
+                        items = rt.localai_catalog(pv.root, query, cat, lambda n: hm.classify(n, default="llm"))
+                    except Exception as e:  # noqa: BLE001
+                        log("localai gallery:", e)
+                        continue
+                    section("localai:" + pv.id, "LocalAI gallery" + (" (:%d)" % pv.port if pv.port != 8080 else ""),
+                            [dict(m, provider=pv.id, source="LocalAI") for m in items])
+                search = hm.hf_search(query, cat)
+                for m in search:
+                    m["source"] = "Hugging Face"
+                    m["installed"] = ("hf:" + m["ref"]) in keys
+                section("hf", "Hugging Face results" if query else "Most downloaded on Hugging Face", search)
         except Exception as e:  # noqa: BLE001
             out["error"] = str(e)
         emit(out)
@@ -1698,29 +1775,23 @@ def main():
             emit({"type": "pull", "provider": prov, "model": model, "status": status,
                   "completed": done, "total": total, "error": err})
         try:
-            if prov == "hf":
-                hf = shutil.which("hf") or shutil.which("huggingface-cli")
-                if not hf:
-                    raise RuntimeError("the Hugging Face CLI (hf) isn't installed")
-                prog("downloading", 0, 0, "")
-                proc = subprocess.Popen([hf, "download", model], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-                                        text=True, bufsize=1)
-                buf, err_tail = "", ""
-                while True:
-                    ch = proc.stderr.read(256)
-                    if not ch:
-                        break
-                    buf += ch
-                    parts = re.split(r"[\r\n]", buf)
-                    buf = parts.pop()
-                    for line in parts:
-                        if line.strip():
-                            err_tail = line.strip()
-                        m = re.search(r"(\d+)%", line)
-                        if m:
-                            prog("downloading", int(m.group(1)), 100, "")
-                if proc.wait() != 0:
-                    raise RuntimeError(err_tail or "download failed")
+            if prov == "lmstudio":
+                # One GGUF (Q4_K_M or near it, plus the vision projector) into
+                # LM Studio's own publisher/repo folder: LM Studio lists it
+                # (`lms get` can't run without asking which file).
+                files, total = rt.pick_gguf(model)
+                dest = os.path.join(rt.lmstudio_models_dir(), model)
+                os.makedirs(dest, exist_ok=True)
+                hf_download([model] + files + ["--local-dir", dest], prog)
+            elif prov == "hf":
+                hf_download([model], prog)
+            elif prov.startswith("runtime:"):
+                cfg, _ = settings()
+                p = providers(cfg).get(prov)
+                if p is None or getattr(p, "flavor", "") != "localai":
+                    raise RuntimeError("%s can't download models" % prov)
+                prog("starting", 0, 0, "")
+                rt.localai_install(p.root, model, prog)
             else:
                 cfg, _ = settings()
                 p = providers(cfg).get(prov)
@@ -1732,6 +1803,31 @@ def main():
         except Exception as e:  # noqa: BLE001
             emit({"type": "pull", "provider": prov, "model": model, "status": "error", "error": str(e), "done": True})
         emit(ARB.snapshot(watching["on"]))
+
+    def hf_download(args, prog):
+        """`hf download ARGS`, its percentages as progress."""
+        hf = shutil.which("hf") or shutil.which("huggingface-cli")
+        if not hf:
+            raise RuntimeError("the Hugging Face CLI (hf) isn't installed")
+        prog("downloading", 0, 0, "")
+        proc = subprocess.Popen([hf, "download"] + args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                                text=True, bufsize=1)
+        buf, err_tail = "", ""
+        while True:
+            ch = proc.stderr.read(256)
+            if not ch:
+                break
+            buf += ch
+            parts = re.split(r"[\r\n]", buf)
+            buf = parts.pop()
+            for line in parts:
+                if line.strip():
+                    err_tail = line.strip()
+                m = re.search(r"(\d+)%", line)
+                if m:
+                    prog("downloading", int(m.group(1)), 100, "")
+        if proc.wait() != 0:
+            raise RuntimeError(err_tail or "download failed")
 
     def act(req):
         cfg, _ = settings()
