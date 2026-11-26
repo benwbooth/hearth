@@ -535,6 +535,13 @@ def app_menus(dump):
     return _app_menus_tree(dump)
 
 
+def read_menus(dump):
+    """One-item menus that were read (a ☰ holding only About), not the
+    reader's unread "…" placeholder: hearth's summary says unread=false."""
+    return [m.get("label", "") for m in (dump or {}).get("menus") or []
+            if isinstance(m, dict) and m.get("items") == 1 and m.get("unread") is False]
+
+
 def _app_menus_tree(dump):
     """Top-level menus with at least one item, from hearth's dump."""
     # The merged tree (the window's menus plus MPRIS / harvested shortcuts)
@@ -756,6 +763,7 @@ def attempt_windows(attr, before, win, wait_menu, escaped=False):
                                gtk_menu=w.get("gtk_menu")),
                    route=route, request=req,
                    menus=[f"{l}:{n}" for l, n in menus], n_items=(sum(n for _, n in menus) if "menus" in dump else count_items(dump.get("tree") or dump.get("menu") or {})),
+                   read_menus=read_menus(dump),
                    result="menus" if any(n for _, n in menus) else ("fallback" if dump_ok else "dump-failed"),
                    n_windows=len(cands))
         if best is None or cur["n_items"] > best["n_items"]:

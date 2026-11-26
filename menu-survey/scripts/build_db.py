@@ -39,6 +39,8 @@ def outcome(r):
     # placeholder item).
     if len(tops) == 1:
         try:
+            if tops[0].rsplit(":", 1)[0] in (r.get("read_menus") or []):
+                return "full"  # read, and it holds one item (Piper's ☰: About)
             return "full" if int(tops[0].rsplit(":", 1)[1]) >= 2 else "burger"
         except ValueError:
             return "burger"

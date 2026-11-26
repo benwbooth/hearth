@@ -196,8 +196,13 @@ Singleton {
         function summary(): string {
             // What the bar shows (deduped titles), not the raw tree.
             return JSON.stringify({ request: root.request,
-                menus: root.topLevel.map(i => ({ label: i.label,
-                    items: (i.children || []).filter(c => c.type !== "separator").length })),
+                menus: root.topLevel.map(i => {
+                    const kids = (i.children || []).filter(c => c.type !== "separator");
+                    // unread: its one item is the reader's "…" placeholder
+                    // (a ☰ or drawer read only when it opens).
+                    return { label: i.label, items: kids.length,
+                        unread: kids.length === 1 && kids[0].label === "\u2026" && kids[0].enabled === false };
+                }),
                 appMenu: root.gtkAppMenu ? (root.gtkAppMenu.children || []).length : 0 });
         }
         // `hearth-ipc call appmenu click "File/New Tab"`: activate an item of
