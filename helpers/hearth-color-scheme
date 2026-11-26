@@ -533,11 +533,14 @@ def apply_qtct():
                            ("qt6ct", "Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1", "Monospace,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1")):
         base = os.path.join(CONFIG, ct)
         colors = os.path.join(base, "colors", "hearth.conf")
+        # standard_dialogs=xdgdesktopportal: open/save dialogs (QFileDialog,
+        # QtQuick.Dialogs) through the FileChooser portal, which arbor's
+        # portal config gives to grove; "default" left Qt's own dialogs.
         conf = ("[Appearance]\n"
                 f"color_scheme_path={colors}\n"
                 "custom_palette=true\n"
                 f"icon_theme={ICONS}\n"
-                "standard_dialogs=default\n"
+                "standard_dialogs=xdgdesktopportal\n"
                 "style=Hearth\n\n"
                 "[Fonts]\n"
                 f"fixed=\"{mono}\"\n"
