@@ -2,15 +2,21 @@ self:
 # storytold's ArtCraft apps (gridcraft, deckcraft, wordcraft, ...; the
 # nix-craftapps flake's `programs.craftapps`) on Wayland, not X11.
 #
-# Several of them open their window through XWayland whenever DISPLAY is
-# set: winit, their windowing library, takes no file drops on Wayland, so
-# they chose X11 for drag-and-drop (gridcraft 0.19.1 main.rs: unless
-# GRIDCRAFT_WAYLAND is set). photocraft and vectorcraft do the same only
-# with a pen tablet plugged in, for its pressure (unless
-# <APP>_NATIVE_WAYLAND is set). As X11 windows arbor can't size them well
-# and the global menu sees less of them. Each app's own switch keeps it on
-# Wayland; the cost is no files dragged in from the file manager (open them
-# with File > Open) and, with a pen, no pressure.
+# Eight of them open their window through XWayland whenever DISPLAY is set
+# (gridcraft 0.19.1 main.rs, unless GRIDCRAFT_WAYLAND is set): upstream
+# winit took no file drops on Wayland. Their own winit fork has since
+# learned them (storytold/winit cf73a29c, 2026-10-02, wayland/seat/dnd.rs,
+# built into these releases) and gridcraft's main branch dropped the X11
+# switch, so on Wayland nothing is lost. As X11 windows arbor can't size
+# them well and the global menu sees less of them. Each app's own switch
+# keeps it on Wayland.
+#
+# Not photocraft and vectorcraft: they open through XWayland only with a
+# pen tablet plugged in, because winit doesn't bind Wayland's tablet
+# protocol (zwp_tablet_v2), so on Wayland a pen does nothing in their
+# window, not even move the pointer; XWayland serves it as an XInput2
+# device with pressure and tilt (photocraft src/tablet.rs). Without a pen
+# they're on Wayland already.
 #
 # Only when the nix-craftapps module is imported. Each wrapped package is a
 # default: an explicit `programs.craftapps.apps.<name>.package` still wins.
@@ -27,8 +33,6 @@ let
     lightcraft = "LIGHTCRAFT_WAYLAND";
     soundcraft = "SOUNDCRAFT_WAYLAND";
     wordcraft = "WORDCRAFT_WAYLAND";
-    photocraft = "PHOTOCRAFT_NATIVE_WAYLAND";
-    vectorcraft = "VECTORCRAFT_NATIVE_WAYLAND";
   };
   wrap = name: var: pkg: pkgs.symlinkJoin {
     name = "${pkg.name}-hearth";
