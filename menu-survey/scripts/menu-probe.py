@@ -1044,7 +1044,10 @@ def probe_flatpak(attr):
         return [dict(attr=attr, variant="exec", result="terminal-only", flatpak=True)]
     meta = flatpak("info", "--show-metadata", fid).stdout
     talk = sorted(set(re.findall(r"(com\.canonical\.AppMenu\.Registrar|org\.kde\.StatusNotifierWatcher|org\.a11y\.Bus)", meta)))
-    argv = ["env", f"FLATPAK_USER_DIR={FLATPAK_DIR}", "flatpak", "run", fid]
+    # No network: with the host's network namespace an app reaches any
+    # abstract X11 socket, Ben's own display's too (LVNAuth's startup.sh
+    # sets DISPLAY=:0.0 and opened on the real desktop, 2026-11-25).
+    argv = ["env", f"FLATPAK_USER_DIR={FLATPAK_DIR}", "flatpak", "run", "--unshare=network", fid]
     # A Java app: run it as hearth.globalMenu.javaFlatpaks would (the bridge
     # folder read-only, JAVA_TOOL_OPTIONS and JDK_JAVA_OPTIONS), so the
     # survey says which Java Flatpaks work with that override.
@@ -1303,7 +1306,7 @@ def probe_installed(attr):
         # otherwise hide the user one.
         fid = argv[1]
         rows = [attempt(attr, ["env", "FLATPAK_USER_DIR=" + os.path.expanduser("~/.local/share/flatpak"),
-                               "flatpak", "run", fid], "session", {}, [])]
+                               "flatpak", "run", "--unshare=network", fid], "session", {}, [])]
         r = rows[0]
         r["hearth"] = HEARTH_PKG or "installed"
         if r.get("result") != "no-window" and not (r.get("inspect") or {}).get("atspi", {}).get("found"):
