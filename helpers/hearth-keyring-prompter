@@ -233,6 +233,7 @@ class Prompter(dbus.service.Object):
             # hearth-askpass's prompts ("sudo", "ssh-key", "ssh"): the dialog words them
             # for what they are instead of as a keyring prompt.
             "kind": props.get("x-hearth-kind", ""),
+            "sudoPid": sudo_parent(p.sender, props.get("x-hearth-sudo-pid", "")),
             "continueLabel": props.get("continue-label", ""),
             "cancelLabel": props.get("cancel-label", ""),
         })
@@ -242,6 +243,24 @@ class Prompter(dbus.service.Object):
         p = prompts.get((str(sender), str(callback)))
         if p:
             p.done()
+
+
+def sudo_parent(sender, claimed):
+    """The sudo pid hearth-askpass names, only when it is true: the asking
+    process's parent is that pid and it is sudo. (A password typed into the
+    dialog sudo opened goes only to sudo's own askpass, never to a process
+    that merely claims to be it.)"""
+    try:
+        pid = int(claimed)
+        dbus_pid = int(bus.get_object("org.freedesktop.DBus", "/org/freedesktop/DBus")
+                       .GetConnectionUnixProcessID(sender, dbus_interface="org.freedesktop.DBus"))
+        with open("/proc/%d/stat" % dbus_pid) as f:
+            ppid = int(f.read().rsplit(")", 1)[1].split()[1])
+        with open("/proc/%d/comm" % pid) as f:
+            comm = f.read().strip()
+    except (ValueError, OSError, IndexError, dbus.DBusException):
+        return 0
+    return pid if ppid == pid and comm == "sudo" else 0
 
 
 watched = {}

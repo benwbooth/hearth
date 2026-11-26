@@ -29,11 +29,97 @@ Singleton {
     // The keyring asked again for the shown prompt (wrong password).
     signal retry()
 
+    // sudo's dialog opens as soon as sudo waits for a fingerprint
+    // (popups/FingerprintPrompt calls sudoWaiting), not 30 s later when
+    // pam_fprintd gives up and sudo runs hearth-askpass: an "early" entry
+    // with the reader's state. A finger closes it; a password typed there
+    // is held, the reader released (fprintd restarted: pam_fprintd stops
+    // the moment fprintd goes away), and the held answer goes to the
+    // askpass prompt sudo then sends, which takes the early entry's place.
+    // A prompt that arrives with nothing held takes its place too, keeping
+    // what was typed.
+    property string fingerMessage: ""
+    property bool fingerMatched: false
+    property var held: ({})          // sudo pid -> { accept, password }
+
+    function earlyId(pid) { return "sudo-" + pid; }
+    // pam_fprintd starts a new verify after each miss: the same sudo
+    // keeps its dialog and the "not recognized" line.
+    function sudoWaiting(pid, command, preview) {
+        if ((!enabled && !preview) || !pid) return;
+        if (queue.some(q => q.id === earlyId(pid) || (q.kind === "sudo" && q.sudoPid === pid))) return;
+        fingerMessage = "";
+        fingerMatched = false;
+        queue = queue.concat([{
+            id: earlyId(pid), early: true, preview: !!preview, sudoPid: pid, kind: "sudo", type: "password",
+            title: "Administrator password",
+            message: "Touch the fingerprint reader or type your password to allow this.",
+            description: command ? "To run: " + command : "A program asks to run something as the administrator (root).",
+            warning: "", passwordNew: false, choiceLabel: "", choiceChosen: false,
+            continueLabel: "Allow", cancelLabel: "Cancel"
+        }]);
+    }
+    function fingerStatus(pid, result) {
+        if (!queue.some(q => q.id === earlyId(pid))) return;
+        switch (result) {
+        case "verify-match":
+            fingerMatched = true;
+            fingerMessage = "";
+            earlyClose.pid = pid;
+            earlyClose.restart();
+            break;
+        case "verify-no-match": fingerMessage = "Fingerprint not recognized. Try again."; break;
+        case "verify-retry-scan": fingerMessage = "Try again."; break;
+        case "verify-swipe-too-short": fingerMessage = "Too short. Try again."; break;
+        case "verify-finger-not-centered": fingerMessage = "Center your finger and try again."; break;
+        case "verify-remove-and-retry": fingerMessage = "Lift your finger and try again."; break;
+        case "verify-disconnected": fingerMessage = "The fingerprint reader was disconnected."; break;
+        }
+    }
+    // sudo stopped waiting for the finger: gone, or its askpass prompt is
+    // on the way (it replaces the early entry). Give it a moment, then drop
+    // an early entry nothing replaced.
+    function sudoDone(pid) {
+        if (!queue.some(q => q.id === earlyId(pid))) return;
+        orphanCheck.pid = pid;
+        orphanCheck.restart();
+    }
+    function dropEarly(pid) {
+        const id = earlyId(pid);
+        if (request && request.id === id) busy = false;
+        queue = queue.filter(q => q.id !== id);
+    }
+    Timer { id: earlyClose; property int pid: 0; interval: 700; onTriggered: root.dropEarly(pid) }
+    Timer {
+        id: orphanCheck
+        property int pid: 0
+        interval: 4000
+        onTriggered: {
+            root.dropEarly(pid);
+            const h = Object.assign({}, root.held);
+            delete h[pid];
+            root.held = h;
+        }
+    }
+    Process {
+        id: release
+        command: ["systemctl", "--no-ask-password", "restart", "fprintd.service"]
+    }
+
     function reply(accept, password, choice) {
         const r = request;
         if (!r || busy) return;
         if (r.preview) {
             queue = queue.slice(1);
+            return;
+        }
+        if (r.early) {
+            const h = Object.assign({}, held);
+            h[r.sudoPid] = { accept: !!accept, password: accept ? String(password ?? "") : "" };
+            held = h;
+            if (accept) busy = true;               // "Checking…" until sudo asks
+            else queue = queue.slice(1);           // the dialog goes now
+            release.running = true;
             return;
         }
         const msg = { id: r.id, accept: !!accept };
@@ -52,7 +138,37 @@ Singleton {
             queue = queue.filter(q => q.id !== m.id);
             return;
         }
-        const i = queue.findIndex(q => q.id === m.id);
+        let i = queue.findIndex(q => q.id === m.id);
+        if (i < 0 && m.kind === "sudo" && m.sudoPid) {
+            // sudo's askpass prompt: answer it with what was typed into the
+            // early dialog, or take that dialog's place.
+            const e = queue.findIndex(q => q.id === earlyId(m.sudoPid));
+            const h = held[m.sudoPid];
+            if (h !== undefined) {
+                const rest = Object.assign({}, held);
+                delete rest[m.sudoPid];
+                held = rest;
+                const msg = { id: m.id, accept: h.accept };
+                if (h.accept) msg.password = h.password;
+                proc.write(JSON.stringify(msg) + "\n");
+                if (!h.accept) return;              // its close comes back; nothing to show
+                m.answered = true;                  // stays "Checking…"
+            }
+            if (e >= 0) {
+                orphanCheck.stop();
+                m.continuesEarly = true;
+                const q = queue.slice();
+                q[e] = m;
+                queue = q;
+                if (e === 0 && !m.answered) busy = false;
+                return;
+            }
+            if (m.answered) {
+                queue = queue.concat([m]);
+                if (queue.length === 1) busy = true;
+                return;
+            }
+        }
         if (i < 0) {
             queue = queue.concat([m]);
             return;

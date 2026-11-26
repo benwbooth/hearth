@@ -53,6 +53,22 @@ in
   # Autostart apps still wait for it (hearth-ready).
   systemd.user.services.xdg-desktop-portal.wantedBy = [ "xdg-desktop-autostart.target" ];
 
+  # sudo's password dialog opens while sudo waits for a fingerprint
+  # (popups/FingerprintPrompt + services/KeyringPrompter). A password typed
+  # there has to end that wait: pam_fprintd gives up the moment fprintd
+  # goes away, so the shell restarts fprintd. Only that unit, only
+  # restart, only someone at the machine in an active session; a restart
+  # costs nothing (fprintd is D-Bus activated and starts again on use).
+  security.polkit.extraConfig = ''
+    polkit.addRule(function(action, subject) {
+      if (action.id == "org.freedesktop.systemd1.manage-units" &&
+          action.lookup("unit") == "fprintd.service" &&
+          action.lookup("verb") == "restart" &&
+          subject.local && subject.active)
+        return polkit.Result.YES;
+    });
+  '';
+
   systemd.user.services.hearth-ready = {
     description = "Wait until hearth's tray, notifications and global menu are up";
     partOf = [ "graphical-session.target" ];

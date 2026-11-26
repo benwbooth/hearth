@@ -313,6 +313,11 @@ def ask_sudo(bus, prompt):
         "warning": "That password didn't work. Try again." if retry else "",
         "continue-label": "Allow",
         "cancel-label": "Cancel",
+        # Which sudo asks: the dialog that opened while sudo waited for a
+        # fingerprint (popups/FingerprintPrompt) becomes this prompt, and a
+        # password typed there answers it. The prompter checks that sudo
+        # really is this process's parent.
+        "x-hearth-sudo-pid": str(sudo) if cmd else "",
     })
     if not ok:
         try:

@@ -24,6 +24,8 @@ Scope {
     property string command: ""
     property string message: ""
     property bool matched: false
+    // The sudo whose password dialog shows the reader (KeyringPrompter).
+    property int dialogPid: 0
 
     function begin(cmd) {
         root.command = cmd || "";
@@ -55,11 +57,24 @@ Scope {
         case "start":
             // Only sudo-like callers: polkit and the lock screen show it themselves.
             if (m.who === "polkit" || m.who === "other" || Lock.locked) return;
+            // sudo with no terminal (an app, an agent, sudo -A): its password
+            // dialog opens now, with the reader in it, instead of this card
+            // and then the dialog 30 s later.
+            if (m.who === "sudo" && !m.tty && KeyringPrompter.enabled) {
+                root.dialogPid = m.pid;
+                KeyringPrompter.sudoWaiting(m.pid, m.command);
+                return;
+            }
             closeTimer.stop();
             if (!root.showing || root.command !== m.command) root.begin(m.command);
             else timeout.restart();
             break;
         case "status":
+            if (root.dialogPid) {
+                KeyringPrompter.fingerStatus(root.dialogPid, m.result);
+                if (m.done) root.dialogPid = 0;
+                return;
+            }
             if (!root.showing) return;
             switch (m.result) {
             case "verify-match": root.matched = true; root.message = "Allowed"; root.finish(900); break;
@@ -73,6 +88,10 @@ Scope {
             }
             break;
         case "end":
+            if (root.dialogPid) {
+                KeyringPrompter.sudoDone(root.dialogPid);
+                root.dialogPid = 0;
+            }
             if (root.showing && !root.matched) root.finish(200);
             break;
         }
@@ -85,6 +104,10 @@ Scope {
     IpcHandler {
         target: "fingerprint"
         function preview(command: string): void { root.begin(command); }
+        // The sudo password dialog as it opens at the fingerprint step
+        // (made-up; nothing is sent anywhere). Then `status verify-no-match`
+        // etc. show the reader's lines in it.
+        function previewDialog(command: string): void { root.dialogPid = 1; KeyringPrompter.sudoWaiting(1, command, true); }
         function status(result: string): void { root.handle({ type: "status", result: result, done: true }); }
         function hide(): void { root.showing = false; }
     }

@@ -74,7 +74,9 @@ Scope {
         onVisibleChanged: if (visible) reset()
         Connections {
             target: KeyringPrompter
-            function onRequestChanged() { if (win.visible) win.reset(); }
+            // sudo's askpass prompt taking the place of the dialog opened at
+            // the fingerprint step keeps what was typed.
+            function onRequestChanged() { if (win.visible && !(root.req && root.req.continuesEarly)) win.reset(); }
             function onRetry() { shake.restart(); win.reset(); }
         }
         function reset() {
@@ -163,6 +165,42 @@ Scope {
                     elide: Text.ElideNone
                     color: Theme.bad
                     font.pointSize: Theme.smallFontSize
+                }
+                // sudo waiting for a fingerprint (KeyringPrompter.sudoWaiting):
+                // the reader works alongside the password.
+                RowLayout {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.topMargin: 2
+                    visible: !!root.req && !!root.req.early
+                    spacing: 8
+                    Rectangle {
+                        id: fpBadge
+                        implicitWidth: 28
+                        implicitHeight: 28
+                        radius: 14
+                        color: KeyringPrompter.fingerMatched ? Theme.good : Theme.accent
+                        Behavior on color { ColorAnimation { duration: 200 } }
+                        Icon {
+                            anchors.centerIn: parent
+                            implicitSize: 16
+                            name: KeyringPrompter.fingerMatched ? "object-select-symbolic" : "auth-fingerprint-symbolic"
+                            fallback: KeyringPrompter.fingerMatched ? "dialog-ok" : "fingerprint-gui"
+                        }
+                        SequentialAnimation on opacity {
+                            running: win.visible && !!root.req && !!root.req.early && !KeyringPrompter.fingerMatched
+                            loops: Animation.Infinite
+                            NumberAnimation { to: 0.55; duration: 700; easing.type: Easing.InOutSine }
+                            NumberAnimation { to: 1.0; duration: 700; easing.type: Easing.InOutSine }
+                            onStopped: fpBadge.opacity = 1
+                        }
+                    }
+                    Label {
+                        text: KeyringPrompter.fingerMatched ? "Allowed"
+                            : root.busy ? "Checking your password…"
+                            : KeyringPrompter.fingerMessage || "Waiting for your fingerprint"
+                        color: KeyringPrompter.fingerMessage && !KeyringPrompter.fingerMatched && !root.busy ? Theme.warn : Theme.fgSecondary
+                        font.pointSize: Theme.smallFontSize
+                    }
                 }
                 TextBox {
                     id: pass
