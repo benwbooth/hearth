@@ -1,13 +1,16 @@
 import QtQuick
+import QtQuick.Effects
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Services.Pipewire
 import "../widgets"
 import "../services"
 import ".."
 
-// On-screen display for volume and brightness changes: icon, bar and
-// percentage, bottom-centre above the bar, gone after 1.5 s. It takes no
+// On-screen display for volume and brightness changes, like macOS 26: a
+// glass panel under the menu bar at the top right with Control Center's
+// slider, gone 1.5 s after the last change. It takes no
 // input, and stays quiet while things settle at startup or when the default
 // output device changes.
 Scope {
@@ -34,7 +37,8 @@ Scope {
         objects: root.sink ? [root.sink] : []
     }
 
-    function show(icon, value, muted) {
+    function show(icon, value, muted, title) {
+        root.title = title || "";
         root.icon = icon;
         root.value = value;
         root.muted = muted;
@@ -50,7 +54,7 @@ Scope {
                    : v < 0.34 ? "audio-volume-low"
                    : v < 0.67 ? "audio-volume-medium"
                    : "audio-volume-high";
-        root.show(icon, v, a.muted);
+        root.show(icon + "-symbolic", v, a.muted, "Sound");
     }
 
     Connections {
@@ -62,7 +66,7 @@ Scope {
     Connections {
         target: Brightness
         function onOsd(percent) {
-            root.show(percent >= 50 ? "brightness-high" : "brightness-low", percent / 100, false);
+            root.show((percent >= 50 ? "brightness-high" : "brightness-low") + "-symbolic", percent / 100, false, "Display");
         }
     }
 
@@ -72,78 +76,97 @@ Scope {
         onTriggered: root.showing = false
     }
 
+    // `hearth-ipc call osd preview 0.4 Sound` (tests, scripts): the panel at
+    // that level without changing anything.
+    IpcHandler {
+        target: "osd"
+        function preview(value: real, title: string): void {
+            root.show(title === "Display" ? "brightness-high-symbolic" : "audio-volume-medium-symbolic",
+                      value, false, title || "Sound");
+        }
+    }
+
+    // What the slider is for: "Sound" or "Display", as macOS titles them.
+    property string title: ""
+
+    // macOS 26: a glass panel just under the menu bar at the top right,
+    // with Control Center's thick slider (the symbol inside its fill),
+    // following each step as you scroll or press the keys.
     PanelWindow {
         id: win
         screen: Compositor.focusedScreen
-        anchors.bottom: true
-        margins.bottom: 32
+        anchors.top: true
+        anchors.right: true
+        margins.top: Math.round(6 * Theme.pt) - frame.shadowPad
+        margins.right: Math.round(8 * Theme.pt) - frame.shadowPad
         exclusionMode: ExclusionMode.Normal
         exclusiveZone: 0
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "hearth-osd"
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
         color: "transparent"
-        implicitWidth: card.width
-        implicitHeight: card.height
-        visible: card.opacity > 0
+        implicitWidth: frame.width + 2 * frame.shadowPad
+        implicitHeight: frame.height + 2 * frame.shadowPad
+        visible: frame.opacity > 0
         // Clicks go through to whatever is underneath.
         mask: Region {}
 
-        Rectangle {
-            id: card
-            width: 320
-            height: 56
-            radius: Theme.popupRadius
-            color: Theme.bgAlt
-            border.color: Theme.border
-            border.width: 1
+        GlassFrame {
+            id: frame
+            x: shadowPad
+            y: shadowPad
+            width: Math.round(300 * Theme.pt)
+            height: Math.round(62 * Theme.pt)
+            radius: Math.round(18 * Theme.pt)
             opacity: root.showing ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 180 } }
+            Behavior on opacity { NumberAnimation { duration: root.showing ? 120 : 260; easing.type: Easing.OutCubic } }
             transform: Translate { x: 0.001; y: 0.001 }
 
-            Icon {
-                id: icon
-                x: 14
-                anchors.verticalCenter: parent.verticalCenter
-                implicitSize: 28
-                name: root.icon
-            }
-            Rectangle {
-                id: track
-                anchors.left: icon.right
-                anchors.leftMargin: 12
-                anchors.right: pct.left
-                anchors.rightMargin: 12
-                anchors.verticalCenter: parent.verticalCenter
-                height: 6
-                radius: 3
-                color: Theme.border
-                Rectangle {
-                    width: parent.width * Math.min(1, Math.max(0, root.value))
-                    height: parent.height
-                    radius: 3
-                    color: root.muted ? Theme.fgDim : Theme.accent
-                    Behavior on width { NumberAnimation { duration: 80 } }
-                }
-                // Past 100% (volume boost) the overflow shows in warn colour.
-                Rectangle {
-                    visible: root.value > 1
-                    anchors.right: parent.right
-                    width: parent.width * Math.min(1, root.value - 1) / Math.max(1, root.value)
-                    height: parent.height
-                    radius: 3
-                    color: Theme.warn
-                }
+            Label {
+                x: Math.round(14 * Theme.pt)
+                y: Math.round(9 * Theme.pt)
+                text: root.title
+                font.pointSize: Theme.menuSmallFontSize
+                font.weight: Font.DemiBold
             }
             Label {
-                id: pct
                 anchors.right: parent.right
-                anchors.rightMargin: 14
-                anchors.verticalCenter: parent.verticalCenter
-                width: 48
-                horizontalAlignment: Text.AlignRight
+                anchors.rightMargin: Math.round(14 * Theme.pt)
+                y: Math.round(9 * Theme.pt)
                 text: root.muted ? "Muted" : Math.round(root.value * 100) + "%"
-                color: root.muted ? Theme.fgDim : Theme.fg
+                color: Theme.fgSecondary
+                font.pointSize: Theme.menuSmallFontSize
+            }
+            Item {
+                id: track
+                x: Math.round(12 * Theme.pt)
+                width: parent.width - 2 * x
+                height: Math.round(22 * Theme.pt)
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: Math.round(10 * Theme.pt)
+                Rectangle {
+                    anchors.fill: parent
+                    radius: height / 2
+                    color: Theme.dark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.08)
+                }
+                Rectangle {
+                    width: Math.max(height, parent.width * (root.muted ? 0 : Math.max(0, Math.min(1, root.value))))
+                    height: parent.height
+                    radius: height / 2
+                    color: Theme.dark ? Qt.rgba(1, 1, 1, 0.92) : "#ffffff"
+                    border.color: Theme.dark ? "transparent" : Qt.rgba(0, 0, 0, 0.06)
+                    Behavior on width { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+                }
+                Icon {
+                    x: 5
+                    anchors.verticalCenter: parent.verticalCenter
+                    implicitSize: 14
+                    name: root.icon
+                    // Dark glyph on the white fill, like macOS.
+                    layer.enabled: true
+                    layer.effect: MultiEffect { brightness: -1; saturation: -1 }
+                    opacity: 0.55
+                }
             }
         }
     }
