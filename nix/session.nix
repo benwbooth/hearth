@@ -49,9 +49,12 @@ in
 
   # Every app-*.service (systemd applies "app-.service.d" to all units whose
   # name starts with "app-"): the XDG autostart units and hearth's launches.
-  environment.etc."systemd/user/app-.service.d/50-hearth-ready.conf".text = ''
-    [Unit]
-    Wants=hearth-ready.service
-    After=hearth-ready.service
-  '';
+  # (A unit package: /etc/systemd/user is generated whole by NixOS.)
+  systemd.packages = [
+    (pkgs.runCommand "hearth-ready-dropin" { } ''
+      mkdir -p $out/lib/systemd/user/app-.service.d
+      printf '[Unit]\nWants=hearth-ready.service\nAfter=hearth-ready.service\n' \
+        > $out/lib/systemd/user/app-.service.d/50-hearth-ready.conf
+    '')
+  ];
 }
