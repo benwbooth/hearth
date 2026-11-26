@@ -202,7 +202,13 @@ fi
 # [undefined]"); the shell started again after it is checked as usual.
 qml_errors=$(awk '/arbor restarted: restarting the shell/{t=1} /starting the shell again/{t=0} !t' "$work/hearth.log" 2>/dev/null |
   grep -aE "ReferenceError|TypeError|SyntaxError|is not defined|is not a function|Cannot (read|assign)|Type error|Unable to assign|QML .*: .*[Ee]rror|ERROR" |
-  grep -avE "pipewire|portal|hyprctl|devloop|atspi|StatusNotifier|sni\.host|fprint|pam|NetworkManager|nmcli|bluez|upower|ddcutil|geoclue|recoll|ollama|llama|whisper" | sort -u)
+  grep -avE "pipewire|portal|hyprctl|devloop|atspi|StatusNotifier|sni\.host|fprint|pam|NetworkManager|nmcli|bluez|upower|ddcutil|geoclue|recoll|ollama|llama|whisper|Detailed logger failed to write" | sort -u)
+# Quickshell's own detailed log couldn't be written: /run/user (a small
+# tmpfs) was full for a moment, nothing wrong with the shell. Noted, not a
+# failure (it held back a deploy on 2026-11-25).
+if grep -aq "Detailed logger failed to write" "$work/hearth.log" 2>/dev/null; then
+  echo "smoke: note: Quickshell's detailed log couldn't be written (is /run/user full? $(df -h --output=pcent "/run/user/$(id -u)" 2>/dev/null | tail -1 | tr -d ' ') used)"
+fi
 if [[ -n $qml_errors ]]; then
   fail "QML errors:"$'\n'"$(head -10 <<<"$qml_errors")"
 fi
