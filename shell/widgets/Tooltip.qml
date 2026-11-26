@@ -50,8 +50,12 @@ PopupWindow {
             if (instant) { instant = false; visible = false; }
         }
     }
+    Connections {
+        target: ShellState
+        function onOsdShowingChanged() { if (ShellState.osdShowing) { showTimer.stop(); tip.shown = false; } }
+    }
     onHoveredChanged: {
-        if (hovered && text) {
+        if (hovered && text && !ShellState.osdShowing) {
             // Warm (moving along the bar): after 60 ms, not at once, so a
             // hover that flickers off and on while leaving an item (the
             // treetop graphs) never flashes a tooltip for a frame.
@@ -81,7 +85,7 @@ PopupWindow {
 
     Timer {
         id: showTimer
-        onTriggered: tip.shown = tip.hovered && tip.text !== ""
+        onTriggered: tip.shown = tip.hovered && tip.text !== "" && !ShellState.osdShowing
     }
 
     GlassFrame {
