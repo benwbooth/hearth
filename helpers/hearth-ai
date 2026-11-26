@@ -80,6 +80,10 @@ DEFAULTS = {
     # the user (codex-computer-use-linux: read windows, click, type) and run
     # shell commands. "ask" = an Allow/Deny card first, "allow", or "off".
     "computerUse": "ask",
+    # How hard reasoning models think before answering the assistant
+    # ("low" | "medium" | "high" | ""): opening apps and clicking needs
+    # little, and every second of thinking is a second of waiting.
+    "assistantReasoning": "low",
     "runCommands": "ask",
     # Graphics memory kept free for the desktop when making room for a
     # model: windows squeezed out of VRAM flicker and show artifacts.
@@ -214,7 +218,7 @@ class Ollama:
                     continue
                 progress(ev.get("status", ""), ev.get("completed", 0), ev.get("total", 0), ev.get("error", ""))
 
-    def chat(self, model, messages, tools, keep_minutes):
+    def chat(self, model, messages, tools, keep_minutes, reasoning=None):
         body = {"model": model, "messages": messages, "stream": False, "think": False,
                 "keep_alive": "%dm" % keep_minutes, "options": {"temperature": 0.2}}
         if tools:
@@ -287,10 +291,15 @@ class LlamaCpp:
     def unload(self, model):
         http(self.url + "/models/unload", {"model": model}, timeout=60)
 
-    def chat(self, model, messages, tools, keep_minutes):
+    def chat(self, model, messages, tools, keep_minutes, reasoning=None):
         body = {"model": model, "messages": messages, "temperature": 0.2, "stream": False}
         if tools:
             body["tools"] = tools
+        if reasoning:
+            # llama.cpp's --jinja templates read reasoning_effort (Inkling,
+            # gpt-oss); a request's kwargs override the server's own, so
+            # the assistant can think less than a coding session does.
+            body["chat_template_kwargs"] = {"reasoning_effort": reasoning}
         r = http(self.chat_url(), body, timeout=180)
         msg = (r.get("choices") or [{}])[0].get("message") or {}
         calls = []
@@ -339,7 +348,7 @@ class AgentCli:
                    ([] if m is not None else ["-m", model]) + [prompt]
         return [self.bin] + ([] if m is not None else ["-m", model]) + ["-p", prompt]
 
-    def chat(self, model, messages, tools, keep_minutes):
+    def chat(self, model, messages, tools, keep_minutes, reasoning=None):
         if not self.bin:
             raise RuntimeError("%s isn't installed" % self.label)
         tool_text = "\n".join("- %s(%s): %s" % (t["function"]["name"],
@@ -671,13 +680,13 @@ class GgufRunner(LlamaCpp):
     def chat_url(self):
         return self._chat
 
-    def chat(self, model, messages, tools, keep_minutes):
+    def chat(self, model, messages, tools, keep_minutes, reasoning=None):
         r = next((x for x in self.running() if x["path"] == model), None)
         if not r:
             self.load(model, keep_minutes)
             r = next((x for x in self.running() if x["path"] == model), None)
         self._chat = "http://127.0.0.1:%d/v1/chat/completions" % r["port"]
-        return LlamaCpp.chat(self, model, messages, tools, keep_minutes)
+        return LlamaCpp.chat(self, model, messages, tools, keep_minutes, reasoning)
 
 
 class Runtime(LlamaCpp):
@@ -1587,7 +1596,12 @@ class ComputerUse:
     through AT-SPI, takes screenshots, and clicks and types through the
     portal or ydotool. One server process, started on first use."""
 
-    HIDDEN = {"doctor", "setup_accessibility", "setup_window_targeting"}   # system setup, not for the model
+    # System setup, and window geometry the assistant has no use for. Each
+    # tool's description is part of every prompt, and a local model reads
+    # prompts at a few hundred tokens a second, so fewer tools answer sooner.
+    # list_windows needs a GNOME Shell backend (arbor has none): list_apps.
+    HIDDEN = {"doctor", "setup_accessibility", "setup_window_targeting", "move_window", "resize_window",
+              "drag", "focused_window", "list_windows"}
     BIN = "codex-computer-use-linux"
 
     def __init__(self):
@@ -1658,8 +1672,8 @@ class ComputerUse:
         except Exception as e:  # noqa: BLE001
             log("computer use: %s" % e)
             return []
-        return [{"type": "function", "function": {"name": t["name"], "description": t.get("description", "")[:600],
-                                                  "parameters": t.get("inputSchema") or {"type": "object", "properties": {}}}}
+        return [{"type": "function", "function": {"name": t["name"], "description": brief(t.get("description", ""), 240),
+                                                  "parameters": slim_schema(t.get("inputSchema") or {"type": "object", "properties": {}})}}
                 for t in self.defs if vision or t["name"] != "screenshot"]
 
     def names(self):
@@ -1678,11 +1692,38 @@ class ComputerUse:
         if r.get("structuredContent") and not texts:
             texts.append(json.dumps(r["structuredContent"]))
         text = "\n".join(texts).strip() or ("Error." if r.get("isError") else "Done.")
-        if len(text) > 12000:
-            text = text[:12000] + "\n[cut: %d more characters]" % (len(text) - 12000)
+        if len(text) > 6000:
+            text = text[:6000] + "\n[cut: %d more characters]" % (len(text) - 6000)
         if r.get("isError") and not text.startswith("Error"):
             text = "Error: " + text
         return text, images
+
+
+def brief(text, limit):
+    """The first sentences of a description, up to `limit` characters."""
+    text = " ".join((text or "").split())
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    end = cut.rfind(". ")
+    return cut[:end + 1] if end > limit // 3 else cut.rstrip() + "…"
+
+
+def slim_schema(schema):
+    """The same parameters with shorter descriptions (they repeat in every prompt)."""
+    if isinstance(schema, dict):
+        out = {}
+        for k, v in schema.items():
+            if k == "description" and isinstance(v, str):
+                out[k] = brief(v, 90)
+            elif k in ("examples", "default", "title", "$schema", "format"):
+                continue
+            else:
+                out[k] = slim_schema(v)
+        return out
+    if isinstance(schema, list):
+        return [slim_schema(v) for v in schema]
+    return schema
 
 
 COMPUTER = ComputerUse()
@@ -1726,10 +1767,9 @@ def describe_action(name, a):
 
 
 def system_prompt(ctx, computer=False, commands=False):
-    now = time.localtime()
     extra = ""
     if computer:
-        extra += ("You can use the computer like the user does: list_windows and get_app_state read what's on screen "
+        extra += ("You can use the computer like the user does: list_apps and get_app_state read what's on screen "
                   "(get_app_state lists a window's controls as text with element_index numbers; call it before acting "
                   "and again after to check), and click, type_text, press_key, scroll, set_value and perform_action act "
                   "on it (prefer element_index from the latest get_app_state). Open apps with launch_app first. "
@@ -1738,7 +1778,7 @@ def system_prompt(ctx, computer=False, commands=False):
         extra += ("run_command runs a bash command after the user allows it; use it for files, settings and "
                   "system questions a command answers directly, and give a short 'why'. ")
     return (
-        "You are the voice assistant of the user's Linux desktop (hearth). Today is %s, the time is %s. %s"
+        "You are the voice assistant of the user's Linux desktop (hearth). Each message starts with the date and time. %s"
         "Do what the user asks by calling tools; you may call several in a row. Never take an action the user didn't "
         "ask for (don't open apps, files or websites unless asked). "
         "For files the user 'edited yesterday' etc., work out the dates and pass modified_after/modified_before. "
@@ -1746,8 +1786,7 @@ def system_prompt(ctx, computer=False, commands=False):
         "right away with fewer filters (drop the kind, then widen the dates) before telling the user. "
         "If nothing matches, say so in one sentence and offer one next step. Answer in one or two short, friendly sentences meant to be spoken aloud: no markdown, no lists, no file paths "
         "unless asked. If you can't do something, say so plainly."
-    ) % (time.strftime("%A, %B %-d, %Y", now), time.strftime("%-I:%M %p", now),
-         ("The user is in %s. " % ctx["place"]) if ctx.get("place") else "") + extra
+    ) % (("The user is in %s. " % ctx["place"]) if ctx.get("place") else "") + extra
 
 
 class Assistant:
@@ -1893,13 +1932,15 @@ class Assistant:
         computer_ok = cfg.get("computerUse", "ask") == "allow"
         messages = [{"role": "system", "content": system_prompt(req.get("context") or {}, computer, commands)}]
         messages += req.get("history") or []
-        messages.append({"role": "user", "content": req.get("text", "")})
+        messages.append({"role": "user", "content": "[%s] %s" % (
+            time.strftime("%A, %B %-d, %Y, %-I:%M %p"), req.get("text", ""))})
         call = 0
         try:
             for _ in range(30 if computer else 8):
                 if rid in self.cancelled:
                     return
-                text, calls, raw = p.chat(model, messages, tools, keep_minutes(cfg))
+                text, calls, raw = p.chat(model, messages, tools, keep_minutes(cfg),
+                                          cfg.get("assistantReasoning", "low") or None)
                 if not calls:
                     emit({"type": "reply", "id": rid, "done": True, "text": (text or "").strip() or "Done."})
                     return
