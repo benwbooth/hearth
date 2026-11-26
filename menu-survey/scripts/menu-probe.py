@@ -237,7 +237,7 @@ def rig_up():
     # A hearth that didn't load (a QML error) reads no menus at all: every
     # app would be measured menu-less. Stop instead.
     try:
-        if "Failed to load configuration" in open(os.path.join(RIGDIR, "hearth.log"), errors="replace").read():
+        if any("Failed to load configuration" in l for l in tail(os.path.join(RIGDIR, "hearth.log"), 400)):
             sys.exit("rig's hearth failed to load: see " + os.path.join(RIGDIR, "hearth.log"))
     except OSError:
         pass
@@ -681,7 +681,8 @@ def attempt(attr, argv, variant, extra_env, extra_args, wait_win=50, wait_menu=1
     SCOPE["n"] += 1
     SCOPE["unit"] = f"menuprobe-{os.getpid()}-{SCOPE['n']}.scope"
     proc = subprocess.Popen(["systemd-run", "--user", "--scope", "--quiet", "--collect", "--unit", SCOPE["unit"],
-                             "-p", "MemoryMax=8G", "-p", "CPUWeight=idle", "-p", "IOWeight=1",
+                             "-p", "Slice=hearth-menu-survey.slice",  # the survey's 16 GB in all (restart-workers.sh)
+                             "-p", "MemoryMax=4G", "-p", "CPUWeight=idle", "-p", "IOWeight=1",
                              "-p", "AllowedCPUs=0-7,12-19", "prlimit", "--core=0", "--fsize=1073741824", "--", "setsid", RIG, "run", "env", *envargs, *argv, *extra_args], env=ENV,
                             stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                             cwd=env["HOME"])  # apps drop logs/configs in their cwd
@@ -987,9 +988,14 @@ def bus_pids_beyond_core():
     return [p for p in bus_pids() if p not in core]
 
 
-def tail(fn, n=6):
+def tail(fn, n=6, limit=64 * 1024):
+    """The last n lines, from at most the last `limit` bytes: an app that
+    floods its log (gigabytes) once made every probe hold it in memory."""
     try:
-        return open(fn, errors="replace").read().strip().splitlines()[-n:]
+        with open(fn, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            f.seek(max(0, f.tell() - limit))
+            return f.read().decode(errors="replace").strip().splitlines()[-n:]
     except OSError:
         return []
 
