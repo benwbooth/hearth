@@ -261,7 +261,15 @@ MouseArea {
         Connections {
             target: preview.visible && preview.framesShown < 3 ? previewFrame.Window.window : null
             ignoreUnknownSignals: true
-            function onFrameSwapped() { preview.framesShown++; }
+            // (Another frame asked for each time: with still thumbnails the
+            // pop-up drew once or twice and stopped, so it never showed, and
+            // the Dock's name label stays hidden while a preview is open:
+            // running apps sometimes showed nothing at all.)
+            function onFrameSwapped() {
+                preview.framesShown++;
+                const w = previewFrame.Window.window;
+                if (preview.framesShown < 3 && w) Qt.callLater(() => w.update());
+            }
         }
         // Placed once, where the icon is when it opens, and kept there:
         // anchored to the icon itself it followed the Dock's magnification
