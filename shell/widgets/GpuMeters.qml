@@ -109,7 +109,7 @@ ColumnLayout {
                             radius: index === 0 || index === root.segments.length - 1 ? 4 : 0
                             Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
                             HoverHandler { id: hv }
-                            Tooltip { anchorItem: parent; hovered: hv.hovered; text: parent.modelData.name; subtext: root.gb(parent.modelData.bytes) + " GB" }
+                            Tooltip { anchorItem: parent; hovered: hv.hovered; text: modelData.name; subtext: root.gb(modelData.bytes) + " GB" }
                         }
                     }
                 }
