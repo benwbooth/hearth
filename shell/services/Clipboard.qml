@@ -201,7 +201,7 @@ Singleton {
     function fullText(it, cb) { run(["decode", it.kind, it.id], cb); }
     function copyText(text) { Quickshell.execDetached(["wl-copy", "--", text]); }
     function open(it) {
-        if (it.url || it.path) Quickshell.execDetached(["xdg-open", it.url || it.path]);
+        if (it.url || it.path) Launch.open(it.url || it.path);
     }
 
     IpcHandler {

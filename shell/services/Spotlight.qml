@@ -243,9 +243,9 @@ Singleton {
         case "app": Launch.app(r.entry); break;
         case "settings": Settings.openRequested(r.pane); break;
         case "action": Help.activate(r.item); break;
-        case "file": Quickshell.execDetached(["xdg-open", r.file.path]); break;
+        case "file": Launch.open(r.file.path); break;
         case "calc": Quickshell.execDetached(["wl-copy", r.result]); break;
-        case "web": Quickshell.execDetached(["xdg-open", "https://duckduckgo.com/?q=" + encodeURIComponent(r.title)]); break;
+        case "web": Launch.open("https://duckduckgo.com/?q=" + encodeURIComponent(r.title)); break;
         case "ask": Voice.ask(r.query); break;
         }
         root.open = false;

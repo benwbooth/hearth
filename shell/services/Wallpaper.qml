@@ -841,7 +841,7 @@ Singleton {
             "sh", src, base]);
     }
     function openLink() {
-        if (root.link) Quickshell.execDetached(["xdg-open", root.link]);
+        if (root.link) Launch.open(root.link);
     }
 
     // ---------------------------------------------------------------- load

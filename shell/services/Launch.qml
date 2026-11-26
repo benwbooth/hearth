@@ -29,4 +29,23 @@ Singleton {
         if (entry.workingDirectory) args.push("--working-directory=" + entry.workingDirectory);
         Quickshell.execDetached(args.concat(["--"], cmd));
     }
+
+    // Any other program the user starts from hearth (a file or link with its
+    // default app, a URL): the same clean start as `app`. Started straight
+    // from hearth it inherited hearth's environment and its raised priority
+    // (Nice=-10, so the desktop stays responsive; an app shouldn't get it).
+    function run(cmd, idHint) {
+        if (!cmd || cmd.length === 0) return;
+        const id = String(idHint || cmd[0].split("/").pop()).replace(/[^A-Za-z0-9:_.]/g, "_");
+        const unit = "app-" + id + "-" + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
+        const args = ["systemd-run", "--user", "--collect", "--quiet", "--unit=" + unit,
+                      "-p", "ExitType=cgroup"];
+        for (const v of ["WAYLAND_DISPLAY", "DISPLAY"]) {
+            const val = Quickshell.env(v);
+            if (val) args.push("--setenv=" + v + "=" + val);
+        }
+        Quickshell.execDetached(args.concat(["--"], cmd));
+    }
+    // A file, folder or URL with its default app.
+    function open(target) { run(["xdg-open", String(target)], "xdg-open"); }
 }

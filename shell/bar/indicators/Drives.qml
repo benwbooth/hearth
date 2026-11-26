@@ -77,7 +77,7 @@ Indicator {
     }
     function mount(fs) { run(fs.path, ["udisksctl", "mount", "--no-user-interaction", "-b", fs.path]); }
     function unmount(fs) { run(fs.path, ["udisksctl", "unmount", "--no-user-interaction", "-b", fs.path]); }
-    function open(fs) { Quickshell.execDetached(["xdg-open", fs.mountpoint]); root.popup.close(); }
+    function open(fs) { Launch.open(fs.mountpoint); root.popup.close(); }
     // Unmount everything on the disk, then power it off.
     function safelyRemove(dev) {
         const mounted = dev.filesystems.filter(f => f.mountpoint).map(f => f.path);
