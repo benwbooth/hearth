@@ -21,8 +21,13 @@ self:
 #   (or with a screen reader running). See nix/global-menu.nix.
 { lib, pkgs }:
 rec {
-  # makeWrapper arguments that pass the global-menu flags.
-  globalMenuArgs = map (f: "--add-flags ${f}") self.lib.globalMenu.electronFlags;
+  # makeWrapper arguments for the global menu: the accessibility flags (a
+  # menu drawn in the page, read over AT-SPI), and libdbusmenu-glib, which
+  # Electron loads at run time to export its native menu bar to the
+  # registrar, on Wayland too (Electron 37+; the menu survey's
+  # electron+libdbusmenu lever: 26 apps with full menus, 2026-11-26).
+  globalMenuArgs = map (f: "--add-flags ${f}") self.lib.globalMenu.electronFlags
+    ++ [ "--prefix LD_LIBRARY_PATH : ${pkgs.libdbusmenu}/lib" ];
 
   # Wayland, the Secret Service, no colour management; `args` are more
   # makeWrapper arguments (globalMenuArgs, an app's own fixes).
