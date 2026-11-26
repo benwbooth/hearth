@@ -497,7 +497,8 @@ def services():
         for d in _unit_dirs():
             for f in sorted(glob.glob(os.path.join(d, "*.service"))):
                 name = os.path.basename(f)
-                if name.startswith("hearth-") or name.endswith("-proxy.service"):
+                # magnitude.service is the Magnitude provider, not one model.
+                if name.startswith("hearth-") or name.endswith("-proxy.service") or name == "magnitude.service":
                     continue
                 text = _read(f)
                 desc = (re.search(r"^Description=(.*)$", text, re.M) or [None, ""])[1]
@@ -572,7 +573,9 @@ def magnitude_installed():
 
 def magnitude_running(timeout=1):
     try:
-        with urllib.request.urlopen("http://127.0.0.1:10100/health", timeout=timeout) as r:
+        # Magnitude answers Python's default User-Agent with 503.
+        req = urllib.request.Request("http://127.0.0.1:10100/health", headers={"User-Agent": "hearth-ai"})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
             h = json.loads(r.read().decode() or "{}")
         return h
     except (OSError, ValueError):

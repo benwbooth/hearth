@@ -124,7 +124,9 @@ def settings():
 def http(url, body=None, timeout=5, method=None):
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method or ("POST" if data else "GET"),
-                                 headers={"Content-Type": "application/json"})
+                                 # A real User-Agent: Magnitude answers Python's default
+                                 # ("Python-urllib/…") with 503.
+                                 headers={"Content-Type": "application/json", "User-Agent": "hearth-ai"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         raw = r.read().decode()
     return json.loads(raw) if raw.strip() else {}
