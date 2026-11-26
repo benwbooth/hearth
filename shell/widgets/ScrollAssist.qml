@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import ".."
 
 // macOS-style scrolling for a Flickable, put next to it (not inside: a
@@ -12,7 +13,8 @@ import ".."
 //   the pointer and can be dragged.
 // - Momentum: touchpad scrolling follows the fingers and keeps gliding
 //   after they lift (Wayland sends no momentum of its own: libinput leaves
-//   that to the app); a mouse wheel glides smoothly instead of jumping.
+//   that to the app), as grove's Kinetic.qml; a swipe during a glide starts
+//   a new one. A mouse wheel glides smoothly instead of jumping.
 // - Nested lists: this sits above everything in its Flickable, so it gets
 //   the wheel first; it scrolls the innermost list under the pointer that
 //   can still move that way (a list inside a scrolling page), and the page
@@ -56,60 +58,92 @@ Item {
         return found || root.flickable;
     }
 
-    // Touchpad samples of this swipe [{t, dy}], and the glide it started on.
-    property var samples: []
-    property real carry: 0
-    // The swipe's speed (content px/s) from its last ~80 ms of events: the
-    // first event has no previous one to time against, so it isn't timed on
-    // its own (a quick swipe is only a few events).
-    function swipeVelocity(now) {
-        const s = root.samples.filter(e => now - e.t < 100);
-        if (!s.length) return 0;
-        let sum = 0;
-        for (const e of s) sum += e.dy;
-        const n = s.length;
-        const span = s[n - 1].t - s[0].t;
-        // n events cover n-1 gaps; one event alone: assume one 12 ms gap.
-        const dt = n > 1 && span > 0 ? span * n / (n - 1) : 12;
-        return sum / (Math.max(8, dt) / 1000);
+    // Touchpad momentum, grove's (Kinetic.qml, Chrome's physics on Linux):
+    // the content follows the fingers; the release speed is a smoothed
+    // average of the last moves; then a constant-deceleration glide of our
+    // own, frame by frame. Fingers lifted = Qt's ScrollEnd, or no event for
+    // 45 ms (not every compositor sends the end). A new swipe stops the
+    // glide and starts its own, at its own speed.
+    property var glider: null           // the Flickable gliding
+    property real glideV: 0             // px/s, positive = down
+    property real pixelV: 0
+    property double lastPixelTime: 0
+    readonly property real maxV: 9000
+    readonly property real decel: 2300  // px/s²
+    function stopGlide() { glide.stop(); release.stop(); root.glideV = 0; root.pixelV = 0; root.lastPixelTime = 0; }
+    function applyPixels(f, dy, now) {
+        glide.stop(); root.glideV = 0;
+        if (f.flicking) f.cancelFlick();
+        f.contentY = root.clampFor(f, f.contentY + dy);
+        root.glider = f;
+        const dt = root.lastPixelTime > 0 ? (now - root.lastPixelTime) / 1000 : 0;
+        if (dt >= 0.004 && dt <= 0.08) {
+            const inst = dy / dt;
+            root.pixelV = root.pixelV === 0 ? inst : root.pixelV * 0.65 + inst * 0.35;
+        } else {
+            root.pixelV = dy * 60;          // first move: one frame's worth
+        }
+        root.pixelV = Math.max(-root.maxV, Math.min(root.maxV, root.pixelV));
+        root.lastPixelTime = now;
+        release.restart();
+    }
+    function finishPixels() {
+        release.stop();
+        root.lastPixelTime = 0;
+        root.glideV = root.pixelV;
+        root.pixelV = 0;
+        if (Math.abs(root.glideV) < 40 || !root.glider) { root.glideV = 0; return; }
+        glide.start();
+    }
+    Timer { id: release; interval: 45; onTriggered: root.finishPixels() }
+    FrameAnimation {
+        id: glide
+        onTriggered: {
+            const f = root.glider;
+            const dt = Math.min(0.05, frameTime);
+            if (!f) { root.stopGlide(); return; }
+            if (dt <= 0) return;
+            const next = root.clampFor(f, f.contentY + root.glideV * dt);
+            const hit = next === f.contentY;
+            f.contentY = next;
+            const speed = Math.max(0, Math.abs(root.glideV) - root.decel * dt);
+            root.glideV = Math.sign(root.glideV) * speed;
+            if (hit || speed < 1) root.stopGlide();
+        }
     }
 
+    // The first few wheel events of each list go to the journal (as grove's
+    // do), so what the compositor really sends shows up when scrolling
+    // misbehaves; HEARTH_WHEEL_DEBUG=1 logs every one.
+    readonly property bool wheelDebug: Quickshell.env("HEARTH_WHEEL_DEBUG") === "1"
+    property int debugLeft: 4
+
     // One wheel event: pixel deltas (touchpad), angle deltas (mouse), phase,
-    // at x, y in this item. (Split out of the handler so tests can replay
-    // real touchpad sequences with their timing.)
+    // at x, y in this item.
     function wheel(x, y, pdy, ady, phase, now) {
+        if (root.wheelDebug || root.debugLeft > 0) {
+            root.debugLeft--;
+            console.warn("hearth wheel: pixel", pdy, "angle", ady, "phase", phase, "t", now % 100000);
+        }
+        // No amount (a swipe's ScrollBegin, its ScrollEnd): decides nothing,
+        // except that the fingers lifted.
+        if (pdy === 0 && ady === 0) {
+            if (phase === Qt.ScrollEnd && root.lastPixelTime > 0) root.finishPixels();
+            return;
+        }
         const dir = pdy !== 0 ? -pdy : -ady;
         // (A scroll in progress stays with its list until it pauses.)
-        const f = root.last && now - root.lastT < 200 && phase !== Qt.ScrollBegin ? root.last : root.pick(x, y, dir);
-        if (f !== root.last) { root.samples = []; root.carry = 0; root.lastT = 0; }
+        const f = root.last && now - root.lastT < 200 ? root.last : root.pick(x, y, dir);
+        if (f !== root.last && root.glider && root.glider !== f) root.stopGlide();
         root.last = f;
-        if (pdy !== 0 || phase === Qt.ScrollBegin || phase === Qt.ScrollUpdate || phase === Qt.ScrollEnd) {
-            // Touchpad: follow the fingers. Touching stops a glide (as on a
-            // Mac), but a swipe the same way while it glided adds to it.
-            if (f.flicking) {
-                const glide = -f.verticalVelocity;
-                root.carry = Math.abs(glide) > 60 ? glide : 0;
-                f.cancelFlick();
-            }
-            if (root.lastT === 0 || now - root.lastT > 200) root.samples = [];
-            const dy = -pdy;
-            if (dy !== 0) {
-                f.contentY = root.clampFor(f, f.contentY + dy);
-                root.samples = root.samples.concat([{ t: now, dy: dy }]).slice(-12);
-            }
-            root.lastT = now;
-            // Fingers lifted: glide on.
-            if (phase === Qt.ScrollEnd) {
-                let v = root.swipeVelocity(now);
-                if (root.carry !== 0 && Math.sign(root.carry) === Math.sign(v)) v += root.carry;
-                if (Math.abs(v) > 60) f.flick(0, -v);
-                root.samples = [];
-                root.carry = 0;
-                root.lastT = 0;
-            }
-        } else if (ady !== 0) {
+        root.lastT = now;
+        if (pdy !== 0) {
+            root.applyPixels(f, -pdy, now);
+            if (phase === Qt.ScrollEnd) root.finishPixels();
+        } else {
             // Mouse wheel: a smooth glide per notch (120 = one notch),
             // adding up while the wheel keeps turning.
+            root.stopGlide();
             const add = -ady / 120 * 1600;
             const v = f.flicking && Math.sign(-f.verticalVelocity) === Math.sign(-add) ? -f.verticalVelocity : 0;
             f.flick(0, -(v + add));
@@ -171,7 +205,7 @@ Item {
             enabled: bar.opacity > 0.05
             property real grabY: 0
             property real startY: 0
-            onPressed: mouse => { grabY = mapToItem(root, 0, mouse.y).y; startY = root.flickable.contentY; root.flickable.cancelFlick(); }
+            onPressed: mouse => { grabY = mapToItem(root, 0, mouse.y).y; startY = root.flickable.contentY; root.flickable.cancelFlick(); root.stopGlide(); }
             onPositionChanged: mouse => {
                 if (!pressed) return;
                 const dy = mapToItem(root, 0, mouse.y).y - grabY;

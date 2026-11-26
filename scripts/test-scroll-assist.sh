@@ -12,5 +12,9 @@ cp "$here/shell/widgets/ScrollAssist.qml" "$t/widgets/"
 cp "$here/tests/scroll-assist/tst_nested.qml" "$t/tests/"
 printf 'pragma Singleton\nimport QtQuick\nQtObject { property bool dark: true }\n' > "$t/Theme.qml"
 echo "singleton Theme 1.0 Theme.qml" > "$t/qmldir"
+# A stand-in Quickshell module (ScrollAssist reads Quickshell.env).
+mkdir -p "$t/Quickshell"
+printf 'pragma Singleton\nimport QtQuick\nQtObject { function env(n) { return "" } }\n' > "$t/Quickshell/Quickshell.qml"
+printf 'module Quickshell\nsingleton Quickshell 1.0 Quickshell.qml\n' > "$t/Quickshell/qmldir"
 cd "$t"
-QML_IMPORT_PATH="$qtd/lib/qt-6/qml" QML2_IMPORT_PATH="$qtd/lib/qt-6/qml" QT_QPA_PLATFORM=offscreen "$qtd/bin/qmltestrunner" -input tests
+QML_IMPORT_PATH="$t:$qtd/lib/qt-6/qml" QML2_IMPORT_PATH="$t:$qtd/lib/qt-6/qml" QT_QPA_PLATFORM=offscreen "$qtd/bin/qmltestrunner" -input tests

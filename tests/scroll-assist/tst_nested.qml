@@ -27,7 +27,7 @@ Item {
     TestCase {
         name: "nested"
         when: windowShown
-        function init() { page.cancelFlick(); list.cancelFlick(); page.contentY = 0; list.contentY = 0; wait(300) }
+        function init() { outerSA.stopGlide(); innerSA.stopGlide(); page.cancelFlick(); list.cancelFlick(); page.contentY = 0; list.contentY = 0; wait(300) }
         function test_wheel_goes_to_inner_list() {
             mouseWheel(top, 150, 120, 0, -120)
             tryVerify(() => list.contentY > 50, 2000, "list scrolled")
@@ -44,39 +44,40 @@ Item {
             tryVerify(() => page.contentY > 50, 2000, "page scrolled once the list is at its end")
         }
 
-        // Touchpad swipes replayed as they arrive (Wayland: ScrollBegin,
-        // updates every ~10 ms, ScrollEnd with no delta), through wheel().
-        function swipe(sa, x, y, dys) {
+        // Touchpad swipes as Wayland sends them (ScrollBegin with no amount,
+        // updates every ~10 ms, ScrollEnd with none), through wheel(). (Not
+        // real QWheelEvents: QtTest can't make phased ones.)
+        function swipe(sa, x, y, dys, noEnd) {
             const t0 = Date.now();
             sa.wheel(x, y, 0, 0, Qt.ScrollBegin, t0);
             dys.forEach((d, i) => sa.wheel(x, y, -d, 0, Qt.ScrollUpdate, t0 + 10 * (i + 1)));
-            sa.wheel(x, y, 0, 0, Qt.ScrollEnd, t0 + 10 * dys.length + 5);
+            if (!noEnd) sa.wheel(x, y, 0, 0, Qt.ScrollEnd, t0 + 10 * dys.length + 5);
         }
+        function gliding(f) { const y = f.contentY; wait(80); return f.contentY !== y; }
         function test_swipe_glides_inner_list() {
             swipe(outerSA, 150, 80, [10, 20, 30, 30, 30])
-            verify(list.flicking, "the list glides after the fingers lift")
-            const y = list.contentY
-            wait(80)
-            verify(list.contentY > y, "gliding down")
+            verify(gliding(list), "the list glides after the fingers lift")
             compare(page.contentY, 0, "page stayed")
         }
-        function test_second_swipe_while_gliding_keeps_momentum() {
+        function test_second_swipe_while_gliding_keeps_gliding() {
             swipe(outerSA, 150, 80, [10, 20, 30, 30, 30])
             wait(60)
-            verify(list.flicking)
-            const before = Math.abs(list.verticalVelocity)
             // A quick second flick: only two events.
             swipe(outerSA, 150, 80, [25, 30])
-            verify(list.flicking, "still gliding after a quick second swipe")
-            wait(30)
-            verify(Math.abs(list.verticalVelocity) > before * 0.8, "the second swipe adds to the glide (" + list.verticalVelocity + " vs " + before + ")")
+            verify(gliding(list), "still gliding after a quick second swipe")
+            wait(150)
+            verify(gliding(list), "and a while later")
             compare(page.contentY, 0, "page stayed")
         }
-        function test_swipe_back_stops_and_reverses() {
+        function test_no_end_event_still_glides() {
+            swipe(outerSA, 150, 80, [10, 20, 30, 30, 30], true)
+            wait(100)
+            verify(gliding(list), "glides once the events stop, without ScrollEnd")
+        }
+        function test_swipe_back_reverses() {
             swipe(outerSA, 150, 80, [10, 20, 30, 30, 30])
             wait(60)
             swipe(outerSA, 150, 80, [-25, -30])
-            verify(list.flicking)
             const y = list.contentY
             wait(80)
             verify(list.contentY < y, "gliding back up")
