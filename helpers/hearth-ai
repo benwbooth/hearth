@@ -536,6 +536,7 @@ def providers(cfg):
 # --- GPUs and VRAM -------------------------------------------------------------
 
 _gpu_names = {}
+_busy_avg = {}
 
 
 def gpu_name(dev):
@@ -569,18 +570,17 @@ def gpus():
             used = int(open(os.path.join(dev, "mem_info_vram_used")).read())
         except (OSError, ValueError):
             continue
-        # gpu_busy_percent is an instant reading: average a few.
+        # gpu_busy_percent is an instant reading that asks the SMU firmware:
+        # read it once per poll and smooth across polls (never a burst; a
+        # wedged SMU blocks every reader).
         busy = None
-        samples = []
-        for i in range(5):
-            try:
-                samples.append(int(open(os.path.join(dev, "gpu_busy_percent")).read()))
-            except (OSError, ValueError):
-                break
-            if i < 4:
-                time.sleep(0.03)
-        if samples:
-            busy = round(sum(samples) / len(samples))
+        try:
+            cur = int(open(os.path.join(dev, "gpu_busy_percent")).read())
+            prev = _busy_avg.get(card)
+            busy = cur if prev is None else round(0.5 * prev + 0.5 * cur)
+            _busy_avg[card] = busy
+        except (OSError, ValueError):
+            pass
         gtt_used = gtt_total = 0
         try:
             gtt_used = int(open(os.path.join(dev, "mem_info_gtt_used")).read())
