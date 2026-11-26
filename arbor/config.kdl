@@ -184,10 +184,13 @@ screenshot-path "~/Pictures/Screenshots/Screenshot_%Y%m%d_%H%M%S.png"
 spawn-sh-at-startup "d=\"$HOME/.local/bin/devloop\"; if [ -x \"$d\" ] && [ -f \"$HOME/src/home-services/devloop/apps/hearth.conf\" ]; then \"$d\" start hearth; sleep 30; pgrep -u \"$(id -u)\" -f 'quickshell -p /nix/store/[^ ]*-hearth-[^ ]*/share/hearth/shell' >/dev/null && exit 0; fi; exec hearth"
 spawn-at-startup "vicinae" "server"
 // The wallpaper is drawn by hearth itself (a background-layer surface per
-// screen, cross-faded; Settings > Wallpaper), so there's no swaybg. Until
-// hearth is up (about a second at login) the screen is black; if a
-// swaybg is still running from an older config, hearth stops it once its
-// own wallpaper is on screen.
+// screen, cross-faded; Settings > Wallpaper). Until hearth is up, swaybg
+// shows hearth's last still (~/.cache/hearth/wallpaper, kept current by
+// hearth for the login and lock screens), so the desktop's picture is
+// there from the first frames of a login instead of a grey screen; hearth
+// stops this swaybg once its own wallpaper is on screen
+// (services/Wallpaper.qml backgroundReady).
+spawn-sh-at-startup "w=\"$HOME/.cache/hearth/wallpaper\"; [ -e \"$w\" ] && exec swaybg -m fill -i \"$w\""
 // "Set as wallpaper" from apps goes to hearth's wallpaper.
 portal {
     wallpaper-command "hearth-ipc" "call" "wallpaper" "setImage"
