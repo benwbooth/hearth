@@ -681,7 +681,7 @@ def attempt(attr, argv, variant, extra_env, extra_args, wait_win=50, wait_menu=1
     SCOPE["n"] += 1
     SCOPE["unit"] = f"menuprobe-{os.getpid()}-{SCOPE['n']}.scope"
     proc = subprocess.Popen(["systemd-run", "--user", "--scope", "--quiet", "--collect", "--unit", SCOPE["unit"],
-                             "-p", "Slice=menusurvey.slice",  # the survey's 16 GB in all (restart-workers.sh)
+                             "-p", "Slice=menusurvey.slice",  # the survey's 8 GB in all (restart-workers.sh)
                              "-p", "MemoryMax=4G", "-p", "CPUWeight=idle", "-p", "IOWeight=1",
                              "-p", "AllowedCPUs=0-7,12-19", "prlimit", "--core=0", "--fsize=1073741824", "--", "setsid", RIG, "run", "env", *envargs, *argv, *extra_args], env=ENV,
                             stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
@@ -1400,12 +1400,12 @@ def app_rows():
 
 
 SLICE = "menusurvey.slice"
-SLICE_LIMITS = ["MemoryHigh=12G", "MemoryMax=16G", "CPUWeight=idle", "IOWeight=1"]
+SLICE_LIMITS = ["MemoryHigh=6G", "MemoryMax=8G", "CPUWeight=idle", "IOWeight=1"]
 
 
 def ensure_slice():
     """The survey's slice and its limits, whoever starts a run: all of it
-    (workers, rigs, probed apps, one-off runs) in 16 GB (Ben, 2026-11-26:
+    (workers, rigs, probed apps, one-off runs) in 8 GB (Ben, 2026-11-26:
     11 workers once held 40 GB). Runtime properties: set on every start."""
     subprocess.run(["systemctl", "--user", "start", SLICE], capture_output=True, timeout=20)
     subprocess.run(["systemctl", "--user", "set-property", "--runtime", SLICE, *SLICE_LIMITS],

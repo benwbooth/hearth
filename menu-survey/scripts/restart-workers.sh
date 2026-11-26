@@ -29,9 +29,9 @@ start() { u=$1; W=$2; shift 2
     -E PATH="$PATH" -E HOME="$HOME" -E XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" -E DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" \
     -E MENU_PROBE_WORKER=$W -E MENU_PROBE_DEVLOOP=1 python3 -I scripts/menu-probe.py --count 5000 --keep-rig "$@"
   # The whole survey (workers, their rigs, every probed app's scope) in one
-  # slice: 16 GB in all, whatever any one app does (Ben, 2026-11-26: 11
+  # slice: 8 GB in all, whatever any one app does (Ben, 2026-11-26: 11
   # workers once held 40 GB).
-  systemctl --user set-property --runtime menusurvey.slice MemoryHigh=12G MemoryMax=16G CPUWeight=idle IOWeight=1 2>/dev/null || true; }
+  systemctl --user set-property --runtime menusurvey.slice MemoryHigh=6G MemoryMax=8G CPUWeight=idle IOWeight=1 2>/dev/null || true; }
 # Six workers (each skips what any worker measured already).
 start w0 "" --sources nixpkgs
 start w2 2 --sources flathub,nixpkgs-uncached,nixpkgs-unfree --stride 2 --offset 0
