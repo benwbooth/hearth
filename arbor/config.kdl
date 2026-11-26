@@ -88,6 +88,13 @@ overview {
     backdrop-color "#000000"
 }
 
+// Draw nothing until the wallpaper covers the screen (swaybg's still, then
+// hearth's own), at most 8 s: a login goes from the login screen to the
+// desktop's picture, never black with only the menu bar on it.
+debug {
+    hold-first-frame
+}
+
 layout {
     gaps 8
     background-color "transparent"
@@ -202,7 +209,8 @@ spawn-at-startup "vicinae" "server"
 // there from the first frames of a login instead of a grey screen; hearth
 // stops this swaybg once its own wallpaper is on screen
 // (services/Wallpaper.qml backgroundReady).
-spawn-sh-at-startup "w=\"$HOME/.cache/hearth/wallpaper\"; [ -e \"$w\" ] && exec swaybg -m fill -i \"$w\""
+// Without that still yet (a first login), the login screen's copy.
+spawn-sh-at-startup "w=\"$HOME/.cache/hearth/wallpaper\"; [ -e \"$w\" ] || w=/var/lib/hearth/wallpaper/wallpaper.jpg; [ -e \"$w\" ] && exec swaybg -m fill -i \"$w\""
 // "Set as wallpaper" from apps goes to hearth's wallpaper.
 portal {
     wallpaper-command "hearth-ipc" "call" "wallpaper" "setImage"

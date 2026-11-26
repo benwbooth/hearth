@@ -203,19 +203,20 @@ in
     # - Plymouth doesn't quit first (plymouth-quit-wait): it lets go of the
     #   screen (deactivate) and keeps its last frame there; the greeter's
     #   arbor doesn't draw until the login screen has (hold-first-frame),
-    #   and once arbor holds the display Plymouth quits leaving the picture
-    #   (--retain-splash). plymouth-quit.service then has nothing to do.
+    #   and once that frame is up Plymouth quits (greetd's ExecStartPost
+    #   waits for it, at most 30 s). plymouth-quit.service, ordered after
+    #   greetd, then has nothing left to do.
     systemd.services.greetd = {
       serviceConfig.Type = lib.mkForce "simple";
       serviceConfig.ExecStartPre = lib.mkIf plymouth [ "-${pkgs.plymouth}/bin/plymouth deactivate" ];
       serviceConfig.ExecStartPost = lib.mkIf plymouth [ "-${pkgs.writeShellScript "hearth-greeter-plymouth-quit" ''
         ${pkgs.plymouth}/bin/plymouth --ping || exit 0
-        # Quit once the greeter's arbor has the display (its IPC socket comes
-        # after the DRM setup): quitting before would hand the screen back
-        # to the text console.
-        dir=/run/user/$(${pkgs.coreutils}/bin/id -u greeter)
-        for i in $(${pkgs.coreutils}/bin/seq 150); do
-          for s in "$dir"/arbor.*.sock; do [ -S "$s" ] && break 2; done
+        # Quit once the login screen's first frame is on screen (it touches
+        # hearth-greeter-drawn): Plymouth's last frame goes away with it, so
+        # quitting earlier leaves the screen black until the greeter draws.
+        f=/run/user/$(${pkgs.coreutils}/bin/id -u greeter)/hearth-greeter-drawn
+        for i in $(${pkgs.coreutils}/bin/seq 300); do
+          [ -e "$f" ] && break
           ${pkgs.coreutils}/bin/sleep 0.1
         done
         ${pkgs.plymouth}/bin/plymouth quit --retain-splash

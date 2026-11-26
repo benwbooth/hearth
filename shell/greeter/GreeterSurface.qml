@@ -104,6 +104,14 @@ Item {
             // starts, without the logo.
             Timer { running: splashLogo.parent.opacity === 0; interval: 50; onTriggered: splashLogo.done = true }
         }
+        // Tell greetd's unit the first frame is on screen
+        // ($XDG_RUNTIME_DIR/hearth-greeter-drawn): only then does Plymouth
+        // quit (nix/greeter.nix); its last frame goes away with it.
+        Timer {
+            running: root.isMain && (splashLogo.dir === "" || splashLogo.status !== Image.Loading)
+            interval: 300
+            onTriggered: Quickshell.execDetached(["sh", "-c", "touch \"$XDG_RUNTIME_DIR/hearth-greeter-drawn\""])
+        }
     }
     Timer { id: readyFallback; property bool done: false; interval: 800; running: true; onTriggered: done = true }
 
