@@ -46,8 +46,12 @@ pkgs.testers.runNixOSTest {
   testScript = ''
     import time
     machine.start()
-    # OVMF, then GRUB: give it time to draw the menu and count a few seconds.
+    # OVMF, then GRUB, which waits with the menu hidden (the splash only).
     time.sleep(12)
+    machine.screenshot("grub-hidden")
+    # Esc brings the menu up.
+    machine.send_key("esc")
+    time.sleep(2)
     machine.screenshot("grub-menu")
     machine.send_key("down")
     time.sleep(1)

@@ -242,8 +242,11 @@ global.frame = 0;
 fun refresh() {
   layout_if_resized();
   global.frame++;
-  # Fade the logo in over half a second (plymouth calls this at 50 Hz).
+  # Fade the logo in over half a second (plymouth calls this at 50 Hz). Not
+  # at boot: hearth's GRUB theme has already drawn this very frame (its
+  # splash), so the logo is there from the first frame and doesn't blink.
   a = clamp(frame / 25, 0, 1);
+  if (Plymouth.GetMode() == "boot") a = 1;
   logo.sprite.SetOpacity(a * a * (3 - 2 * a));
 
   if (show_bar && !asking) {

@@ -183,17 +183,6 @@ def build(height, tdir):
     for k, b in parts.items():
         clear.crop(b).save(f"{tdir}/item_{k}.png")
 
-    # Terminal box (the "c" console and "e" editor): solid dark panel, same
-    # corners.
-    term = Image.new("RGBA", (side * SS, side * SS), (0, 0, 0, 0))
-    ImageDraw.Draw(term).rounded_rectangle(
-        [0, 0, side * SS - 1, side * SS - 1], r, fill=(22, 22, 25, 242),
-        outline=(255, 255, 255, 40), width=SS)
-    term = term.resize((side, side), Image.LANCZOS)
-    for k, b in parts.items():
-        term.crop(b).save(f"{tdir}/terminal_{k}.png")
-
-
     # --- theme.txt --------------------------------------------------------------
     row = ITEM_H + 2 * ITEM_PAD + ITEM_SPACE
     theme = f"""\
@@ -204,12 +193,11 @@ def build(height, tdir):
     desktop-image-scale-method: "stretch"
     desktop-color: "#0e0e10"
     terminal-font: "{fonts['mono']}"
-    terminal-box: "terminal_*.png"
-    terminal-left: "10%"
-    terminal-top: "10%"
-    terminal-width: "80%"
-    terminal-height: "80%"
-    terminal-border: "{px(24)}"
+    terminal-left: "0"
+    terminal-top: "0"
+    terminal-width: "100%"
+    terminal-height: "100%"
+    terminal-border: "0"
 
     + boot_menu {{
       left = 50%-{MENU_W // 2}
@@ -268,6 +256,29 @@ with open(f"{out}/theme.txt", "w") as f:
     f.write(t)
 shutil.copytree(f"{out}/h1600/icons", f"{out}/icons")  # GRUB looks in <theme dir>/icons
 
+# Boot splash per mode: Plymouth's first frame (black, the white snowflake at
+# hearth.script's size and place), shown as gfxterm's background from the
+# moment the mode is set. With the menu hidden it is all GRUB ever shows, and
+# it stays up while GRUB reads the kernel and initrd and until Plymouth draws
+# the same picture, so the hand-over is seamless. Keep in step with layout()
+# in boot/plymouth/hearth.script.
+os.makedirs(f"{out}/splash", exist_ok=True)
+logos = {}
+for m, _ in MODES:
+    w, h = (int(v) for v in m.split("x"))
+    size = min(max(int(h * 0.094 / 8 + 0.5) * 8, 48), 512)
+    if size not in logos:
+        dst = f"{out}/splash/logo-{size}.png"
+        subprocess.run(["resvg", "-w", str(size), "-h", str(size), snowflake,
+                        dst], check=True)
+        # Flat white silhouette, as mkassets.py makes Plymouth's.
+        logos[size] = Image.open(dst).convert("RGBA").getchannel("A")
+        os.remove(dst)
+    img = Image.new("RGB", (w, h), (0, 0, 0))
+    img.paste((255, 255, 255), (int((w - size) / 2), int(h * 0.46 - size / 2)),
+              logos[size])
+    img.save(f"{out}/splash/{m}.png", optimize=True)
+
 modes = " ".join(f"{m}:{h}" for m, h in MODES)
 with open(f"{out}/select-mode.cfg", "w") as f:
     f.write(f"""\
@@ -279,7 +290,10 @@ with open(f"{out}/select-mode.cfg", "w") as f:
 # GRUB's own "auto" mode falls back to 800x600 on monitors whose preferred
 # mode is 4096 px wide or more, so try real modes from the largest down and
 # keep the first the firmware has. Linux keeps it (gfxpayload=keep), so the
-# boot splash starts at the same size without a mode switch.
+# boot splash starts at the same size without a mode switch. The mode's
+# splash (Plymouth's first frame) becomes gfxterm's background: the hidden
+# menu's wait, the kernel and initrd loading and the theme's full-screen
+# console all show it, so nothing else appears between firmware and Plymouth.
 #
 # gfxterm appends ";auto" to gfxmode, so a missing mode would quietly become
 # "auto" and look like a success. The ",none" after it is not a mode: GRUB
@@ -292,6 +306,7 @@ else
   insmod vbe
 fi
 insmod gfxterm
+insmod png
 insmod regexp
 regexp --set=1:hearth_dir '^(.*)/[^/]*$' "$theme"
 set gfxpayload=keep
@@ -301,6 +316,9 @@ for hearth_mode in {modes}; do
   set gfxmode="$hearth_wxh,none"
   if terminal_output gfxterm; then
     set gfxmode="$hearth_wxh"
+    background_image -m normal "$hearth_dir/splash/$hearth_wxh.png"
+    # Paint it now: nothing else draws while the hidden menu waits.
+    clear
     regexp --set=1:hearth_height ':(.*)$' "$hearth_mode"
     break
   fi

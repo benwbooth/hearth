@@ -36,6 +36,10 @@ in {
         # NixOS sets gfxmode and turns on gfxterm only when a font is set; the
         # theme's script does both itself, once, with the mode it found.
         font = null;
+        # macOS-style: no menu unless Esc, F4 or Shift is pressed while GRUB
+        # waits (boot.loader.timeout seconds); the screen shows the boot
+        # splash meanwhile.
+        timeoutStyle = lib.mkDefault "hidden";
         extraConfig = ''
           regexp --set=1:hearth_theme_dir '^(.*)/[^/]*$' "$theme"
           source "$hearth_theme_dir/select-mode.cfg"

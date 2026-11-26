@@ -758,7 +758,8 @@ nixos-icons' SVG with resvg, GRUB fonts made from Inter with grub-mkfont):
 
 - `packages.x86_64-linux.plymouth-theme-hearth`: Plymouth theme `hearth`
   (script plugin). Black screen, a flat white NixOS snowflake (0.094 x screen
-  height, fading in over 0.5 s), a thin rounded progress bar under it
+  height; at boot it is there from the first frame, since GRUB already drew
+  it, while shutdown fades it in over 0.5 s), a thin rounded progress bar under it
   (0.205 x height wide, white over a 24% track, eased so it glides), all
   macOS boot proportions. A disk passphrase request swaps the bar for a
   FileVault-like pill field with white dots and an "Enter Password"
@@ -779,11 +780,20 @@ nixos-icons' SVG with resvg, GRUB fonts made from Inter with grub-mkfont):
   `select-mode.cfg`, which tries real modes from 5120x2160 down, keeps the
   first the firmware has and switches to that height's theme. Linux keeps the
   mode (`gfxpayload=keep`), so the splash starts at the panel's resolution.
+  Each mode also has `splash/<WxH>.png`, Plymouth's first frame (black, the
+  snowflake at the same size and place), set as gfxterm's background: the
+  menu is hidden (`timeout_style=hidden`; Esc, F4 or holding Shift during
+  the timeout shows it), and the waiting, the kernel and initrd loading and
+  the full-screen `c`/`e` console all show that frame, so the picture runs
+  unbroken from GRUB into Plymouth. The firmware only offers modes it finds
+  in the monitor's base EDID block (the LG lists 5120x2160 only in its
+  DisplayID extension, so GRUB gets 3440x1440 there); no theme can go above
+  the firmware's modes.
   GRUB's `boot_menu` only lays items out vertically, so macOS's horizontal
   row of disks becomes a centred column.
 - `packages.x86_64-linux.boot-screenshots`: a NixOS VM test (OVMF -> GRUB ->
   Plymouth with the LG's 5120x2160 as the monitor's preferred mode, and fake
-  Windows and firmware entries) that saves screenshots of the GRUB menu, the splash and the password prompt to
+  Windows and firmware entries) that saves screenshots of the hidden menu's wait, the GRUB menu (after Esc), the splash and the password prompt to
   `result/`. Nothing touches the host's bootloader.
 
 Use in /etc/nixos (`nix/boot.nix` sets the GRUB theme, `font = null` so
