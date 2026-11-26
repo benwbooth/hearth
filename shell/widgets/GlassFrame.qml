@@ -73,10 +73,28 @@ Item {
 
     // --- real glass reporting ---
     readonly property var hostWindow: root.QsWindow.window
+    // A pop-up (preview, tooltip, menu) reports its glass only from its
+    // second drawn frame on: arbor draws pop-up glass as soon as it
+    // arrives, and sent with the first frame it showed for a frame at the
+    // parent's corner (the screen's lower left, under the Dock), before
+    // the pop-up was placed: an empty "tooltip" flashing there.
+    readonly property bool inPopup: !!hostWindow && hostWindow.anchor !== undefined && hostWindow.exclusiveZone === undefined
+    property int shownFrames: 0
+    Connections {
+        target: root.inPopup ? root.hostWindow : null
+        ignoreUnknownSignals: true
+        function onVisibleChanged() { root.shownFrames = 0; }
+    }
+    Connections {
+        target: root.inPopup && root.realGlass ? root.Window.window : null
+        ignoreUnknownSignals: true
+        function onFrameSwapped() { if (root.shownFrames < 2) { root.shownFrames++; Qt.callLater(root.report); } }
+    }
 
     function report() {
         const win = root.hostWindow;
-        if (!root.realGlass || !win || !win.visible || !root.visible || root.width <= 0 || root.height <= 0) {
+        if (!root.realGlass || !win || !win.visible || !root.visible || root.width <= 0 || root.height <= 0
+            || (root.inPopup && root.shownFrames < 2)) {
             RealGlass.remove(root);
             return;
         }
