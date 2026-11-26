@@ -22,7 +22,8 @@ including Auto's 7:00/19:00 switch), so the whole desktop follows:
 - Qt 5/6 apps outside Plasma (QT_QPA_PLATFORMTHEME=qt5ct, set in the NixOS
   config): ~/.config/qt{5,6}ct/qt{5,6}ct.conf and a "hearth" colour scheme,
   hearth's own palette and accent (shell/Theme.qml), Breeze icons, Inter and
-  the Fusion style. Running Qt apps reload them when they change.
+  the Hearth widget style (github.com/benwbooth/hearth-qt-style, also named
+  in kdeglobals for KDE apps). Running Qt apps reload them when they change.
 
 Only what differs is written; with nothing to change it does nothing.
 Prints one JSON line: {"changed": [...]}.
@@ -429,7 +430,7 @@ def apply_qtct():
                 "custom_palette=true\n"
                 f"icon_theme={ICONS}\n"
                 "standard_dialogs=default\n"
-                "style=Fusion\n\n"
+                "style=Hearth\n\n"
                 "[Fonts]\n"
                 f"fixed=\"{mono}\"\n"
                 f"general=\"{font}\"\n\n"
@@ -451,6 +452,23 @@ def apply_qtct():
                 pass
             write_atomic(path, text)
             changed.append(os.path.relpath(path, CONFIG))
+    apply_kde_widget_style()
+
+
+def apply_kde_widget_style():
+    """kdeglobals [KDE] widgetStyle=Hearth: KDE apps outside Plasma
+    (KStyleManager::initStyle, KXmlGui apps, Haruna...) set the style named
+    there, and Breeze when none is, over the qt5ct/qt6ct one."""
+    path = os.path.join(CONFIG, "kdeglobals")
+    sections = read_sections(path)
+    before = render(sections) if os.path.exists(path) else ""
+    set_key(sections, "[KDE]", "widgetStyle", "Hearth")
+    after = render(sections)
+    if after == before:
+        return
+    write_atomic(path, after)
+    if "kdeglobals" not in changed:
+        changed.append("kdeglobals")
 
 
 GTKRC_BEGIN = "# hearth: begin (written by hearth-color-scheme; edits here are replaced)"
