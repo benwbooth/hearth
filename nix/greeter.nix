@@ -17,6 +17,9 @@ let
   sessions = config.services.displayManager.sessionData.desktops;
   arbor = lib.getExe' cfg.arborPackage "arbor";
   greeter = lib.getExe' cfg.package "hearth-greeter";
+  plymouth = config.boot.plymouth.enable;
+  # hearth's own splash: the login screen starts with its logo (nix/boot.nix).
+  splash = plymouth && config.boot.plymouth.theme == "hearth";
 
   # The greeter's arbor: displays and keyboard layouts from hearth's copies
   # in /var/lib/hearth/greeter (written by hearth whenever you change them
@@ -40,6 +43,11 @@ let
         skip-at-startup
     }
     prefer-no-csd
+    // Plymouth's last frame stays on screen until the login screen has
+    // drawn (with the same logo), instead of a black frame between them.
+    debug {
+        hold-first-frame
+    }
     cursor {
         xcursor-theme "${cfg.cursorTheme}"
         xcursor-size 24
@@ -76,6 +84,7 @@ let
     export XCURSOR_PATH=/run/current-system/sw/share/icons:${pkgs.adwaita-icon-theme}/share/icons:${pkgs.kdePackages.breeze}/share/icons
     export HEARTH_GREETER=1
     export HEARTH_GREETER_STATE_DIR=$state
+    ${lib.optionalString splash "export HEARTH_GREETER_SPLASH=${self.packages.${system}.plymouth-theme-hearth}/share/plymouth/themes/hearth"}
     export HEARTH_GREETER_SESSIONS=${sessions}/share/wayland-sessions
     export HEARTH_GREETER_DEFAULT_SESSION=${lib.escapeShellArg cfg.defaultSession}
     ${lib.optionalString (cfg.wallpaper != null) "export HEARTH_GREETER_WALLPAPER=${cfg.wallpaper}"}
@@ -183,6 +192,34 @@ in
         user = "greeter";
       };
     };
+
+    # Straight from the boot splash to the login screen, like macOS:
+    # - Not Type=idle (NixOS's default for greetd): systemd holds idle
+    #   services back up to 5 s while other boot jobs still run, and the
+    #   screen was black meanwhile.
+    # - Plymouth doesn't quit first (plymouth-quit-wait): it lets go of the
+    #   screen (deactivate) and keeps its last frame there; the greeter's
+    #   arbor doesn't draw until the login screen has (hold-first-frame),
+    #   and once arbor holds the display Plymouth quits leaving the picture
+    #   (--retain-splash). plymouth-quit.service then has nothing to do.
+    systemd.services.greetd = {
+      serviceConfig.Type = lib.mkForce "simple";
+      after = lib.mkIf plymouth (lib.mkForce [ "systemd-user-sessions.service" "getty@tty1.service" ]);
+      serviceConfig.ExecStartPre = lib.mkIf plymouth [ "-${pkgs.plymouth}/bin/plymouth deactivate" ];
+      serviceConfig.ExecStartPost = lib.mkIf plymouth [ "-${pkgs.writeShellScript "hearth-greeter-plymouth-quit" ''
+        ${pkgs.plymouth}/bin/plymouth --ping || exit 0
+        # Quit once the greeter's arbor has the display (its IPC socket comes
+        # after the DRM setup): quitting before would hand the screen back
+        # to the text console.
+        dir=/run/user/$(${pkgs.coreutils}/bin/id -u greeter)
+        for i in $(${pkgs.coreutils}/bin/seq 150); do
+          for s in "$dir"/arbor.*.sock; do [ -S "$s" ] && break 2; done
+          ${pkgs.coreutils}/bin/sleep 0.1
+        done
+        ${pkgs.plymouth}/bin/plymouth quit --retain-splash
+      ''}" ];
+    };
+    systemd.services.plymouth-quit = lib.mkIf plymouth { after = [ "greetd.service" ]; };
 
     security.pam.services.greetd = {
       # Password only: pam_fprintd would block the stack waiting for a

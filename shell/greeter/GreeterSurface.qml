@@ -80,6 +80,30 @@ Item {
         opacity: Greeter.launching ? 1 : (wall.ready || readyFallback.done ? 0 : 1)
         Behavior on opacity { NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
         z: 5
+        // The boot splash's logo (hearth's Plymouth theme, HEARTH_GREETER_SPLASH:
+        // nix/greeter.nix), the same image at the same pixels: Plymouth's last
+        // frame stays on screen until this one replaces it (arbor's
+        // hold-first-frame), and it fades into the wallpaper with the black.
+        Image {
+            id: splashLogo
+            readonly property string dir: Quickshell.env("HEARTH_GREETER_SPLASH") ?? ""
+            readonly property real dpr: root.screen && root.screen.devicePixelRatio > 0 ? root.screen.devicePixelRatio : 1
+            readonly property int hp: Math.round(root.height * dpr)
+            readonly property int wp: Math.round(root.width * dpr)
+            // hearth.script: clamp(int(H * 0.094 / 8 + 0.5) * 8, 48, 512).
+            readonly property int px: Math.max(48, Math.min(512, Math.floor(hp * 0.094 / 8 + 0.5) * 8))
+            property bool done: false
+            visible: dir !== "" && !done && hp > 0
+            source: visible ? "file://" + dir + "/logo-" + px + ".png" : ""
+            x: Math.floor((wp - px) / 2) / dpr
+            y: Math.floor(hp * 0.46 - px / 2) / dpr
+            width: px / dpr
+            height: px / dpr
+            smooth: true
+            // Only the first time: the black comes back while a session
+            // starts, without the logo.
+            Timer { running: splashLogo.parent.opacity === 0; interval: 50; onTriggered: splashLogo.done = true }
+        }
     }
     Timer { id: readyFallback; property bool done: false; interval: 800; running: true; onTriggered: done = true }
 

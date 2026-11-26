@@ -81,6 +81,13 @@ cursor {
     xcursor-size 24
 }
 
+// Behind transparent workspaces until hearth's wallpaper is up (and in the
+// overview where no wallpaper covers it): black, so a login fades from the
+// login screen's black into the wallpaper instead of flashing grey.
+overview {
+    backdrop-color "#000000"
+}
+
 layout {
     gaps 8
     background-color "transparent"
