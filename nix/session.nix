@@ -12,7 +12,7 @@ self:
 # hearth: canopy got no tray icon, tessera no global menu (2026-11-25).
 #
 # hearth-ready.service waits (at most 30 s) until the three names are on
-# the session bus; every app-*.service (the autostart units, and the apps
+# the session bus and the portal answers (dark mode); every app-*.service (the autostart units, and the apps
 # hearth itself starts, which find it long done) is ordered after it.
 # arbor's session restore waits for hearth's menu bar the same way, and
 # arbor starts the menu registrar first thing (hearth/arbor/config.kdl).
@@ -27,6 +27,14 @@ let
         # activates) anything.
         ${pkgs.systemd}/bin/busctl --user status "$n" >/dev/null 2>&1 || missing="$missing $n"
       done
+      # The portal answering, not just started: apps ask it once, at start,
+      # for dark mode (Claude stayed light all session when it didn't answer
+      # in time, 2026-11-25). Asking also starts it (D-Bus activation).
+      if [ -z "$missing" ] && ! ${pkgs.systemd}/bin/busctl --user --timeout=2 call \
+          org.freedesktop.portal.Desktop /org/freedesktop/portal/desktop \
+          org.freedesktop.portal.Settings ReadOne ss org.freedesktop.appearance color-scheme >/dev/null 2>&1; then
+        missing=" org.freedesktop.portal.Desktop (Settings)"
+      fi
       [ -z "$missing" ] && { echo "hearth is ready"; exit 0; }
       sleep 0.25
     done
@@ -34,6 +42,12 @@ let
   '';
 in
 {
+  # The portal (dark mode, file dialogs, screenshots for apps) starts as soon
+  # as the session does, not when the first app asks: arbor has imported
+  # WAYLAND_DISPLAY by then (graphical-session.target), and its backends
+  # are quick (grove claims its name before Qt starts, grove 35b9e78).
+  systemd.user.services.xdg-desktop-portal.wantedBy = [ "graphical-session.target" ];
+
   systemd.user.services.hearth-ready = {
     description = "Wait until hearth's tray, notifications and global menu are up";
     partOf = [ "graphical-session.target" ];
