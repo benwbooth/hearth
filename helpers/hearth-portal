@@ -15,7 +15,9 @@ Interfaces:
   contrast / reduced-motion, from hearth's light/dark and accent
   ($XDG_STATE_HOME/hearth/appearance.json, written by hearth-color-scheme),
   plus every org.gnome.* key set in dconf (fonts, cursor, button layout for
-  GTK Flatpaks). SettingChanged when either changes.
+  GTK Flatpaks), and ~/.config/kdeglobals as org.kde.kdeglobals.<Group>
+  (KDE's platform theme in Flatpak runtimes: colours, fonts, widget style).
+  SettingChanged when any changes.
 - Notification: handed to hearth's notification server
   (org.freedesktop.Notifications), buttons and default action included.
 - Lockdown: the GNOME lockdown/privacy keys in dconf (all off by default).
@@ -336,6 +338,58 @@ class Appearance:
         return out
 
 
+KDEGLOBALS = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "kdeglobals")
+KDE_NS = "org.kde.kdeglobals."
+
+
+class KdeGlobals:
+    """~/.config/kdeglobals as the org.kde.kdeglobals.<Group> namespaces
+    (as xdg-desktop-portal-kde serves them): KDE's platform theme in Flatpak
+    runtimes reads its colours, fonts, icons and widget style (Hearth)
+    through the portal, since the sandbox can't read the file."""
+
+    def __init__(self, on_change):
+        self.on_change = on_change
+        self.groups = {}
+        self.read()
+        d = Gio.File.new_for_path(os.path.dirname(KDEGLOBALS))
+        self.monitor = d.monitor_directory(Gio.FileMonitorFlags.WATCH_MOVES, None)
+        self.monitor.connect("changed", self.changed)
+
+    def read(self):
+        groups, cur = {}, None
+        try:
+            with open(KDEGLOBALS, encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    line = line.rstrip("\n")
+                    if line.startswith("[") and line.endswith("]"):
+                        # Nested groups ([A][B]) as KConfig names them: A\x1dB.
+                        cur = "\x1d".join(line[1:-1].split("]["))
+                        groups.setdefault(cur, {})
+                    elif cur is not None and "=" in line and not line.startswith("#"):
+                        k, v = line.split("=", 1)
+                        groups[cur][k.strip()] = v
+        except OSError:
+            pass
+        self.groups = groups
+
+    def changed(self, _m, f, other, _event):
+        names = {x.get_basename() for x in (f, other) if x}
+        if os.path.basename(KDEGLOBALS) not in names:
+            return
+        before = self.values()
+        self.read()
+        after = self.values()
+        for ns, keys in after.items():
+            old = before.get(ns, {})
+            for k, v in keys.items():
+                if old.get(k) != v:
+                    self.on_change(ns, k, v)
+
+    def values(self):
+        return {KDE_NS + g: {k: dbus.String(v) for k, v in keys.items()} for g, keys in self.groups.items()}
+
+
 # --- requests ---------------------------------------------------------------------
 
 class Request(dbus.service.Object):
@@ -484,6 +538,7 @@ class Backend(dbus.service.Object):
         super().__init__(bus, PATH)
         self.dconf = Dconf(self.dconf_changed)
         self.appearance = Appearance(self.dconf, self.setting_changed)
+        self.kdeglobals = KdeGlobals(self.setting_changed)
         self.lockdown_last = self.lockdown()
         self.notes = {}       # (app_id, id) -> fdo id
         self.notes_back = {}  # fdo id -> (app_id, id, {action key: (action, target)})
@@ -541,6 +596,7 @@ class Backend(dbus.service.Object):
 
     def namespaces(self):
         out = {APPEARANCE: self.appearance.values()}
+        out.update(self.kdeglobals.values())
         for ns, keys in self.dconf.values.items():
             out[ns] = {k: gv_to_dbus(v) for k, v in keys.items()}
         return out
