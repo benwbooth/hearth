@@ -11,8 +11,10 @@ import Quickshell.Services.Pipewire
 // Settings > Sound > "Play feedback when volume is changed".
 //
 // Quiet while the shell starts and for a moment after the default output
-// changes (its volume "changes" to the new device's then); at most one pop
-// per 90 ms, the last one always played, so a fast scroll doesn't pile up.
+// changes (its volume "changes" to the new device's then). One pop once the
+// volume stops changing for 150 ms, at the level it ends on: a scroll or a
+// held key is one pop (a pop per step sounded like a machine gun), separate
+// key presses still pop each.
 Singleton {
     id: root
 
@@ -23,7 +25,6 @@ Singleton {
 
     property real last: -1
     property bool armed: false
-    property real lastPlayed: 0
 
     Timer { id: arm; interval: 1500; running: true; onTriggered: { root.last = root.volume; root.armed = true; } }
     onSinkChanged: { armed = false; arm.restart(); }
@@ -34,16 +35,13 @@ Singleton {
         if (Math.abs(v - last) < 0.004) return;
         last = v;
         if (!enabled) return;
-        const now = Date.now();
-        if (now - lastPlayed >= 90) play();
-        else trailing.restart();
+        settle.restart();
     }
-    Timer { id: trailing; interval: 90; onTriggered: root.play() }
+    Timer { id: settle; interval: 150; onTriggered: root.play() }
 
     function play() {
         const dir = Quickshell.env("HEARTH_SOUND_DIR");
         if (!dir) return;
-        lastPlayed = Date.now();
         Quickshell.execDetached(["pw-play", dir + "/audio-volume-change.oga"]);
     }
 }
