@@ -797,12 +797,27 @@ def main():
         time.sleep(1.5)
         emit(full_state(watching["on"]))
 
+    # A test shell (smoke tests, the menu survey's rigs: HEARTH_SESSION_DRYRUN=1)
+    # never makes the machine load or run a model. The smoke test opens the AI
+    # menu, and a test shell's assistant loaded qwen3.5 into the real ollama on
+    # the display GPU: ROCm hung starting there and froze the desktop
+    # (2026-11-25, fans at full). It still reads state (what's installed).
+    test_shell = os.environ.get("HEARTH_SESSION_DRYRUN") == "1"
+
     for line in sys.stdin:
         try:
             req = json.loads(line)
         except ValueError:
             continue
         cmd = req.get("cmd")
+        if test_shell and cmd in ("load", "unload", "unloadAll", "delete", "pull", "server"):
+            emit({"type": "done", "cmd": cmd, "provider": req.get("provider"), "model": req.get("model"),
+                  "error": "not in a test session"})
+            continue
+        if test_shell and cmd == "ask":
+            emit({"type": "reply", "id": int(req.get("id", 0)), "done": True,
+                  "text": "(Test session: the assistant doesn't run models here.)"})
+            continue
         if cmd == "refresh":
             bg(lambda: emit(full_state(watching["on"])))
         elif cmd == "watch":
