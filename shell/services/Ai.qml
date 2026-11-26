@@ -39,7 +39,12 @@ Singleton {
             codex: { enabled: false },
             gemini: { enabled: false }
         },
-        assistant: { provider: "ollama", model: "qwen3.5:4b" }
+        assistant: { provider: "ollama", model: "qwen3.5:4b" },
+        // The app API (hearth-ai ApiServer): "default" / "fast" models; an
+        // empty provider falls back to the assistant's (fast: to default's).
+        api: { enabled: true, port: 18380 },
+        apps: { provider: "", model: "" },
+        appsFast: { provider: "", model: "" }
     })
     readonly property var cfg: {
         void Settings.data;

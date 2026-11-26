@@ -313,6 +313,68 @@ ColumnLayout {
         wrapMode: Text.Wrap
     }
 
+    // --- apps (hearth-ai's OpenAI-compatible server, README "AI" > Apps) ---
+    // A provider + model picker for ai.apps / ai.appsFast; empty = the fallback.
+    component AppModelRows: Column {
+        id: amr
+        property string key
+        property string label
+        property string note
+        property string fallback
+        readonly property var f: pane.cfg[key] || ({})
+        readonly property var prov: f.provider ? Ai.provider(f.provider) : null
+        width: parent ? parent.width : 0
+        spacing: 0
+        SettingsRow {
+            label: amr.label
+            note: amr.note
+            Dropdown {
+                implicitWidth: 220
+                options: [{ value: "", label: amr.fallback }].concat(Ai.providers.filter(p => p.kind === "local" || pane.cfg.allowCloud).map(p => ({ value: p.id, label: p.label + (p.kind === "cloud" ? " (cloud)" : "") })))
+                value: amr.f.provider || ""
+                onPicked: v => {
+                    const p = v ? Ai.provider(v) : null;
+                    Settings.set("ai." + amr.key, { provider: v, model: p && p.installed.length ? p.installed[0].name : "" });
+                }
+            }
+        }
+        SettingsDivider { visible: !!amr.f.provider }
+        SettingsRow {
+            visible: !!amr.f.provider
+            label: "Model"
+            Dropdown {
+                implicitWidth: 220
+                options: (amr.prov ? amr.prov.installed : []).map(m => ({ value: m.name, label: m.name + (m.params ? " · " + m.params : "") }))
+                value: amr.f.model || ""
+                placeholder: "No models installed"
+                onPicked: v => Settings.set("ai." + amr.key + ".model", v)
+            }
+        }
+    }
+    Label { text: "Apps"; font.weight: Font.DemiBold }
+    SettingsGroup {
+        SettingsRow {
+            label: "Let apps use these models"
+            note: "Apps such as Tessera ask hearth instead of running their own: one set of models, unloaded when idle."
+            tip: "An OpenAI-compatible server on 127.0.0.1 port 18380 (ai.api.port). Only your apps can use it: they read its address and key from $XDG_RUNTIME_DIR/hearth/ai-api.json, readable only by you. Apps ask for \"default\" or \"fast\" (below), or a model by name. Cloud AI answers only while Allow cloud AI is on."
+            Toggle { checked: (pane.cfg.api || {}).enabled !== false; onToggled: c => Settings.set("ai.api.enabled", c) }
+        }
+        SettingsDivider {}
+        AppModelRows {
+            key: "apps"
+            label: "Default"
+            note: "For apps' assistants and requests (Tessera's sidebar, # commands, fixes)."
+            fallback: "Same as the assistant"
+        }
+        SettingsDivider {}
+        AppModelRows {
+            key: "appsFast"
+            label: "Fast"
+            note: "For answers as you type (Tessera's suggestions and checks): pick a small model that doesn't think out loud."
+            fallback: "Same as Default"
+        }
+    }
+
     // --- cloud ---
     // The coding-agent apps hearth-ai knows how to drive (Ai.clis).
     Label { text: "Cloud AI"; font.weight: Font.DemiBold }

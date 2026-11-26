@@ -706,6 +706,27 @@ One hub for every model the desktop uses: `helpers/hearth-ai`,
   overview, next wallpaper, brightness, open a Settings pane), the weather
   (hearth's Open-Meteo data), calculate, and web search or open a URL in the
   browser. Shell-side tools run in the shell; the rest run in the helper.
+- Apps: hearth-ai serves the same models to any app as an OpenAI-compatible
+  server on `127.0.0.1:18380` (`ai.api.port`; off with Settings > AI >
+  Apps > "Let apps use these models", `ai.api.enabled`). While it runs,
+  `$XDG_RUNTIME_DIR/hearth/ai-api.json` (mode 0600) holds
+  `{"url", "token", "pid", "version"}`; every request needs
+  `Authorization: Bearer <token>` (the token is kept in
+  `~/.local/state/hearth/ai-api-token`, so an app set up by hand keeps
+  working). `GET /v1/models` lists `default` and `fast` first (Settings >
+  AI > Apps: `ai.apps` / `ai.appsFast`; empty = the assistant's model, and
+  fast falls back to default), each with a `hearth` field naming the model
+  it stands for, then every language model as `<provider>/<model>`
+  (`ollama/qwen3.5:4b`, `service:inkling-2-mini.service/inkling-2-mini`).
+  `POST /v1/chat/completions` streams through to the model's own server
+  (tools pass through), after the memory manager makes room; a model unit,
+  Magnitude model or loose GGUF starts first. Ollama gets
+  `reasoning_effort: "none"` unless the app sends its own. Cloud CLIs answer
+  only with "Allow cloud AI" on, as one reply. Only the shell's own
+  hearth-ai serves (a test shell with `HEARTH_SESSION_DRYRUN=1` doesn't,
+  unless `HEARTH_AI_API_PORT` is set; `HEARTH_AI_API_FILE` moves the file,
+  `HEARTH_AI_API=0` turns it off). Tessera uses it (Preferences > AI >
+  Hearth AI hub).
 - `hearth-ai --state` prints everything; `hearth-ipc call ai state|unloadAll`.
 
 ## Voice assistant
