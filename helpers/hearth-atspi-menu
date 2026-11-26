@@ -1467,6 +1467,149 @@ class AtspiMenu:
         c[self.burger_key()] = self.burger
         save_cache(c)
 
+    def ocr_scale(self, size):
+        """Capture pixels per logical pixel (the output's scale)."""
+        try:
+            fw = self.frame.get_component_iface().get_extents(Atspi.CoordType.WINDOW).width
+        except Exception:
+            fw = 0
+        return size[0] / fw if size and fw > 0 else 1.0
+
+    def point_of(self, o):
+        """Where real_click would click `o`: (x, y, geometry flag) or None."""
+        try:
+            e = o.get_component_iface().get_extents(Atspi.CoordType.WINDOW)
+            if e.width <= 0 or e.height <= 0 or not o.get_state_set().contains(Atspi.StateType.SHOWING):
+                return None
+        except Exception:
+            return None
+        x, y = self.to_surface(o, e.x + e.width / 2, e.y + e.height / 2)
+        native = self.document(o) is None
+        return [round(x, 1), round(y, 1), bool(native and self.toolkit.startswith("GTK"))]
+
+    def click_point(self, pt):
+        geo = ["--geometry"] if pt[2] else []
+        return arbor("click-window", "--id", str(self.window), "--x", f"{pt[0]:.1f}", "--y", f"{pt[1]:.1f}", *geo)
+
+    def twins(self):
+        """The ☰ and the other showing buttons with its name (Qt Quick apps
+        can expose two "Show menu" buttons; one of them opens nothing)."""
+        A = Atspi
+        want = button_menu_name(self.trigger.get_name() or "")
+        roles = {A.Role.PUSH_BUTTON, A.Role.TOGGLE_BUTTON}
+        if hasattr(A.Role, "PUSH_BUTTON_MENU"):
+            roles.add(A.Role.PUSH_BUTTON_MENU)
+        found = [self.trigger]
+
+        def test(o, r):
+            try:
+                if r in roles and o is not self.trigger and button_menu_name(o.get_name() or "") == want \
+                        and o.get_state_set().contains(A.StateType.SHOWING):
+                    found.append(o)
+            except Exception:
+                pass
+            return False
+        if want:
+            self.search(A, self.frame, test, web=False)
+        pts, res = [], []
+        for o in found:
+            pt = self.point_of(o)
+            if pt and pt[:2] not in pts:
+                pts.append(pt[:2])
+                res.append(pt)
+        return res[:4]
+
+    def learn_ocr(self):
+        """Open the ☰ with a real click and read the popup off a capture of
+        the window (hearth_ocr_menu): one flat menu, each item clicked at
+        where it was read (click_ocr)."""
+        if not self.window:
+            return False
+        try:
+            import hearth_ocr_menu as om
+        except Exception as e:
+            err(f"ocr menus: {e}")
+            return False
+        ses = om.Session(self.window)
+        found, size, at = [], None, None
+        try:
+            before, _ = ses.rows()
+            if before is None:
+                return False
+            pts = self.twins()
+            last = (self.burger or {}).get("at")
+            if last and last[:2] in [q[:2] for q in pts]:
+                pts.sort(key=lambda q: q[:2] != last[:2])  # the one that opened it last time first
+            for pt in pts:
+                if not self.click_point(pt):
+                    continue
+                time.sleep(0.6)
+                found, size = ses.read_popup(before)
+                if os.environ.get("HEARTH_OCR_DEBUG"):
+                    err(f"ocr: ☰ at {pt}: {found}")
+                if found:
+                    self.click_point(pt)  # closes it again, as a second click would
+                    at = pt
+                    break
+                arbor("close-popups", "--id", str(self.window))
+        finally:
+            ses.close()
+        if not found:
+            return False
+        k = self.ocr_scale(size)
+        self.cache = {}
+        items = []
+        for i, (label, sc, (x, y)) in enumerate(found[:40]):
+            items.append(item(self.nid((-1, i)), label, shortcut=sc, pos=[round(x / k, 1), round(y / k, 1)]))
+        self.cache[(-1,)] = items
+        self.tree_read = True
+        self.burger = {"flat": True, "ocr": True, "at": at, "labels": [menu_title(self.trigger)], "exe": self.exe(),
+                       "tree": {"-1": [self.saved(it) for it in items]}}
+        c = load_cache()
+        c[self.burger_key()] = self.burger
+        save_cache(c)
+        return True
+
+    def click_ocr(self, nid):
+        """Open the ☰, check the item is still where it was read (the same
+        text on that line), click it there."""
+        it = next((k for k in self.cache.get((-1,), []) if k["id"] == nid), None)
+        if os.environ.get("HEARTH_OCR_DEBUG"):
+            err(f"ocr click {nid}: {it} window {self.window} at {(self.burger or {}).get('at')}")
+        if not it or not it.get("pos") or not self.window:
+            return False
+        import hearth_ocr_menu as om
+        ses = om.Session(self.window)
+        try:
+            at = (self.burger or {}).get("at")
+            if not (self.click_point(at) if at else self.real_click(self.trigger)):
+                return False
+            time.sleep(0.5)
+            # Only the item's line is read again: is it there, the same?
+            p = ses.shot()
+            ok = False
+            if p:
+                try:
+                    w, h, _ = om.read_png(p)
+                    k = self.ocr_scale((w, h))
+                    x, y = it["pos"]
+                    box = (max(0, int((x - 260) * k)), max(0, int((y - 14) * k)),
+                           min(w, int((x + 260) * k)), min(h, int((y + 14) * k)))
+                    want = om.norm(it["label"])
+                    rows = om.ocr_rows(p, box)
+                    ok = any(want and want in om.norm(r["text"]) for r in rows)
+                    if os.environ.get("HEARTH_OCR_DEBUG"):
+                        err(f"ocr click {it['label']!r} at {x},{y} (x{k:.2f}): {ok} {[r['text'] for r in rows]}")
+                except Exception as e:
+                    err(f"ocr menus: {e}")
+            if not ok:
+                self.click_point(at) if at else self.real_click(self.trigger)  # close it: the menu changed
+                self.forget_tree()
+                return False
+            return arbor("click-window", "--id", str(self.window), "--x", f"{x:.1f}", "--y", f"{y:.1f}", "--geometry")
+        finally:
+            ses.close()
+
     def drawer_items(self):
         A = Atspi
         found = {}
@@ -1549,6 +1692,10 @@ class AtspiMenu:
         drawer = bool(self.DRAWER.search(self.trigger.get_name() or ""))
         menus = None if drawer else self.open_burger()
         if not menus:
+            # A popup the toolkit never shows on the bus (Qt Quick's Menu in
+            # its own popup window): read it off the screen.
+            if not drawer and self.learn_ocr():
+                return
             self.learn_drawer(before)
             return
         root = menus[0]
@@ -1713,6 +1860,13 @@ class AtspiMenu:
                 self.act(c)  # GTK 3's menu items take the accessible click
             return
         if self.busy:
+            return
+        if self.kind == "burger" and (self.burger or {}).get("ocr"):
+            self.busy = True
+            try:
+                self.click_ocr(nid)
+            finally:
+                self.busy = False
             return
         if self.kind == "burger" and (self.burger or {}).get("drawer"):
             want = next((k.get("name") or k["label"] for k in self.cache.get(tuple(path[:-1]), [])

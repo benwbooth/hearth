@@ -20,6 +20,7 @@ Scope {
     property real value: 0      // 0..1 (volume may go above 1)
     property bool muted: false
     property bool showing: false
+    onShowingChanged: ShellState.osdShowing = showing
 
     // Ignore the initial volume readout (and the one after switching sinks).
     property bool armed: false

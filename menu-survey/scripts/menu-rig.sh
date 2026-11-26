@@ -65,8 +65,13 @@ EOF
   # closure: evolution-data-server, gnome-terminal-server...). From the
   # system only an allow-list: never the keyring, the a11y bus (started
   # separately), systemd, your accounts or file manager.
-  mkdir -p "$R/services" "$R/run"
-  chmod 700 "$R/run"
+  # The apps' runtime dir (Flatpak instances, sockets, whatever an app
+  # writes to XDG_RUNTIME_DIR) on disk too, linked from $R/run: one app
+  # once filled the 6 GB /run/user tmpfs (2026-11-25).
+  mkdir -p "$R/services" "$D/run"
+  chmod 700 "$D/run"
+  [[ -L $R/run || ! -e $R/run ]] || rm -rf "${R:?}/run"
+  ln -sfn "$D/run" "$R/run"
   for f in /run/current-system/sw/share/dbus-1/services/*.service /etc/profiles/per-user/$USER/share/dbus-1/services/*.service; do
     case $(basename "$f" .service) in
       ca.desrt.dconf|org.freedesktop.portal.Desktop|org.freedesktop.portal.Documents|org.freedesktop.portal.Flatpak|\
@@ -136,9 +141,17 @@ WP
   # hearth with only its own Qt plugins and QML, as devloop starts it: the
   # session's QT_PLUGIN_PATH still has Plasma's kde platform theme (the
   # org.kde.desktop style, whose Kirigami hearth no longer ships).
+  # Its sound (the volume chime) and volume controls on the rig's PipeWire
+  # (the dummy sink), never yours: rigs once chimed on every volume change
+  # (2026-11-25). No rig PipeWire: a remote that doesn't exist.
+  if [[ -S $R/run/pipewire-0 ]]; then
+    pwenv=(PIPEWIRE_RUNTIME_DIR="$R/run" PULSE_SERVER="unix:$R/run/pulse/native")
+  else
+    pwenv=(PIPEWIRE_REMOTE=rig-no-pipewire PULSE_SERVER=unix:/nonexistent)
+  fi
   DISPLAY=$(grep ^DISPLAY= "$R/arbor.env" | cut -d= -f2-) \
     QT_PLUGIN_PATH= QML2_IMPORT_PATH= \
-    HEARTH_SESSION_DRYRUN=1 HEARTH_POLKIT=0 daemon "$R/hearth.pid" "$R/hearth.log" "$H/libexec/hearth-shell"
+    HEARTH_SESSION_DRYRUN=1 HEARTH_POLKIT=0 daemon "$R/hearth.pid" "$R/hearth.log" env "${pwenv[@]}" "$H/libexec/hearth-shell"
   sleep 4
   echo "rig up: WAYLAND_DISPLAY=$WAYLAND_DISPLAY bus=$DBUS_SESSION_BUS_ADDRESS hearth pid=$(hearth_pid)"
   ;;

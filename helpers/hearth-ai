@@ -947,7 +947,8 @@ class Arbiter:
 
     def unload(self, e, reason, wait=False):
         self.unloading[e["key"]] = time.time()
-        dry = bool(os.environ.get("HEARTH_AI_MANAGE_DRYRUN"))
+        # Test shells (HEARTH_SESSION_DRYRUN=1) only report, never unload.
+        dry = bool(os.environ.get("HEARTH_AI_MANAGE_DRYRUN")) or os.environ.get("HEARTH_SESSION_DRYRUN") == "1"
         self.notices.append({"type": "evicted", "key": e["key"], "name": e["name"], "reason": reason,
                              "vramText": e.get("vramText", ""), "dryRun": dry})
         log("%sunloading %s (%s)" % ("[dry run] " if dry else "", e["key"], reason))
@@ -1496,12 +1497,28 @@ def main():
         time.sleep(1.5)
         emit(full_state(watching["on"]))
 
+    # A test shell (smoke tests, the menu survey's rigs: HEARTH_SESSION_DRYRUN=1)
+    # never makes the machine load or run a model. The smoke test opens the AI
+    # menu, and a test shell's assistant loaded qwen3.5 into the real ollama on
+    # the display GPU: ROCm hung starting there and froze the desktop
+    # (2026-11-25, fans at full). It still reads state (what's installed).
+    test_shell = os.environ.get("HEARTH_SESSION_DRYRUN") == "1"
+
     for line in sys.stdin:
         try:
             req = json.loads(line)
         except ValueError:
             continue
         cmd = req.get("cmd")
+        if test_shell and cmd in ("load", "unload", "unloadAll", "delete", "pull", "server",
+                                  "loadKey", "unloadKey", "remove", "install"):
+            emit({"type": "done", "cmd": cmd, "provider": req.get("provider"), "model": req.get("model"),
+                  "error": "not in a test session"})
+            continue
+        if test_shell and cmd == "ask":
+            emit({"type": "reply", "id": int(req.get("id", 0)), "done": True,
+                  "text": "(Test session: the assistant doesn't run models here.)"})
+            continue
         if cmd == "refresh":
             bg(lambda: emit(full_state(watching["on"])))
         elif cmd == "watch":

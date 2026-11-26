@@ -12,6 +12,9 @@ Singleton {
     // Tooltips (widgets/Tooltip.qml): the one on screen, and until when the
     // next one shows at once (moving along the bar, like macOS).
     property var tooltip: null
+    // The volume/brightness panel (popups/Osd.qml) is up: tooltips stand
+    // down (the volume item's "Volume: 30%" under its own panel, doubled).
+    property bool osdShowing: false
     property real tooltipWarmUntil: 0
     // Dock window previews (bar/TaskButton.qml): one is open, or was a
     // moment ago, so the next app's opens at once.

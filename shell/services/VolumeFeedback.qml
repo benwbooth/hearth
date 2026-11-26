@@ -18,7 +18,11 @@ import Quickshell.Services.Pipewire
 Singleton {
     id: root
 
+    // Never from a test shell (HEARTH_SESSION_DRYRUN=1: smoke tests, the
+    // menu survey's rigs): they share the real audio, and six of them each
+    // popped with the real one, a machine gun.
     readonly property bool enabled: Settings.sound.volumeFeedback !== false
+        && Quickshell.env("HEARTH_SESSION_DRYRUN") !== "1"
     readonly property PwNode sink: Pipewire.defaultAudioSink
     readonly property real volume: sink && sink.audio ? sink.audio.volume : -1
     PwObjectTracker { objects: [root.sink] }
