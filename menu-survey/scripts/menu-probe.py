@@ -681,7 +681,7 @@ def attempt(attr, argv, variant, extra_env, extra_args, wait_win=50, wait_menu=1
     SCOPE["n"] += 1
     SCOPE["unit"] = f"menuprobe-{os.getpid()}-{SCOPE['n']}.scope"
     proc = subprocess.Popen(["systemd-run", "--user", "--scope", "--quiet", "--collect", "--unit", SCOPE["unit"],
-                             "-p", "Slice=hearth-menu-survey.slice",  # the survey's 16 GB in all (restart-workers.sh)
+                             "-p", "Slice=menusurvey.slice",  # the survey's 16 GB in all (restart-workers.sh)
                              "-p", "MemoryMax=4G", "-p", "CPUWeight=idle", "-p", "IOWeight=1",
                              "-p", "AllowedCPUs=0-7,12-19", "prlimit", "--core=0", "--fsize=1073741824", "--", "setsid", RIG, "run", "env", *envargs, *argv, *extra_args], env=ENV,
                             stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
@@ -1397,7 +1397,7 @@ def app_rows():
             continue
 
 
-SLICE = "hearth-menu-survey.slice"
+SLICE = "menusurvey.slice"
 SLICE_LIMITS = ["MemoryHigh=12G", "MemoryMax=16G", "CPUWeight=idle", "IOWeight=1"]
 
 

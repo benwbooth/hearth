@@ -23,7 +23,7 @@ PY
 for d in "" 1 2 3 4 5 6 7 10 11 12; do MENU_RIG_DIR=$XDG_RUNTIME_DIR/menu-rig-survey$d scripts/menu-rig.sh stop 2>/dev/null; done
 start() { u=$1; W=$2; shift 2
   for i in $(seq 30); do systemctl --user list-units --all --plain --no-legend "hearth-menu-probe-$u.service" | grep -q . || break; sleep 2; done
-  systemd-run --user --quiet --unit=hearth-menu-probe-$u --collect -p Slice=hearth-menu-survey.slice \
+  systemd-run --user --quiet --unit=hearth-menu-probe-$u --collect -p Slice=menusurvey.slice \
     -p Nice=5 -p CPUWeight=idle -p IOWeight=1 -p AllowedCPUs=0-7,12-19 -p MemoryMax=4G \
     -p StandardOutput=append:$PWD/data/probe$W.log -p StandardError=append:$PWD/data/probe$W.log --working-directory=$PWD \
     -E PATH="$PATH" -E HOME="$HOME" -E XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" -E DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" \
@@ -31,7 +31,7 @@ start() { u=$1; W=$2; shift 2
   # The whole survey (workers, their rigs, every probed app's scope) in one
   # slice: 16 GB in all, whatever any one app does (Ben, 2026-11-26: 11
   # workers once held 40 GB).
-  systemctl --user set-property --runtime hearth-menu-survey.slice MemoryHigh=12G MemoryMax=16G CPUWeight=idle IOWeight=1 2>/dev/null || true; }
+  systemctl --user set-property --runtime menusurvey.slice MemoryHigh=12G MemoryMax=16G CPUWeight=idle IOWeight=1 2>/dev/null || true; }
 # Six workers (each skips what any worker measured already).
 start w0 "" --sources nixpkgs
 start w2 2 --sources flathub,nixpkgs-uncached,nixpkgs-unfree --stride 2 --offset 0
