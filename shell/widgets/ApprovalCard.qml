@@ -43,7 +43,8 @@ Rectangle {
             text: card.req ? card.req.detail : ""
             font.family: card.req && card.req.kind === "command" ? "monospace" : Theme.fontFamily
             color: card.req && card.req.kind === "command" ? Theme.fg : Theme.fgSecondary
-            wrapMode: Text.WrapAnywhere
+            // A command may have long unbroken paths; prose wraps at words.
+            wrapMode: card.req && card.req.kind === "command" ? Text.WrapAtWordBoundaryOrAnywhere : Text.Wrap
             elide: Text.ElideNone
             maximumLineCount: 8
             textFormat: Text.PlainText

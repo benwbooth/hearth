@@ -325,5 +325,12 @@ Singleton {
         function unloadAll(): void { root.unloadAll(); }
         // The AI menu's tab: loaded | installed | more (and a category id).
         function showTab(tab: string, category: string): void { root.tabRequested(tab, category); }
+        // Show the Allow/Deny card without a model (testing, screenshots):
+        // kind "command" or "computer". Its answer goes nowhere.
+        function previewApproval(kind: string, detail: string): void {
+            root.approval = { id: -1, call: 0, kind: kind,
+                              title: kind === "command" ? "Check the running Linux kernel version" : "Let the assistant use your computer?",
+                              detail: detail };
+        }
     }
 }
