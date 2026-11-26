@@ -55,6 +55,11 @@ in
     (lib.optionalAttrs (options ? services.flatpak.overrides) {
       services.flatpak.overrides = {
         global.Environment.JAVA_TOOL_OPTIONS = "";
+        # Every Flatpak may register its window's menu with hearth's
+        # registrar: Electron, Chromium and Qt apps export dbusmenu menus
+        # but most manifests don't ask for this name (the survey's
+        # flatpak+registrar lever: about 30 Flathub apps, 2026-11-25).
+        global."Session Bus Policy"."com.canonical.AppMenu.Registrar" = "talk";
       } // lib.genAttrs config.hearth.globalMenu.javaFlatpaks (_: {
         Context.filesystems = [ "${jaw}:ro" ];
         Environment.JAVA_TOOL_OPTIONS = javaToolOptions;

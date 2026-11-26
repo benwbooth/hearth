@@ -1114,6 +1114,11 @@ def appimage_url(how):
     return ""
 
 
+# MENU_PROBE_EXTRA_ENV="K=V K2=V2": added to every app's environment
+# (experiments on one rig).
+SESSION_ENV.update(dict(kv.split("=", 1) for kv in os.environ.get("MENU_PROBE_EXTRA_ENV", "").split() if "=" in kv))
+
+
 def sandboxed(argv):
     """Run an untrusted program (a downloaded AppImage) in bubblewrap: your
     home and the real session's sockets hidden (/run/user, /tmp), only the
