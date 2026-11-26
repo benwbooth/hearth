@@ -56,6 +56,11 @@ def rmtree(path):
                 pass
     shutil.rmtree(path, ignore_errors=True)
 ENV = dict(os.environ, MENU_RIG_DIR=RIGDIR)
+# The session's Qt Quick style (hearth-qt-style's org.hearth.desktop,
+# 2026-11-25) isn't on probed apps' QML paths (Flatpaks, nixpkgs apps with
+# their own Qt): they'd fail to start over it, which says nothing about
+# their menus.
+ENV.pop("QT_QUICK_CONTROLS_STYLE", None)
 # MENU_PROBE_DEVLOOP=1: the rig runs devloop's latest arbor and hearth (the
 # engine as it is now) instead of the installed ones.
 HEARTH_PKG = ""
