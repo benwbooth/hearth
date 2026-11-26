@@ -633,9 +633,19 @@ class AtspiMenu:
         except Exception:
             return False
 
+    @staticmethod
+    def on_screen(o):
+        """Showing, with a size: Kirigami keeps a hidden "Open drawer"
+        button (0x0 at 0,0) beside the ☰ it really shows (Kalk)."""
+        try:
+            e = o.get_component_iface().get_extents(Atspi.CoordType.WINDOW)
+            return e.width > 0 and e.height > 0 and o.get_state_set().contains(Atspi.StateType.SHOWING)
+        except Exception:
+            return False
+
     def is_burger(self, o, r):
         A = Atspi
-        if r not in BUTTON_ROLES():
+        if r not in BUTTON_ROLES() or not self.on_screen(o):
             return False
         name = (o.get_name() or "").strip().lower()
         if name not in BURGER_NAMES and not self.holds_items(o):
@@ -675,7 +685,7 @@ class AtspiMenu:
         found = []
 
         def test(o, r):
-            if r not in BUTTON_ROLES() or (o.get_name() or "").strip():
+            if r not in BUTTON_ROLES() or (o.get_name() or "").strip() or not self.on_screen(o):
                 return False
             menu_role = getattr(A.Role, "PUSH_BUTTON_MENU", None)
             if r != menu_role and not o.get_state_set().contains(A.StateType.HAS_POPUP):

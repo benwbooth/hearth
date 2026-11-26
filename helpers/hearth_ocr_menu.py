@@ -23,6 +23,7 @@ import tempfile
 import zlib
 
 SCALE = 3  # upscale before OCR
+MOD_RE = re.compile(r"^(?:(?:Ctrl|Shift|Alt|Meta|Super)\+)+[^+\s]+$")
 KEY_RE = re.compile(r"^(?:(?:Ctrl|Shift|Alt|Meta|Super)\+)+\S+$|^F(?:[1-9]|1[0-2])$|^(?:Del|Delete|Esc|Return|Enter|Backspace|Tab)$")
 
 
@@ -230,6 +231,10 @@ def items_of(rows):
             tail = re.sub(r"^F[lI|]", "F1", tail)
             if gaps[k] > max(12, 3 * space) and KEY_RE.match(tail):
                 sc, ws = tail, ws[:k + 1]
+            elif MOD_RE.match(ws[-1]["t"]) and len(ws) >= 2:
+                # A key with modifiers is never part of a label: split it
+                # off however narrow the gap (a narrow menu).
+                sc, ws = ws[-1]["t"], ws[:-1]
         while ws and ws[-1]["t"] in (">", "›", "»", "▸", "▶"):
             ws = ws[:-1]
         label = " ".join(d["t"] for d in ws).strip(" .")
