@@ -1621,6 +1621,20 @@ def result_attrs(fn, limit=1 << 20):
     return attrs
 
 
+def canary_opens():
+    """Whether a plain X11 app (xterm, from the system) opens a window in
+    the rig right now: the harness's own health check."""
+    xterm = shutil.which("xterm") or "/run/current-system/sw/bin/xterm"
+    if not os.path.exists(xterm):
+        return False
+    try:
+        r = attempt("canary:xterm", [xterm], "canary", {}, [], wait_win=20, wait_menu=1)
+        cleanup()
+        return r.get("result") != "no-window"
+    except Exception:
+        return False
+
+
 def own_rss_mb():
     try:
         for l in open("/proc/self/status"):
@@ -1722,6 +1736,11 @@ def main():
             # Ten apps in a row without a window: the harness is broken (an
             # app launch that always fails), not the apps. Stop, loudly.
             streak = streak + 1 if all(r.get("result") in ("no-window",) for r in rows) else 0
+            if streak >= 10 and canary_opens():
+                # A known-good app still opens a window: the harness works,
+                # these apps just don't (a requeue of hard cases runs them
+                # back to back). Carry on.
+                streak = 0
             if streak >= 10:
                 print("10 apps in a row opened no window: the harness looks broken; stopping. Last log: "
                       + " | ".join(rows[-1].get("log_tail") or []), file=sys.stderr, flush=True)
