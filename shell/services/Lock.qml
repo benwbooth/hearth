@@ -80,8 +80,12 @@ Singleton {
     property bool capsLock: false
 
     // ---- fingerprint
-    // off | waiting | retry | failed | unavailable
+    // off | waiting | retry | failed | unavailable | sleeping
     property string fpState: "off"
+    // The reader listens for a minute after locking, then sleeps (fprintd
+    // keeps the sensor powered and polling while a verify runs); the lock
+    // screen's fingerprint button wakes it for another minute.
+    property bool fpAsleep: false
     property string fpMessage: ""
     property int fpRestarts: 0
 
@@ -329,17 +333,37 @@ Singleton {
     readonly property bool fpWanted: root.locked && root.secure && !root.unlocking && !root.graceActive
                                      && !!root.cfg.fingerprint && root.fpService !== ""
     onFpWantedChanged: {
-        if (fpWanted) { root.fpRestarts = 0; fpStart.restart(); }
-        else { fpStart.stop(); fpRetry.stop(); if (fp.active) fp.abort(); root.fpState = "off"; }
+        if (fpWanted) { root.fpRestarts = 0; root.fpAsleep = false; fpStart.restart(); fpSleep.restart(); }
+        else { fpStart.stop(); fpRetry.stop(); fpSleep.stop(); root.fpAsleep = false; if (fp.active) fp.abort(); root.fpState = "off"; }
+    }
+    Timer {
+        id: fpSleep
+        interval: 60000
+        onTriggered: {
+            if (!root.fpWanted) return;
+            root.fpAsleep = true;
+            fpRetry.stop();
+            if (fp.active) fp.abort();
+            root.fpState = "sleeping";
+            root.fpMessage = "";
+        }
+    }
+    // The fingerprint button on the lock screen: listen again for a minute.
+    function wakeFingerprint() {
+        if (!root.fpWanted) return;
+        root.fpAsleep = false;
+        root.fpRestarts = 0;
+        fpSleep.restart();
+        if (!fp.active) root.startFingerprint();
     }
     Timer { id: fpStart; interval: 300; onTriggered: root.startFingerprint() }
     Timer {
         id: fpRetry
         interval: 1500
-        onTriggered: if (root.fpWanted && !fp.active) root.startFingerprint()
+        onTriggered: if (root.fpWanted && !root.fpAsleep && !fp.active) root.startFingerprint()
     }
     function startFingerprint() {
-        if (!root.fpWanted || fp.active) return;
+        if (!root.fpWanted || root.fpAsleep || fp.active) return;
         fp.config = root.fpService;
         root.fpMessage = "";
         if (fp.start()) root.fpState = "waiting";
@@ -370,7 +394,7 @@ Singleton {
     }
     Timer { id: fpMsgReset; interval: 2500; onTriggered: if (root.fpState === "retry") { root.fpState = "waiting"; root.fpMessage = ""; } }
     function fpFailed(hard) {
-        if (!root.fpWanted) return;
+        if (!root.fpWanted || root.fpAsleep) return;
         root.fpRestarts++;
         // A reader that isn't there (or fprintd stopped for sleep) fails
         // straight away: try again a few times, then wait for input.

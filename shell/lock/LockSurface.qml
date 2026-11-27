@@ -531,6 +531,18 @@ Item {
                             function onFpStateChanged() { if (Lock.fpState === "retry") fpShake.restart(); }
                         }
                     }
+                    // The reader sleeps a minute after locking (services/Lock.qml):
+                    // this turns it on again for another minute.
+                    LockButton {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        visible: Lock.fpState === "sleeping"
+                        k: root.k
+                        pill: true
+                        backdrop: backdrop
+                        text: "Use Fingerprint"
+                        tip: "The fingerprint reader turned off after a minute. Click to turn it on again."
+                        onClicked: Lock.wakeFingerprint()
+                    }
                     Label {
                         anchors.horizontalCenter: parent.horizontalCenter
                         visible: text !== "" && Lock.fieldShown
