@@ -614,17 +614,23 @@ def desktop_exec(out):
         bindir = os.path.join(out, "bin")
         argv = ["/bin/sh", "-c", f'PATH="{bindir}:$PATH"; ' + argv[2]] if len(argv) > 2 else argv
         return argv, did
-    if argv and not argv[0].startswith("/"):
-        for o in [out] + sorted(glob.glob(out.rsplit("-", 1)[0] + "*")):
-            p = os.path.join(o, "bin", argv[0])
-            if os.path.exists(p):
-                argv[0] = p
-                break
-        else:
-            p = os.path.join(out, "bin", argv[0])
-            if not os.path.exists(p):
-                hits = glob.glob(os.path.join(out, "bin", "*"))
-                argv[0] = hits[0] if len(hits) == 1 else argv[0]
+    # The program by its name in the package's bin/ (an Exec of
+    # /usr/bin/cropgui is the package's cropgui too), its other outputs
+    # next; never another package's (ace-of-penguins got its desktop item's
+    # derivation, "...-canfield.desktop/bin"). A name it doesn't have
+    # (unetbootin_asroot): its own binary named like it, or its only one.
+    if argv and not (argv[0].startswith("/nix/store/") and os.path.exists(argv[0])):
+        name = os.path.basename(argv[0])
+        outs = [out] + [o for o in sorted(glob.glob(out.rsplit("-", 1)[0] + "-*"))
+                        if o != out and not o.endswith((".desktop", ".drv"))]
+        hit = next((os.path.join(o, "bin", name) for o in outs if os.path.exists(os.path.join(o, "bin", name))), None)
+        if not hit:
+            bins = sorted(glob.glob(os.path.join(out, "bin", "*")))
+            stem = name.split("_")[0].split("-")[0].lower()
+            named = [b for b in bins if os.path.basename(b).lower() in (pname, stem)]
+            hit = (named or (bins if len(bins) == 1 else [None]))[0]
+        if hit:
+            argv[0] = hit
     return argv, did
 
 
