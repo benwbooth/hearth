@@ -29,6 +29,41 @@ Scope {
     readonly property var flow: agentLoader.item ? agentLoader.item.flow : null
     readonly property bool shown: !!flow && !flow.isCompleted
 
+    // "Use Fingerprint" after the reader gave up (pam_fprintd times out or
+    // runs out of tries, and polkit's PAM stack moves on to the password).
+    // Starting the sign-in over starts with the reader again: Quickshell
+    // sets up a new PAM session when the selected identity changes or an
+    // attempt fails. Shown only when the reader took part in this request.
+    property bool sawFinger: false
+    property bool restarting: false
+    onFlowChanged: { sawFinger = false; restarting = false; }
+    Connections {
+        target: root.flow
+        ignoreUnknownSignals: true
+        function onSupplementaryMessageChanged() {
+            const m = root.flow ? String(root.flow.supplementaryMessage) : "";
+            if (/finger/i.test(m)) { root.sawFinger = true; root.restarting = false; }
+        }
+    }
+    function useFingerprint() {
+        const f = root.flow;
+        if (!f || !f.isResponseRequired) return;
+        root.restarting = true;
+        const ids = Array.prototype.slice.call(f.identities || []);
+        const cur = f.selectedIdentity;
+        const other = ids.find(i => i !== cur) || null;
+        if (other && cur) {
+            // A new session for another identity, then one for ours again:
+            // no failed attempt, no delay.
+            f.selectedIdentity = other;
+            f.selectedIdentity = cur;
+        } else {
+            // An empty answer fails the password step (after PAM's usual
+            // short delay) and the new attempt starts with the reader.
+            f.submit("");
+        }
+    }
+
     PanelWindow {
         id: win
         // Made again if a monitor dropout takes its surface (widgets/KeepShown).
@@ -46,7 +81,7 @@ Scope {
             target: root.flow
             ignoreUnknownSignals: true
             function onIsResponseRequiredChanged() { if (root.flow && root.flow.isResponseRequired) { pass.text = ""; pass.forceActiveFocus(); } }
-            function onAuthenticationFailed() { shake.restart(); pass.text = ""; }
+            function onAuthenticationFailed() { if (!root.restarting) shake.restart(); pass.text = ""; }
         }
         function submit() { if (root.flow && root.flow.isResponseRequired) root.flow.submit(pass.text); }
         function cancel() { if (root.flow) root.flow.cancelAuthenticationRequest(); }
@@ -127,6 +162,18 @@ Scope {
                     Layout.fillWidth: true
                     spacing: 8
                     Item { Layout.fillWidth: true }
+                    PushButton {
+                        visible: root.sawFinger && !!root.flow && root.flow.isResponseRequired && !root.restarting
+                        text: "Use Fingerprint"
+                        tooltip: "Turn the fingerprint reader on again, if you missed it"
+                        onClicked: root.useFingerprint()
+                    }
+                    Label {
+                        visible: root.restarting
+                        text: "Starting the fingerprint reader…"
+                        color: Theme.fgSecondary
+                        font.pointSize: Theme.smallFontSize
+                    }
                     PushButton { text: "Cancel"; tooltip: "Don't allow it (Esc)"; onClicked: win.cancel() }
                     PushButton {
                         text: "OK"
