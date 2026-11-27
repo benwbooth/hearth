@@ -80,6 +80,7 @@ EOF
     case $(basename "$f" .service) in
       ca.desrt.dconf|org.freedesktop.portal.Desktop|org.freedesktop.portal.Documents|org.freedesktop.portal.Flatpak|\
       org.freedesktop.impl.portal.desktop.gtk|org.freedesktop.impl.portal.PermissionStore|org.freedesktop.Flatpak|\
+      org.freedesktop.impl.portal.desktop.grove|org.freedesktop.impl.portal.desktop.hearth|\
       org.gtk.vfs.*|org.gtk.GLib.PACRunner|org.mpris.MediaPlayer2.playerctld) ln -sf "$f" "$R/services/" ;;
     esac
   done

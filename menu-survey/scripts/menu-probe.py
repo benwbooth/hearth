@@ -1404,6 +1404,73 @@ def probe_store(attr, outs, err):
 INSTALLED = {}
 
 
+OPEN_LABEL = re.compile(r"^(open|open file|open\.\.\.|open…|open file\.\.\.|open file…|open project.*|open folder.*)$", re.I)
+
+
+def find_open_item(node, path=()):
+    """The path ("File/Open…") of the app's Open command in hearth's menu
+    dump, File first."""
+    best = None
+    for c in (node or {}).get("children") or []:
+        label = (c.get("label") or "").replace("_", "").strip()
+        p = path + (c.get("label") or "",)
+        if c.get("children"):
+            hit = find_open_item(c, p)
+            if hit and (best is None or p[0].lower() == "file"):
+                best = hit
+                if p[0].lower() == "file":
+                    return best
+        elif OPEN_LABEL.match(label) and c.get("enabled", True):
+            return "/".join(p)
+    return best
+
+
+def file_dialog(row):
+    """Whether the app's Open dialog is the portal's (Hearth's file dialog
+    on the desktop) or one the app draws itself: run its Open command (its
+    menu item through hearth, else Ctrl+O) and see whose window opens. Ben,
+    2026-11-26: installed apps' file dialogs, alongside their menus."""
+    w = row.get("window") or {}
+    cur = [x for x in windows() if x.get("app_id") != "org.quickshell"]
+    win = next((x for x in cur if x.get("pid") == w.get("pid") and x.get("title") == w.get("title")), None) \
+        or next((x for x in cur if x.get("pid") == w.get("pid")), None) or (cur[-1] if cur else None)
+    if not win:
+        return {"result": "no-window"}
+    mine = tree_pids(x11_app_pid(win.get("pid") or 0) or win.get("pid") or 0)
+    before = {x["id"] for x in windows()}
+    rig("run", "arbor", "msg", "action", "focus-window", "--id", str(win["id"]))
+    time.sleep(1.0)
+    via = "keys"
+    try:
+        dump = json.loads(rig("dump", timeout=20).stdout)
+        path = find_open_item(dump.get("tree") or dump.get("menu") or {})
+    except Exception:
+        path = None
+    if path:
+        r = rig("ipc", "call", "appmenu", "click", path, timeout=20)
+        via = "menu:" + path if "ok" in r.stdout else "keys"
+    if via == "keys":
+        rig("run", "arbor", "msg", "action", "send-keys", "--id", str(win["id"]), "--keys", "Ctrl+O")
+    new = []
+    for _ in range(16):
+        time.sleep(0.5)
+        new = [x for x in windows() if x["id"] not in before and x.get("app_id") != "org.quickshell"]
+        if new:
+            time.sleep(0.8)
+            new = [x for x in windows() if x["id"] not in before and x.get("app_id") != "org.quickshell"]
+            break
+    res = {"via": via}
+    if not new:
+        res["result"] = "none"
+    else:
+        d = new[-1]
+        own = str(x11_app_pid(d.get("pid") or 0) or d.get("pid")) in mine
+        res.update(result="own" if own else "portal", title=d.get("title"), app_id=d.get("app_id"))
+        for x in new:
+            rig("run", "arbor", "msg", "action", "close-window", "--id", str(x["id"]))
+    return res
+
+
 def probe_installed(attr):
     """An app installed on this machine (data/installed_exec.tsv, from
     installed_apps.py): run from the installed copy. Nothing is downloaded,
@@ -1427,6 +1494,8 @@ def probe_installed(attr):
         r.update(toolkit=tk, flatpak=True, installed=True)
         late_check(rows)
         rows[-1]["shot"] = shot(attr)
+        if rows[-1].get("result") not in ("no-window", "tray-only"):
+            rows[-1]["file_dialog"] = file_dialog(rows[-1])
         cleanup()
         return rows
     rows = probe_argv(attr, argv, tk, dict(installed=True))
@@ -1467,6 +1536,11 @@ def probe_argv(attr, argv, tk, extra):
                 break
     late_check(rows)
     rows[-1]["shot"] = shot(attr)
+    if extra.get("installed") and rows[-1].get("result") not in ("no-window", "tray-only"):
+        try:
+            rows[-1]["file_dialog"] = file_dialog(rows[-1])
+        except Exception as e:
+            rows[-1]["file_dialog"] = {"result": "error", "error": str(e)[:200]}
     cleanup()
     return rows
 
