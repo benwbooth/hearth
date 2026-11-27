@@ -1081,6 +1081,125 @@ def unit_active(unit):
 
 HIDDEN_APPS = {"hearth", "arbor (compositor)", "Xwayland"}
 
+# --- which app uses which model ---------------------------------------------
+#
+# Apps reach a model through the app API (the caller is the process on the
+# other end of the request's TCP connection) or straight at its server (a
+# snapshot sees their open connections to its port). The assistant notes
+# itself. The AI menu shows the names on each loaded model.
+
+USERS = {}                # model key -> {app name: last time}
+USERS_LOCK = threading.Lock()
+USED_WITHIN = 3600        # an app counts as using a model for this long after its last request
+GENERIC_EXES = {"python", "python3", "node", "bash", "sh", "zsh", "env", "perl", "ruby", "java", "deno", "bun",
+                "uv", "npx", "systemd-run", "timeout", "nice", "ionice"}
+
+
+def note_user(key, app):
+    if key and app:
+        with USERS_LOCK:
+            USERS.setdefault(key, {})[app] = time.time()
+
+
+def users_of(key, since=0):
+    """Apps that used a model lately, most recent first."""
+    cut = max(since, time.time() - USED_WITHIN)
+    with USERS_LOCK:
+        got = sorted(((t, a) for a, t in (USERS.get(key) or {}).items() if t >= cut), reverse=True)
+    return [a for _, a in got]
+
+
+def app_of(pid):
+    """A process's app name: its executable ("tessera" -> "Tessera"), or
+    for an interpreter its script, walking up from helpers to their app."""
+    for _ in range(6):
+        try:
+            exe = os.path.basename(os.readlink("/proc/%d/exe" % pid))
+            argv = open("/proc/%d/cmdline" % pid, "rb").read().split(b"\0")
+            ppid = int(open("/proc/%d/stat" % pid).read().rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            return ""
+        name = re.sub(r"^\.|-wrapped$|\d+(\.\d+)*$", "", exe)
+        if name.rstrip(".") in GENERIC_EXES:
+            script = next((a.decode(errors="replace") for a in argv[1:] if a and not a.startswith(b"-")), "")
+            name = re.sub(r"\.(py|js|mjs|ts|sh)$", "", os.path.basename(script)) if script else ""
+        if name and name.rstrip(".") not in GENERIC_EXES:
+            return name[:1].upper() + name[1:]
+        if ppid <= 1:
+            return ""
+        pid = ppid
+    return ""
+
+
+def tcp_sockets(match):
+    """{inode: (local port, remote port)} of established loopback TCP
+    sockets for which match(local, remote) is true."""
+    out = {}
+    for f in ("/proc/net/tcp", "/proc/net/tcp6"):
+        try:
+            lines = open(f).read().splitlines()[1:]
+        except OSError:
+            continue
+        for ln in lines:
+            parts = ln.split()
+            if len(parts) < 10 or parts[3] != "01":   # ESTABLISHED
+                continue
+            lp, rp = int(parts[1].rsplit(":", 1)[1], 16), int(parts[2].rsplit(":", 1)[1], 16)
+            if match(lp, rp):
+                out[parts[9]] = (lp, rp)
+    return out
+
+
+def socket_owners(inodes):
+    """{inode: pid} for these socket inodes (this user's processes)."""
+    want = {"socket:[%s]" % i: i for i in inodes}
+    found = {}
+    if not want:
+        return found
+    for d in os.listdir("/proc"):
+        if not d.isdigit():
+            continue
+        try:
+            for fd in os.listdir("/proc/%s/fd" % d):
+                try:
+                    t = os.readlink("/proc/%s/fd/%s" % (d, fd))
+                except OSError:
+                    continue
+                if t in want:
+                    found[want[t]] = int(d)
+                    if len(found) == len(want):
+                        return found
+        except OSError:
+            continue
+    return found
+
+
+def caller_app(client_port, server_port):
+    """The app behind a request to our server from client_port."""
+    socks = tcp_sockets(lambda lp, rp: lp == client_port and rp == server_port)
+    pid = next(iter(socket_owners(socks).values()), 0)
+    return app_of(pid) if pid else ""
+
+
+def direct_users(port_keys):
+    """Note the apps connected right now to a model server's port
+    ({port: model key}), other than hearth-ai and socket proxies."""
+    socks = tcp_sockets(lambda lp, rp: rp in port_keys)
+    if socks:   # our own requests (the assistant, the app API's relay) need no search
+        for fd in os.listdir("/proc/self/fd"):
+            try:
+                socks.pop(os.readlink("/proc/self/fd/" + fd)[8:-1], None)
+            except OSError:
+                pass
+    if not socks:
+        return
+    for inode, pid in socket_owners(socks).items():
+        if pid == os.getpid():
+            continue
+        app = app_of(pid)
+        if app and app.lower() not in ("systemd-socket-proxyd", "hearth-ai"):
+            note_user(port_keys[socks[inode][1]], app)
+
 
 def model_category(name, caps=(), arch=""):
     if "embedding" in caps:
@@ -1406,6 +1525,18 @@ class Arbiter:
                 self.unloading.pop(k, None)
         self.present = keys
         self.mem.save()
+        try:
+            ports = {}
+            for e in loaded:
+                u = (pstates.get(e["provider"]) or {}).get("url") or ""
+                m = re.match(r"https?://(?:127\.0\.0\.1|localhost|\[::1\]):(\d+)", u)
+                if m and e["kind"] == "server":
+                    ports.setdefault(int(m.group(1)), e["key"])
+            direct_users(ports)
+        except Exception as ex:  # noqa: BLE001
+            log("direct users: %s" % ex)
+        for e in loaded:
+            e["usedBy"] = users_of(e["key"], e.get("firstSeen", 0))
         loaded.sort(key=lambda e: -(e["vram"] + e["gtt"]))
         inv = self.inventory(cfg, pstates)
         held = set()
@@ -2488,6 +2619,8 @@ class Assistant:
     def run(self, rid, req, cfg, pid, model, p, fast):
         """One model's tool loop. Replies itself and returns None, or (the
         small model) returns {"why", "done": [what it did]} to hand off."""
+        note_user(pid if pid.startswith("service:") else "%s:%s" % (pid, model),
+                  "Quick assistant" if fast else "Assistant")
         if isinstance(p, AgentCli) and p.id == "claude" and not fast:
             return self.run_claude(rid, req, cfg, model, p)
         was_loaded = True
@@ -2843,6 +2976,10 @@ class ApiHandler(httpserver.BaseHTTPRequestHandler):
             self.error(400, "The body isn't JSON")
             return
         cfg, _ = settings()
+        try:
+            app = caller_app(self.client_address[1], self.server.server_address[1]) or "An app"
+        except Exception:  # noqa: BLE001
+            app = "An app"
         asked = str(body.get("model") or "")
         pid, model = api_resolve(cfg, asked)
         p = api_providers(cfg).get(pid) or api_providers(cfg, fresh=True).get(pid)
@@ -2865,9 +3002,11 @@ class ApiHandler(httpserver.BaseHTTPRequestHandler):
                     self.error(403, "%s sends what you type to the cloud. Allow cloud AI in Settings > AI first."
                                % p.label, "permission_error")
                     return
+                note_user("%s:%s" % (pid, model), app)
                 self.send_text(api_cli_reply(p, model, body.get("messages") or []), asked, stream)
                 return
             key = pid if pid.startswith("service:") else "%s:%s" % (pid, model)
+            note_user(key, app)
             loaded = make_room_for(pid, model)
             if not loaded and isinstance(p, (ModelService, Magnitude)):
                 t0 = time.time()

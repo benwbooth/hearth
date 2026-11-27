@@ -162,6 +162,9 @@ ColumnLayout {
                         if (busy === "unloading" || m.unloading) return "Unloading…";
                         let s = m.active ? "In use now" + (m.gpuPercent ? ` (${m.gpuPercent}% GPU)` : "")
                                          : "Last used " + root.dur(m.idleSec) + " ago";
+                        // Which apps (hearth-ai notes API callers, direct
+                        // connections to the server, and the assistant).
+                        if (m.usedBy && m.usedBy.length) s += " by " + m.usedBy.slice(0, 3).join(", ");
                         if (m.pinned) s += " · kept loaded";
                         else if (m.unloadIn >= 0 && !m.active) s += " · unloads in " + root.dur(m.unloadIn);
                         else if (m.kind === "process") s += " · managed by the app";
