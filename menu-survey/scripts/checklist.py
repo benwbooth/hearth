@@ -333,7 +333,7 @@ def rebuild():
                 # emulators with Qt/GTK front ends are classified by those.
                 r["status"], r["solution"], r["gap"] = "none-needed", "none-needed:game", ""
                 r["notes"] = r["notes"] or "game: menus are in-game"
-            elif r["gap"].startswith(("no-a11y:", "flatpak-no-a11y", "electron-no-a11y")) and r["attr"] in looked:
+            elif r["status"] in ("todo", "partial") and r["attr"] in looked:
                 v, note = looked[r["attr"]]
                 if v == "none":
                     r["status"], r["solution"], r["gap"] = "none-needed", "none-needed:looked", ""

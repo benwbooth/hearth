@@ -1008,10 +1008,10 @@ def open_placeholders(menus, dump, win_id=None):
 
 
 def ocr_top(r):
-    """A no-tree window with no menus: what screen reading saw at its top
-    (scripts/ocr-top.py), so "no menu bar" can be told from "unreadable"."""
-    if r.get("result") != "fallback" or not (r.get("window") or {}).get("title") \
-            or ((r.get("inspect") or {}).get("atspi") or {}).get("found"):
+    """A window where no menus were found: what screen reading saw at its
+    top and a strip of it (scripts/ocr-top.py) to look at, so "no menus"
+    can be told from "menus nothing reads" (a drawn bar, an icon button)."""
+    if r.get("result") != "fallback" or not (r.get("window") or {}).get("title"):
         return
     wid = next((w["id"] for w in windows() if w.get("title") == r["window"]["title"]
                 and w.get("app_id") != "org.quickshell"), None)
