@@ -4,7 +4,8 @@ import ".."
 import "../services"
 
 // The assistant asking before it runs a command or starts using the
-// computer (Ai.approval): what it wants to do, Allow and Deny.
+// computer (Ai.approval): what it wants to do, Allow and Deny (and, for
+// computer use and Turbine, Always Allow).
 Rectangle {
     id: card
     readonly property var req: Ai.approval
@@ -55,6 +56,17 @@ Rectangle {
             Layout.alignment: Qt.AlignRight
             spacing: 8
             PushButton { text: "Deny"; onClicked: Ai.answerApproval(false) }
+            // Computer use and Turbine can be allowed for good (Settings > AI
+            // has the same choice); commands are always asked one by one.
+            PushButton {
+                visible: !!card.req && card.req.kind !== "command"
+                text: "Always Allow"
+                tooltip: "Don't ask again: it clicks and types whenever a request needs it. Change it back in Settings > AI."
+                onClicked: {
+                    Settings.set(card.req.kind === "turbine" ? "ai.turbine" : "ai.computerUse", "allow");
+                    Ai.answerApproval(true);
+                }
+            }
             PushButton {
                 text: card.req && card.req.kind === "command" ? "Run" : "Allow"
                 primary: true

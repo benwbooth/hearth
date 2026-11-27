@@ -266,6 +266,15 @@ Singleton {
         function stop(): void { root.stop(); }
         function cancel(): void { root.dismiss(); }
         function ask(text: string): void { root.ask(text); }
+        // The card mid-request without a model (testing, screenshots):
+        // what was heard and that many steps.
+        function preview(heard: string, steps: int): void {
+            root.voiceAsk = false;
+            root.heard = heard;
+            root.reply = "";
+            root.steps = Array.from({ length: steps }, (_, i) => ({ name: "step", text: i % 2 ? "Reading the window" : "Clicking item " + (i + 1) }));
+            root.phase = "thinking";
+        }
         function state(): string { return JSON.stringify({ phase: root.phase, heard: root.heard, reply: root.reply, steps: root.steps }); }
     }
 }

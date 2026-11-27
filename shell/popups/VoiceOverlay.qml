@@ -70,7 +70,11 @@ Scope {
         margins.top: Theme.menuBarHeight + 8
         margins.right: 10
         implicitWidth: Math.round(400 * Theme.pt) + 2 * card.shadowPad
-        implicitHeight: Math.round(320 * Theme.pt)
+        // Room for long requests (steps, the Allow card, the answer): the
+        // window is see-through and only the card takes clicks (mask), so
+        // a tall one costs nothing. 320 pt cut the Allow card off.
+        implicitHeight: Math.max(Math.round(320 * Theme.pt),
+                                 (screen ? screen.height : 1080) - Theme.menuBarHeight - Math.round(60 * Theme.pt))
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "hearth-voice"
@@ -179,8 +183,15 @@ Scope {
                     elide: Text.ElideNone
                 }
                 // What it did.
+                Label {
+                    visible: Voice.steps.length > 6
+                    text: "%1 earlier steps".arg(Voice.steps.length - 6)
+                    color: Theme.fgSecondary
+                    font.pointSize: Theme.smallFontSize
+                }
                 Repeater {
-                    model: Voice.steps
+                    // The latest few: a long computer-use request has dozens.
+                    model: Voice.steps.slice(-6)
                     Row {
                         required property var modelData
                         spacing: 6
@@ -188,7 +199,7 @@ Scope {
                         Label { text: modelData.text; color: Theme.fgSecondary; font.pointSize: Theme.smallFontSize; width: content.width - 24 }
                     }
                 }
-        ApprovalCard { width: parent.width }
+                ApprovalCard { width: parent.width }
                 // The answer.
                 Label {
                     width: parent.width
