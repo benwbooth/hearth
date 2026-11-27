@@ -154,6 +154,10 @@ WP
   else
     pwenv=(PIPEWIRE_REMOTE=rig-no-pipewire PULSE_SERVER=unix:/nonexistent)
   fi
+  # A lock flag an earlier rig left for this display name (hearth restores
+  # a lock across restarts). WAYLAND_DISPLAY here is this rig's own arbor
+  # socket (arbor.env), which no live session can share.
+  [[ $WAYLAND_DISPLAY == wayland-* && -S $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY ]] && rm -f "$XDG_RUNTIME_DIR/hearth-locked-$WAYLAND_DISPLAY"
   # No first-run welcome tour: it's a window of its own over every probed
   # app (the harness then saw no app window: 2026-11-27).
   python3 -I - "$XDG_CONFIG_HOME/hearth/settings.json" <<'PY' || true
@@ -163,6 +167,10 @@ os.makedirs(os.path.dirname(p), exist_ok=True)
 try: s = json.load(open(p))
 except Exception: s = {}
 s.update(welcomeShown=True, welcomeShownArbor=True)
+# Never idle-lock: a locked rig hides every app, and its lock screen opened
+# PAM fingerprint sessions on the real fprintd (2026-11-27).
+s.setdefault("power", {}).update(displayOff=0, lock=0, sleep=0, lockOnSleep=False)
+s.setdefault("lockScreen", {}).update(fingerprint=False)
 json.dump(s, open(p, "w"), indent=2)
 PY
   DISPLAY=$(grep ^DISPLAY= "$R/arbor.env" | cut -d= -f2-) \
