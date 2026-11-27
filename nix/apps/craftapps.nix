@@ -20,6 +20,25 @@ self:
 #
 # Only when the nix-craftapps module is imported. Each wrapped package is a
 # default: an explicit `programs.craftapps.apps.<name>.package` still wins.
+#
+# Global menus: their macOS menu bar, which Linux builds don't have. Each
+# app has a localhost JSON-lines control server that lists the menu the
+# Mac menu bar is built from and runs its items; hearth-appmenu reads it
+# (CraftMenu; gridcraft's from its source, menus/craft/gridcraft.json).
+# The launcher turns the server on: a free 127.0.0.1 port per run, a fresh
+# token where the app takes one (gridcraft, photocraft, filmcraft; cadcraft
+# makes its own), recorded for hearth in $XDG_RUNTIME_DIR/hearth/craft/
+# <pid>.json (0600 in a 0700 folder; the token is also in the app's
+# environment, which only you can read). Not when a copy of the app already
+# runs with one: with a control port photocraft runs as its own process
+# instead of handing the file to the open window.
+#
+# Exposure: 127.0.0.1 is reachable by every local process of every user.
+# designcraft, effectcraft, lightcraft, soundcraft and vectorcraft check no
+# token, so such a process could run their menu commands (open, save,
+# export...). The servers reject HTTP, so web pages can't reach them.
+# Ben's choice (2026-11-26); a Unix socket in the runtime folder (a
+# preloaded bind() shim) would close it.
 { config, lib, options, pkgs, ... }:
 let
   cfg = config.hearth.apps.craftapps;
@@ -34,12 +53,55 @@ let
     soundcraft = "SOUNDCRAFT_WAYLAND";
     wordcraft = "WORDCRAFT_WAYLAND";
   };
-  wrap = name: var: pkg: pkgs.symlinkJoin {
+  # Control servers: the token variable where the app takes one from us.
+  control = {
+    cadcraft = { };
+    designcraft = { };
+    effectcraft = { };
+    filmcraft = { token = "FILMCRAFT_CONTROL_TOKEN"; };
+    gridcraft = { token = "GRIDCRAFT_CONTROL_TOKEN"; };
+    lightcraft = { };
+    photocraft = { token = "PHOTOCRAFT_CONTROL_TOKEN"; };
+    soundcraft = { };
+    vectorcraft = { };
+  };
+  cu = "${pkgs.coreutils}/bin";
+  controlScript = name: c: pkgs.writeText "${name}-hearth-control" (
+    let port = "${lib.toUpper name}_CONTROL_PORT"; in ''
+      # hearth: a control port for the global menu (nix/apps/craftapps.nix).
+      if [ -z "''${${port}:-}" ] && [ -n "''${XDG_RUNTIME_DIR:-}" ]; then
+        _hd="$XDG_RUNTIME_DIR/hearth/craft"
+        (umask 077; ${cu}/mkdir -p "$_hd")
+        _hrun=
+        for _hf in "$_hd"/*.json; do
+          [ -e "$_hf" ] || continue
+          _hp=''${_hf##*/}; _hp=''${_hp%.json}
+          if [ -d "/proc/$_hp" ]; then
+            ${pkgs.gnugrep}/bin/grep -q '"app":"${name}"' "$_hf" && _hrun=1
+          else
+            ${cu}/rm -f "$_hf"
+          fi
+        done
+        if [ -z "$_hrun" ]; then
+          for _ht in 1 2 3 4 5 6 7 8; do
+            _hport=$(( 40000 + (RANDOM * 32768 + RANDOM) % 20000 ))
+            (exec 3<>"/dev/tcp/127.0.0.1/$_hport") 2>/dev/null || break
+          done
+          _htok=$(${cu}/od -An -N32 -tx1 /dev/urandom | ${cu}/tr -d ' \n')
+          export ${port}="$_hport"
+          ${lib.optionalString (c ? token) ''export ${c.token}="$_htok"''}
+          (umask 077; printf '{"app":"${name}","port":%s,"token":"%s"}\n' "$_hport" "${if c ? token then "$_htok" else ""}" > "$_hd/$$.json")
+        fi
+      fi
+    '');
+  wrap = name: pkg: pkgs.symlinkJoin {
     name = "${pkg.name}-hearth";
     paths = [ pkg ];
     nativeBuildInputs = [ pkgs.makeWrapper ];
     postBuild = ''
-      wrapProgram $out/bin/${name} --set-default ${var} 1
+      wrapProgram $out/bin/${name} \
+        ${lib.optionalString (switches ? ${name}) "--set-default ${switches.${name}} 1"} \
+        ${lib.optionalString (control ? ${name}) "--run '. ${controlScript name control.${name}}'"}
     '';
     inherit (pkg) meta;
   };
@@ -47,11 +109,11 @@ let
 in
 {
   options.hearth.apps.craftapps.enable =
-    lib.mkEnableOption "the ArtCraft apps on Wayland (their own switch; nix-craftapps module)";
+    lib.mkEnableOption "the ArtCraft apps on Wayland (their own switch) with their Mac menus in the global menu (nix-craftapps module)";
 
   config = lib.mkIf cfg.enable (lib.optionalAttrs hasCraftapps {
-    programs.craftapps.apps = lib.mapAttrs (name: var: {
-      package = lib.mkDefault (wrap name var options.programs.craftapps.apps.${name}.package.default);
-    }) (lib.filterAttrs (name: _: options.programs.craftapps.apps ? ${name}) switches);
+    programs.craftapps.apps = lib.mapAttrs (name: _: {
+      package = lib.mkDefault (wrap name options.programs.craftapps.apps.${name}.package.default);
+    }) (lib.filterAttrs (name: _: options.programs.craftapps.apps ? ${name}) (switches // control));
   });
 }

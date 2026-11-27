@@ -1413,6 +1413,8 @@ class X11Window:
         if getattr(self, "module", None):
             self.module.rebuild()
             return False
+        if self.craft_route(self.pid):
+            return
 
         reg = registered_for_pid(self.pid)
         if reg:
@@ -1433,6 +1435,20 @@ class X11Window:
         if self.inner:
             self.inner.stop()
         self.inner = AtspiMenu(self.key, self.title, self.pid, self.window)
+
+    def craft_route(self, pid):
+        """An ArtCraft app started by hearth's launcher: its Mac menu over
+        its control server (CraftMenu)."""
+        info = craft_control_for_pid(pid)
+        if not info:
+            return False
+        if isinstance(self.inner, CraftMenu) and self.inner.info == info:
+            self.inner.fetch()
+            return True
+        if self.inner:
+            self.inner.stop()
+        self.inner = CraftMenu(self.key, info, self.window)
+        return True
 
     def set_extra(self, name, menus):
         if not self.alive:
@@ -1498,6 +1514,8 @@ class X11Window:
                 if isinstance(self.inner, ModuleMenu):
                     return False
                 new = ModuleMenu(self.key, found[0], found[1], self.window, None)
+        if new is None and xid and self.craft_route(x11_pid(xid) or self.pid):
+            return False
         if new is None and xid:
             # Nothing exported: the window's own menu bar over AT-SPI, as for
             # Wayland windows (Java Swing through the ATK bridge, X11 Qt and
@@ -1790,6 +1808,385 @@ class ScreenReader:
             err(e)
         cls.ours = False
         return False
+
+
+# ---------------------------------------------------------------- craft apps
+
+# storytold's ArtCraft apps (nix/apps/craftapps.nix): egui windows with no
+# menu bar on Linux, but a localhost JSON-lines control server that lists
+# the menu their macOS menu bar is built from and runs its items. hearth's
+# launcher starts each app with its control port on (127.0.0.1 only) and
+# records port and token in $XDG_RUNTIME_DIR/hearth/craft/<pid>.json (0600,
+# in a 0700 folder). Exposure: on 127.0.0.1 any local process of any user
+# can connect; five of these servers (designcraft, effectcraft, lightcraft,
+# soundcraft, vectorcraft) have no token, so such a process could run
+# their menu commands. They reject HTTP, so web pages can't. Ben's choice
+# (2026-11-26); a Unix socket in the runtime folder (preloaded bind shim)
+# would close it.
+CRAFT_DIR = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "hearth", "craft")
+CRAFT_TIMEOUT = 4.0  # (File › Open in cadcraft/gridcraft holds their UI thread: don't wait)
+
+
+def craft_control_for_pid(pid):
+    """The control endpoint hearth's launcher recorded for this process."""
+    if not pid:
+        return None
+    try:
+        with open(os.path.join(CRAFT_DIR, f"{int(pid)}.json")) as f:
+            info = json.load(f)
+        if info.get("app") in CRAFT_APPS and int(info.get("port", 0)) > 0:
+            return info
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def craft_shortcut(s):
+    """"Cmd+Shift+S" as shown off the Mac: Ctrl+Shift+S."""
+    if not s:
+        return ""
+    return "+".join("Ctrl" if p in ("Cmd", "Command", "Super") else p for p in str(s).split("+"))
+
+
+class CraftConn:
+    """One app's control server: a request per connection, on a worker
+    thread (the helper's loop never waits on an app)."""
+
+    def __init__(self, info):
+        self.app, self.port, self.token = info["app"], int(info["port"]), info.get("token", "")
+        if self.app == "cadcraft" and not self.token:
+            # cadcraft makes its own token per launch, in a 0600 file.
+            try:
+                with open(os.path.join(os.environ.get("XDG_RUNTIME_DIR", ""), f"cadcraft-control-{self.port}.token")) as f:
+                    self.token = f.read().strip()
+            except OSError:
+                pass
+
+    def call(self, method, params=None):
+        import socket
+        style = CRAFT_APPS[self.app]["auth"]
+        with socket.create_connection(("127.0.0.1", self.port), timeout=CRAFT_TIMEOUT) as sock:
+            f = sock.makefile("rwb")
+
+            def send(obj):
+                f.write((json.dumps(obj) + "\n").encode())
+                f.flush()
+                line = f.readline()
+                if not line:
+                    raise OSError(f"{self.app}: connection closed")
+                return json.loads(line)
+
+            if style == "handshake":
+                r = send({"id": 1, "method": "auth", "params": {"token": self.token}})
+                if not r.get("ok"):
+                    raise OSError(f"{self.app}: {r.get('error')}")
+            req = {"id": 2, "method": method, "params": params or {}}
+            if style == "per_request":
+                req["token"] = self.token
+            r = send(req)
+            if not r.get("ok"):
+                raise OSError(f"{self.app} {method}: {r.get('error')}")
+            return r.get("result")
+
+    def async_call(self, method, params, done=None):
+        import threading
+
+        def work():
+            try:
+                res = self.call(method, params)
+            except (OSError, ValueError) as e:
+                GLib.idle_add(lambda: err(e) and False)
+                return
+            if done:
+                GLib.idle_add(lambda: done(res) and False)
+        threading.Thread(target=work, daemon=True).start()
+
+
+# A node: {"label", "shortcut", "enabled", "checked" (None/bool), "children"
+# (submenu) or "run": (method, params) / ("keys", chord) / ("url", url)},
+# or {"sep": True}.
+def _craft_tree_from_paths(rows, key_path, label, make):
+    """Flat rows with a path of menu titles into nested nodes, in order."""
+    root = []
+    index = {}
+    for r in rows:
+        path = key_path(r)
+        if not path:
+            continue
+        parent, sofar = root, ()
+        for t in path:
+            sofar += (t,)
+            node = index.get(sofar)
+            if node is None:
+                node = {"label": t, "children": []}
+                index[sofar] = node
+                parent.append(node)
+            parent = node["children"]
+        n = make(r)
+        if n:
+            parent.append(n)
+    return root
+
+
+def _craft_flat(rows, run, sep_id=None):
+    def make(r):
+        if sep_id and r.get("id") == sep_id:
+            return {"sep": True}
+        c = r.get("checked")
+        return {"label": r.get("label", ""), "shortcut": craft_shortcut(r.get("shortcut")),
+                "enabled": bool(r.get("enabled", True)), "checked": c if isinstance(c, bool) else None,
+                "run": run(r)}
+    return _craft_tree_from_paths(rows, lambda r: list(r.get("path") or r.get("menu") or []),
+                                  None, make)
+
+
+def _craft_photocraft(c):
+    rows = c.call("ui.menu.list")
+    return _craft_flat(rows, lambda r: ("ui.menu.invoke", dict({"id": r["id"], "wait": False},
+                                                                **({"params": r["params"]} if r.get("params") else {}))),
+                       sep_id="---")
+
+
+def _craft_idparams(c):  # effectcraft, filmcraft
+    rows = c.call("ui.menu.list")
+    return _craft_flat(rows, lambda r: ("ui.menu.invoke", dict({"id": r["id"]},
+                                                                **({"params": r["params"]} if r.get("params") else {}))))
+
+
+def _craft_vectorcraft(c):
+    rows = c.call("ui.menu.list")
+
+    def run(r):
+        cmd, params, label = r.get("command"), r.get("params"), r.get("label", "")
+        if not cmd:
+            return None
+        if label.endswith("…") and params:
+            # A click on a "…" item asks for its parameters first (menus/invoke.rs).
+            return ("ui.menu.invoke", {"command": "ui.paramDialog",
+                                       "params": {"command": cmd, "label": label.rstrip("…"), "params": params}})
+        return ("ui.menu.invoke", {"command": cmd, "params": params or {}})
+    tree = _craft_flat(rows, run)
+    _craft_disable_unrunnable(tree)
+    return tree
+
+
+def _craft_disable_unrunnable(nodes):
+    for n in nodes:
+        if "children" in n:
+            _craft_disable_unrunnable(n["children"])
+        elif not n.get("sep") and n.get("run") is None:
+            n["enabled"] = False
+
+
+def _craft_nested(c, method="ui.menu.list"):  # cadcraft, lightcraft
+    def conv(nodes):
+        out = []
+        for n in nodes:
+            kind = n.get("kind")
+            if kind == "separator":
+                out.append({"sep": True})
+            elif "children" in n or kind == "submenu":
+                out.append({"label": n.get("label", ""), "children": conv(n.get("children") or [])})
+            else:
+                cmd = n.get("command") or n.get("id")
+                params = {"command": cmd}
+                if n.get("params"):
+                    params["params"] = n["params"]
+                c_ = n.get("checked")
+                out.append({"label": n.get("label", ""), "shortcut": craft_shortcut(n.get("shortcut")),
+                            "enabled": bool(n.get("enabled", True)) and bool(cmd),
+                            "checked": c_ if isinstance(c_, bool) else None,
+                            "run": ("ui.menu.invoke", params) if cmd else None})
+        return out
+    return conv(c.call(method))
+
+
+def _craft_soundcraft(c):
+    rows = c.call("ui.menu.list")
+
+    def make(r):
+        label = r["path"].split(" > ")[-1]
+        cmd = r.get("command")
+        return {"label": label, "shortcut": "", "enabled": bool(cmd), "checked": None,
+                "run": ("ui.menu.invoke", {"path": r["path"], **({"id": cmd} if cmd else {})}) if cmd else None}
+    return _craft_tree_from_paths(rows, lambda r: r["path"].split(" > ")[:-1], None, make)
+
+
+def _craft_designcraft(c):
+    """ui.menu.list is the static table (ids only, "-" separators, ">Name"
+    … "<" submenus); labels and enabled from engine.commands, as its Mac
+    menu takes them."""
+    table = c.call("ui.menu.list")
+    labels = {}
+    for cmd in c.call("engine.commands") or []:
+        cid = cmd.get("id")
+        if cid and (cmd.get("ui") or cid not in labels):
+            labels[cid] = cmd
+    out = []
+    for title, entries in table:
+        stack = [{"label": title, "children": []}]
+        for e in entries:
+            if e == "-":
+                stack[-1]["children"].append({"sep": True})
+            elif e.startswith(">"):
+                node = {"label": e[1:], "children": []}
+                stack[-1]["children"].append(node)
+                stack.append(node)
+            elif e == "<":
+                if len(stack) > 1:
+                    stack.pop()
+            else:
+                ident = e.split(":", 1)[1].split("|", 1)[0] if ":" in e else e
+                parts = e.split("|")
+                fixed_label = parts[1] if len(parts) > 1 else ""
+                params = json.loads(parts[2]) if len(parts) > 2 else None
+                if ident in ("window.panel", "window.workspace", "window.brightness"):
+                    continue  # (submenus the app expands from its own state)
+                info = labels.get(ident, {})
+                run = {"command": ident}
+                if params:
+                    run["params"] = params
+                stack[-1]["children"].append({
+                    "label": fixed_label or info.get("label") or ident, "shortcut": craft_shortcut(info.get("shortcut")),
+                    "enabled": bool(info.get("enabled", True)), "checked": None,
+                    "run": ("ui.menu.invoke", run)})
+        out.append(stack[0])
+    return out
+
+
+def _craft_gridcraft(c):
+    """gridcraft lists no menu: its Mac menu's static table, generated from
+    its source (menus/craft/gridcraft.json, gen-craft-mac-menu.py)."""
+    with open(os.path.join(MODULE_DIRS[0], "craft", "gridcraft.json")) as f:
+        data = json.load(f)
+
+    def conv(items):
+        out = []
+        for it in items:
+            if it.get("separator"):
+                out.append({"sep": True})
+            elif "items" in it:
+                out.append({"label": it["label"], "children": conv(it["items"])})
+            else:
+                r = it["run"]
+                run = ("keys", r["keys"]) if "keys" in r else ("url", r["url"]) if "url" in r else (r["method"], r["params"])
+                out.append({"label": it["label"], "shortcut": it.get("shortcut", ""), "enabled": True,
+                            "checked": None, "run": run})
+        return out
+    return [{"label": m["title"], "children": conv(m["items"])} for m in data["menus"]]
+
+
+CRAFT_APPS = {
+    "cadcraft": {"auth": "per_request", "read": _craft_nested},
+    "designcraft": {"auth": "none", "read": _craft_designcraft},
+    "effectcraft": {"auth": "none", "read": _craft_idparams},
+    "filmcraft": {"auth": "per_request", "read": _craft_idparams},
+    "gridcraft": {"auth": "handshake", "read": _craft_gridcraft},
+    "lightcraft": {"auth": "none", "read": lambda c: _craft_nested(c, "ui.menu.tree")},
+    "photocraft": {"auth": "handshake", "read": _craft_photocraft},
+    "soundcraft": {"auth": "none", "read": _craft_soundcraft},
+    "vectorcraft": {"auth": "none", "read": _craft_vectorcraft},
+}
+
+
+class CraftMenu:
+    """A craft app window's menus from its control server: read when the
+    window is focused and again when a menu opens (enabled/checked states
+    are live), items run through the server (keys through arbor for the
+    few its Mac menu sends as keys)."""
+
+    FIRST_ID = -7000
+
+    def __init__(self, key, info, window):
+        self.key, self.info, self.window, self.alive = key, info, window, True
+        self.conn = CraftConn(info)
+        self.runs, self.busy, self.again = {}, False, False
+        self.fetch()
+
+    def request(self):
+        return {"cmd": "watch", "key": self.key, "kind": "craft", "app": self.info["app"]}
+
+    def same(self, other):
+        return isinstance(other, CraftMenu) and other.key == self.key and other.info == self.info
+
+    def stop(self):
+        self.alive = False
+
+    def fetch(self):
+        if self.busy:
+            self.again = True
+            return
+        self.busy = True
+        import threading
+        reader = CRAFT_APPS[self.info["app"]]["read"]
+
+        def work():
+            try:
+                tree = reader(self.conn)
+                GLib.idle_add(lambda: self.emit(tree) and False)
+            except (OSError, ValueError, KeyError, TypeError) as e:
+                msg = f"craft menu {self.info['app']}: {e}"
+                GLib.idle_add(lambda: self.failed(msg) and False)
+        threading.Thread(target=work, daemon=True).start()
+
+    def failed(self, msg):
+        self.busy = False
+        err(msg)
+        if self.alive and not self.runs:
+            out({"type": "none", "key": self.key})
+
+    def emit(self, tree):
+        self.busy = False
+        if self.again:
+            self.again = False
+            self.fetch()
+        if not self.alive:
+            return
+        self.runs = {}
+        counter = [self.FIRST_ID]
+
+        def conv(nodes):
+            res = []
+            for n in nodes:
+                nid = counter[0]
+                counter[0] -= 1
+                if n.get("sep"):
+                    res.append(item(nid, type="separator"))
+                elif "children" in n:
+                    kids = conv(n["children"])
+                    if kids:
+                        res.append(item(nid, n["label"], submenu=True, children=kids))
+                else:
+                    kw = {"shortcut": n.get("shortcut", ""), "enabled": n.get("enabled", True) and n.get("run") is not None}
+                    if n.get("checked") is not None:
+                        kw.update(toggleType="checkmark", toggleState=1 if n["checked"] else 0)
+                    self.runs[nid] = n.get("run")
+                    res.append(item(nid, n["label"], **kw))
+            return res
+        out({"type": "menu", "key": self.key, "source": "craft", "menu": item(0, children=conv(tree))})
+
+    def open(self, nid):
+        self.fetch()  # states as they are now
+
+    def close(self, nid):
+        pass
+
+    def click(self, nid):
+        run = self.runs.get(nid)
+        if not run:
+            return
+        kind, arg = run
+        if kind == "keys":
+            if self.window:
+                GLib.timeout_add(120, lambda: subprocess.Popen(
+                    ["arbor", "msg", "action", "send-keys", "--id", str(self.window), "--keys", arg],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) and False)
+        elif kind == "url":
+            if arg.startswith("https://"):
+                subprocess.Popen(["xdg-open", arg], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            # After hearth's menu has closed and the window has the keyboard.
+            GLib.timeout_add(120, lambda: self.conn.async_call(kind, arg, lambda _r: self.fetch()) and False)
 
 
 class AtspiMenu:

@@ -193,10 +193,37 @@ any new app:
    `key_binds` (COSMIC Files/Edit/Term, Cedilla, StarryDex, camera,
    color picker, cosmicding), GTKmm/GTK accelerators (GParted). One
    parser per toolkit: every app on that toolkit is then covered.
-5. **Keyboard sections of man pages and manuals** (TigerVNC's
+5. **The app's macOS menu bar** (Ben, 2026-11-26: "checking the mac
+   version for global menus is a valid option"). Cross-platform apps
+   often build a real menu bar only on macOS (muda, AppKit, Electron's
+   `Menu` with `process.platform` checks, Qt's `QMenuBar` under
+   `Q_OS_MACOS`), while Linux gets a ribbon or nothing. That Mac menu is
+   the app author's own layout of File/Edit/View…, with its commands and
+   shortcuts (Cmd becomes Ctrl). Two ways in, best first:
+   - **Live, from the app**: when the app can list the model its Mac menu
+     is built from and run its items (the ArtCraft apps' control servers:
+     `ui.menu.list` / `ui.menu.tree` / `ui.menu.invoke`), hearth reads it
+     at run time: always the installed version's menu, with live
+     enabled/checked states and the exact command per item. Done for
+     cadcraft, designcraft, effectcraft, filmcraft, lightcraft,
+     photocraft, soundcraft and vectorcraft (hearth-appmenu `CraftMenu`;
+     nix/apps/craftapps.nix starts them with a 127.0.0.1 control port and
+     records port and token for hearth; the exposure is written there).
+   - **From the source table**: when the Mac menu is a static table, a
+     generator turns it into hearth's menu data, rerun on each release.
+     gridcraft: `gen-craft-mac-menu.py SRC gridcraft >
+     menus/craft/gridcraft.json` reads `fn tree()` in
+     apps/gridcraft/src/native_menu.rs (label, command id or
+     `dialog:name`, accelerator); its items run through the control
+     server (`engine.execute`, `ui.dialog`) or as keys where the Mac menu
+     sends keys (Cut/Copy/Paste/Undo/Redo).
+   No Mac menu: deckcraft, figcraft, pdfcraft, wordcraft (they stay on the
+   AT-SPI route). craft-anything has one (crates/ui-egui/src/menu.rs) but
+   no control server: a keys-only module from it is still open.
+6. **Keyboard sections of man pages and manuals** (TigerVNC's
    vncviewer(1), Acrobat's shortcut chapter): a table parser, with the
    menu grouping from the section headings.
-6. **A local model** reads what the steps above couldn't parse (prose
+7. **A local model** reads what the steps above couldn't parse (prose
    docs, unusual source) and writes the same YAML; the validator and the
    rig test (send each key, watch for a change) gate it like any module.
 

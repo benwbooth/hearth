@@ -1,0 +1,1293 @@
+{
+ "app": "gridcraft",
+ "source": "apps/gridcraft/src/native_menu.rs fn tree()",
+ "version": "v0.19.1",
+ "generator": "menu-survey/generators/gen-craft-mac-menu.py",
+ "menus": [
+  {
+   "title": "File",
+   "items": [
+    {
+     "label": "New Workbook",
+     "id": "file.new",
+     "shortcut": "Ctrl+N",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "file.new"
+      }
+     }
+    },
+    {
+     "label": "New from Sample…",
+     "id": "dialog:start",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "start"
+      }
+     }
+    },
+    {
+     "label": "Open…",
+     "id": "file.open",
+     "shortcut": "Ctrl+O",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "file.open"
+      }
+     }
+    },
+    {
+     "separator": true
+    },
+    {
+     "label": "Close",
+     "id": "file.close",
+     "shortcut": "Ctrl+W",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "file.close"
+      }
+     }
+    },
+    {
+     "label": "Save",
+     "id": "file.save",
+     "shortcut": "Ctrl+S",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "file.save"
+      }
+     }
+    },
+    {
+     "label": "Save As…",
+     "id": "file.saveAs",
+     "shortcut": "Ctrl+Shift+S",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "file.saveAs"
+      }
+     }
+    },
+    {
+     "label": "Export as PDF…",
+     "id": "file.exportPdf",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "file.exportPdf"
+      }
+     }
+    },
+    {
+     "label": "Export as CSV…",
+     "id": "dialog:saveCopy:csv",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "saveCopy",
+       "format": "csv"
+      }
+     }
+    },
+    {
+     "label": "Save as Web Page…",
+     "id": "dialog:saveCopy:html",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "saveCopy",
+       "format": "html"
+      }
+     }
+    },
+    {
+     "separator": true
+    },
+    {
+     "label": "Page Setup…",
+     "id": "dialog:pageSetup",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "pageSetup"
+      }
+     }
+    },
+    {
+     "label": "Print…",
+     "id": "file.print",
+     "shortcut": "Ctrl+P",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "file.print"
+      }
+     }
+    },
+    {
+     "separator": true
+    },
+    {
+     "label": "Properties…",
+     "id": "dialog:backstage:info",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "backstage",
+       "page": "info"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "title": "Edit",
+   "items": [
+    {
+     "label": "Undo",
+     "id": "edit.undo",
+     "shortcut": "Ctrl+Z",
+     "run": {
+      "keys": "Ctrl+Z"
+     }
+    },
+    {
+     "label": "Redo",
+     "id": "edit.redo",
+     "shortcut": "Ctrl+Shift+Z",
+     "run": {
+      "keys": "Ctrl+Shift+Z"
+     }
+    },
+    {
+     "separator": true
+    },
+    {
+     "label": "Cut",
+     "id": "edit.cut",
+     "shortcut": "Ctrl+X",
+     "run": {
+      "keys": "Ctrl+X"
+     }
+    },
+    {
+     "label": "Copy",
+     "id": "edit.copy",
+     "shortcut": "Ctrl+C",
+     "run": {
+      "keys": "Ctrl+C"
+     }
+    },
+    {
+     "label": "Paste",
+     "id": "edit.paste",
+     "shortcut": "Ctrl+V",
+     "run": {
+      "keys": "Ctrl+V"
+     }
+    },
+    {
+     "label": "Paste Special…",
+     "id": "dialog:pasteSpecial",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "pasteSpecial"
+      }
+     }
+    },
+    {
+     "separator": true
+    },
+    {
+     "label": "Fill Down",
+     "id": "edit.fillDown",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "edit.fillDown"
+      }
+     }
+    },
+    {
+     "label": "Fill Right",
+     "id": "edit.fillRight",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "edit.fillRight"
+      }
+     }
+    },
+    {
+     "label": "Series…",
+     "id": "dialog:series",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "series"
+      }
+     }
+    },
+    {
+     "label": "Flash Fill",
+     "id": "edit.flashFill",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "edit.flashFill"
+      }
+     }
+    },
+    {
+     "separator": true
+    },
+    {
+     "label": "Clear All",
+     "id": "edit.clearAll",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "edit.clearAll"
+      }
+     }
+    },
+    {
+     "label": "Clear Formats",
+     "id": "edit.clearFormats",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "edit.clearFormats"
+      }
+     }
+    },
+    {
+     "label": "Clear Contents",
+     "id": "edit.clearContents",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "edit.clearContents"
+      }
+     }
+    },
+    {
+     "separator": true
+    },
+    {
+     "label": "Delete…",
+     "id": "dialog:deleteCells",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "deleteCells"
+      }
+     }
+    },
+    {
+     "label": "Delete Sheet",
+     "id": "home.deleteSheet",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "home.deleteSheet"
+      }
+     }
+    },
+    {
+     "separator": true
+    },
+    {
+     "label": "Find…",
+     "id": "dialog:find",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "find"
+      }
+     }
+    },
+    {
+     "label": "Replace…",
+     "id": "dialog:find:replace",
+     "shortcut": "Ctrl+H",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "find",
+       "replace": true
+      }
+     }
+    },
+    {
+     "label": "Go To…",
+     "id": "dialog:goTo",
+     "shortcut": "Ctrl+G",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "goTo"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "title": "View",
+   "items": [
+    {
+     "label": "Normal",
+     "id": "view.normal",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "view.normal"
+      }
+     }
+    },
+    {
+     "label": "Page Layout",
+     "id": "view.pageLayout",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "view.pageLayout"
+      }
+     }
+    },
+    {
+     "label": "Page Break Preview",
+     "id": "view.pageBreakPreview",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "view.pageBreakPreview"
+      }
+     }
+    },
+    {
+     "separator": true
+    },
+    {
+     "label": "Formula Bar",
+     "id": "view.formulaBar",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "view.formulaBar"
+      }
+     }
+    },
+    {
+     "label": "Gridlines",
+     "id": "view.gridlines",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "view.gridlines"
+      }
+     }
+    },
+    {
+     "label": "Headings",
+     "id": "view.headings",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "view.headings"
+      }
+     }
+    },
+    {
+     "separator": true
+    },
+    {
+     "label": "Zoom…",
+     "id": "dialog:zoom",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "zoom"
+      }
+     }
+    },
+    {
+     "label": "Zoom to Selection",
+     "id": "view.zoomToSelection",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "view.zoomToSelection"
+      }
+     }
+    },
+    {
+     "label": "Freeze Panes",
+     "id": "view.freezePanes",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "view.freezePanes"
+      }
+     }
+    },
+    {
+     "label": "Freeze Top Row",
+     "id": "view.freezeTopRow",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "view.freezeTopRow"
+      }
+     }
+    },
+    {
+     "label": "Unfreeze Panes",
+     "id": "view.unfreezePanes",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "view.unfreezePanes"
+      }
+     }
+    },
+    {
+     "separator": true
+    },
+    {
+     "label": "Display Theme",
+     "items": [
+      {
+       "label": "System",
+       "run": {
+        "method": "engine.execute",
+        "params": {
+         "command": "view.theme",
+         "params": {
+          "mode": "system"
+         }
+        }
+       }
+      },
+      {
+       "label": "Light",
+       "run": {
+        "method": "engine.execute",
+        "params": {
+         "command": "view.theme",
+         "params": {
+          "mode": "light"
+         }
+        }
+       }
+      },
+      {
+       "label": "Dark",
+       "run": {
+        "method": "engine.execute",
+        "params": {
+         "command": "view.theme",
+         "params": {
+          "mode": "dark"
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "label": "Collapse Ribbon",
+     "id": "view.collapseRibbon",
+     "shortcut": "Ctrl+Alt+R",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "view.collapseRibbon"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "title": "Insert",
+   "items": [
+    {
+     "label": "Cells…",
+     "id": "dialog:insertCells",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "insertCells"
+      }
+     }
+    },
+    {
+     "label": "Rows",
+     "id": "home.insertRows",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "home.insertRows"
+      }
+     }
+    },
+    {
+     "label": "Columns",
+     "id": "home.insertColumns",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "home.insertColumns"
+      }
+     }
+    },
+    {
+     "label": "Sheet",
+     "id": "home.insertSheet",
+     "shortcut": "Shift+F11",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "home.insertSheet"
+      }
+     }
+    },
+    {
+     "separator": true
+    },
+    {
+     "label": "Chart",
+     "id": "insert.recommendedCharts",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "insert.recommendedCharts"
+      }
+     }
+    },
+    {
+     "label": "Sparklines…",
+     "id": "dialog:sparkline",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "sparkline"
+      }
+     }
+    },
+    {
+     "label": "PivotTable",
+     "id": "insert.pivotTable",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "insert.pivotTable"
+      }
+     }
+    },
+    {
+     "label": "Table",
+     "id": "insert.table",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "insert.table"
+      }
+     }
+    },
+    {
+     "separator": true
+    },
+    {
+     "label": "Function…",
+     "id": "dialog:insertFunction",
+     "shortcut": "Shift+F3",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "insertFunction"
+      }
+     }
+    },
+    {
+     "label": "Name…",
+     "id": "dialog:defineName",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "defineName"
+      }
+     }
+    },
+    {
+     "label": "New Comment",
+     "id": "dialog:comment",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "comment",
+       "threaded": true
+      }
+     }
+    },
+    {
+     "label": "New Note",
+     "id": "dialog:note",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "comment",
+       "threaded": false
+      }
+     }
+    },
+    {
+     "label": "Picture…",
+     "id": "dialog:insertPicture",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "insertPicture"
+      }
+     }
+    },
+    {
+     "label": "Text Box",
+     "id": "insert.textBox",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "insert.textBox"
+      }
+     }
+    },
+    {
+     "label": "Link…",
+     "id": "dialog:insertLink",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "insertLink"
+      }
+     }
+    },
+    {
+     "label": "Checkbox",
+     "id": "insert.checkbox",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "insert.checkbox"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "title": "Format",
+   "items": [
+    {
+     "label": "Cells…",
+     "id": "dialog:formatCells",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "formatCells"
+      }
+     }
+    },
+    {
+     "label": "Row Height…",
+     "id": "dialog:rowHeight",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "rowHeight"
+      }
+     }
+    },
+    {
+     "label": "AutoFit Row Height",
+     "id": "home.autofitRowHeight",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "home.autofitRowHeight"
+      }
+     }
+    },
+    {
+     "label": "Column Width…",
+     "id": "dialog:columnWidth",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "columnWidth"
+      }
+     }
+    },
+    {
+     "label": "AutoFit Column Width",
+     "id": "home.autofitColumnWidth",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "home.autofitColumnWidth"
+      }
+     }
+    },
+    {
+     "separator": true
+    },
+    {
+     "label": "Hide Rows",
+     "id": "home.hideRows",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "home.hideRows"
+      }
+     }
+    },
+    {
+     "label": "Unhide Rows",
+     "id": "home.unhideRows",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "home.unhideRows"
+      }
+     }
+    },
+    {
+     "label": "Hide Columns",
+     "id": "home.hideColumns",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "home.hideColumns"
+      }
+     }
+    },
+    {
+     "label": "Unhide Columns",
+     "id": "home.unhideColumns",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "home.unhideColumns"
+      }
+     }
+    },
+    {
+     "separator": true
+    },
+    {
+     "label": "Rename Sheet…",
+     "id": "dialog:renameSheet",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "renameSheet"
+      }
+     }
+    },
+    {
+     "label": "Hide Sheet",
+     "id": "sheet.hide",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "sheet.hide"
+      }
+     }
+    },
+    {
+     "label": "Unhide Sheet…",
+     "id": "sheet.unhide",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "sheet.unhide"
+      }
+     }
+    },
+    {
+     "separator": true
+    },
+    {
+     "label": "Conditional Formatting…",
+     "id": "dialog:manageRules",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "manageRules"
+      }
+     }
+    },
+    {
+     "label": "Format as Table",
+     "id": "home.formatAsTable",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "home.formatAsTable"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "title": "Tools",
+   "items": [
+    {
+     "label": "Spelling…",
+     "id": "dialog:spelling",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "spelling"
+      }
+     }
+    },
+    {
+     "label": "Workbook Statistics",
+     "id": "dialog:statistics",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "statistics"
+      }
+     }
+    },
+    {
+     "label": "Check Accessibility",
+     "id": "dialog:accessibility",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "accessibility"
+      }
+     }
+    },
+    {
+     "separator": true
+    },
+    {
+     "label": "Protect Sheet…",
+     "id": "dialog:protectSheet",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "protectSheet"
+      }
+     }
+    },
+    {
+     "label": "Protect Workbook",
+     "id": "review.protectWorkbook",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "review.protectWorkbook"
+      }
+     }
+    },
+    {
+     "separator": true
+    },
+    {
+     "label": "Goal Seek…",
+     "id": "dialog:goalSeek",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "goalSeek"
+      }
+     }
+    },
+    {
+     "label": "Error Checking…",
+     "id": "dialog:errorChecking",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "errorChecking"
+      }
+     }
+    },
+    {
+     "label": "Evaluate Formula…",
+     "id": "dialog:evaluateFormula",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "evaluateFormula"
+      }
+     }
+    },
+    {
+     "separator": true
+    },
+    {
+     "label": "Record Actions",
+     "id": "automate.recordActions",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "automate.recordActions"
+      }
+     }
+    },
+    {
+     "label": "Command Palette…",
+     "id": "dialog:commandSearch",
+     "shortcut": "Ctrl+Shift+P",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "commandSearch"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "title": "Data",
+   "items": [
+    {
+     "label": "Sort…",
+     "id": "dialog:sort",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "sort"
+      }
+     }
+    },
+    {
+     "label": "Sort A to Z",
+     "id": "data.sortAscending",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "data.sortAscending"
+      }
+     }
+    },
+    {
+     "label": "Sort Z to A",
+     "id": "data.sortDescending",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "data.sortDescending"
+      }
+     }
+    },
+    {
+     "label": "Filter",
+     "id": "data.filter",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "data.filter"
+      }
+     }
+    },
+    {
+     "label": "Clear Filter",
+     "id": "data.clearFilter",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "data.clearFilter"
+      }
+     }
+    },
+    {
+     "separator": true
+    },
+    {
+     "label": "Text to Columns…",
+     "id": "dialog:textToColumns",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "textToColumns"
+      }
+     }
+    },
+    {
+     "label": "Remove Duplicates…",
+     "id": "dialog:removeDuplicates",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "removeDuplicates"
+      }
+     }
+    },
+    {
+     "label": "Data Validation…",
+     "id": "dialog:dataValidation",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "dataValidation"
+      }
+     }
+    },
+    {
+     "separator": true
+    },
+    {
+     "label": "Group",
+     "id": "data.group",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "data.group"
+      }
+     }
+    },
+    {
+     "label": "Ungroup",
+     "id": "data.ungroup",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "data.ungroup"
+      }
+     }
+    },
+    {
+     "label": "Show Detail",
+     "id": "data.showDetail",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "data.showDetail"
+      }
+     }
+    },
+    {
+     "label": "Hide Detail",
+     "id": "data.hideDetail",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "data.hideDetail"
+      }
+     }
+    },
+    {
+     "label": "Subtotal…",
+     "id": "dialog:subtotal",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "subtotal"
+      }
+     }
+    },
+    {
+     "separator": true
+    },
+    {
+     "label": "Calculate Now",
+     "id": "formulas.calculateNow",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "formulas.calculateNow"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "title": "Window",
+   "items": [
+    {
+     "label": "New Window",
+     "id": "view.newWindow",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "view.newWindow"
+      }
+     }
+    },
+    {
+     "label": "Next Sheet",
+     "id": "sheet.next",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "sheet.next"
+      }
+     }
+    },
+    {
+     "label": "Previous Sheet",
+     "id": "sheet.previous",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "sheet.previous"
+      }
+     }
+    },
+    {
+     "separator": true
+    }
+   ]
+  },
+  {
+   "title": "Help",
+   "items": [
+    {
+     "label": "Check for Updates…",
+     "id": "app.checkForUpdates",
+     "shortcut": "",
+     "run": {
+      "method": "engine.execute",
+      "params": {
+       "command": "app.checkForUpdates"
+      }
+     }
+    },
+    {
+     "label": "Agent Control (MCP)…",
+     "id": "dialog:agents",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "agents"
+      }
+     }
+    },
+    {
+     "label": "Contributors…",
+     "id": "dialog:about:Contributors",
+     "shortcut": "",
+     "run": {
+      "method": "ui.dialog",
+      "params": {
+       "name": "about",
+       "tab": "Contributors"
+      }
+     }
+    },
+    {
+     "label": "GridCraft on getartcraft.com",
+     "id": "url:https://getartcraft.com/apps/gridcraft",
+     "shortcut": "",
+     "run": {
+      "url": "https://getartcraft.com/apps/gridcraft"
+     }
+    },
+    {
+     "label": "Join the ArtCraft Discord…",
+     "id": "url:https://discord.gg/artcraft",
+     "shortcut": "",
+     "run": {
+      "url": "https://discord.gg/artcraft"
+     }
+    }
+   ]
+  }
+ ]
+}
