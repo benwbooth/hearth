@@ -204,32 +204,12 @@ Row {
         required property var modelData
         // In the chevron's dropdown: a left click there also closes it.
         property bool inMenu: false
-        // Tray icons that are filled shapes at menu bar size, as symbolic
-        // glyphs that keep what the icon says (locked or not). Matched on the
-        // icon name the app asks for (its StatusNotifierItem IconName); with
-        // Settings > Menu Bar > monochrome icons off, apps keep their own.
-        readonly property var symbolicIcons: [
-            // KeePassXC: a filled disc with a padlock badge (its "monochrome"
-            // icons, keepassxc-monochrome-{light,dark}[-locked]).
-            { match: /keepassxc.*-locked/, icon: "object-locked-symbolic" },
-            { match: /keepassxc/, icon: "object-unlocked-symbolic" }
-        ]
-        function symbolicFor(name) {
-            if (Settings.menubar.monochromeIcons === false) return "";
-            for (const s of symbolicIcons) if (s.match.test(name)) return s.icon;
-            return "";
-        }
-
         implicitWidth: Theme.menuBarItemWidth
-        // An app whose tray icon is a heavy filled shape (a blob among the
-        // menu bar's line glyphs) gets a matching symbolic one instead
-        // (symbolicFor, above); everything else shows its own.
-        readonly property string symbolic: item.symbolicFor(String(modelData.icon))
-        icon: symbolic || modelData.icon
+        icon: modelData.icon
         // Apps' own tray icons are usually full-colour pictures that turn
         // into blobs as silhouettes: only their symbolic/panel icons go
         // monochrome.
-        monochrome: Settings.menubar.monochromeIcons !== false && (symbolic !== "" || /symbolic|panel|tray|indicator|-mono/i.test(String(modelData.icon)))
+        monochrome: Settings.menubar.monochromeIcons !== false && /symbolic|panel|tray|indicator|-mono/i.test(String(modelData.icon))
         // Everything else: white or grey pictures (an update checker, Claude)
         // still follow the bar's text colour; colourful icons keep theirs.
         adaptive: Settings.menubar.monochromeIcons !== false && !monochrome
