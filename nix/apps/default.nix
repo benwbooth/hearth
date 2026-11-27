@@ -20,6 +20,7 @@ self:
     (import ./chatgpt.nix self)
     (import ./claude-desktop.nix self)
     (import ./cursor.nix self)
+    (import ./freelens.nix self)
     (import ./google-chrome.nix self)
     (import ./heroic.nix self)
     (import ./mailspring.nix self)
