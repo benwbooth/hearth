@@ -70,7 +70,11 @@ let cfg = config.hearth.appearance; in
       };
     }
     (lib.optionalAttrs (options ? services.flatpak.overrides) {
-      services.flatpak.overrides.global.Environment.QT_QPA_PLATFORMTHEME = "kde";
+      # The portal's platform theme: Qt Flatpaks' file dialogs are then the
+      # desktop's (grove's picker through the FileChooser portal); with
+      # "kde" the KDE theme drew its own (SpeechNote's "Import from a
+      # file"). Ben, 2026-11-26: the desktop's dialog, always.
+      services.flatpak.overrides.global.Environment.QT_QPA_PLATFORMTHEME = "xdgdesktopportal";
     })
     (lib.optionalAttrs (options ? hearth.flatpakBlankEnv) {
       hearth.flatpakBlankEnv = lib.mkIf (cfg.qtStyle.package != null) [ "QT_QUICK_CONTROLS_STYLE" ];
