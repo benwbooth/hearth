@@ -4,7 +4,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 3	kdePackages.discover	nixpkgs	53.046	qt6-mixed	full	atspi	Open Drawer:18	full			Home — Discover	0	0				
 4	vlc	nixpkgs	52.96	qt5-widgets	full	x11	Media:13 | Playback:14 | Audio:7 | Video:10 | Subtitle:2 | Tools:10 | View:9 | Help:2	full			VLC media player	0	0				
 5	pavucontrol	nixpkgs	52.91	gtk4	none	x11		none			Volume Control	0	0			0	
-6	steam	nixpkgs-unfree	51.63	cef	no-window			no-window				0	0				
+6	steam	nixpkgs-unfree	51.63	cef	none	x11		none				0	0				
 7	gimp	nixpkgs	50.95	gtk3	full	atspi	File:20 | Edit:23 | Select:18 | View:29 | Image:21 | Layer:15 | Colors:27 | Tools:12 | Filters:18 | Windows:6 | Help:10	full			Welcome to GIMP 3.0.8	1	0			0	
 8	kdePackages.dolphin	nixpkgs	44.46	qt6-widgets	full	dbusmenu	File:13 | Edit:13 | View:18 | Go:6 | Tools:6 | Settings:7 | Help:7	full			Home — Dolphin	0	0				
 9	kdePackages.systemsettings	nixpkgs	43.24	qt6-widgets	full	atspi	Show Menu:6	full			System Settings	0	0				
@@ -67,7 +67,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 66	gnome-contacts	nixpkgs	22.77	gtk4-adwaita	full	atspi	Actions:2 | Edit:2 | View:7	full			Contacts Setup	0	0			1	
 67	evolution	nixpkgs	22.744	gtk3	full	atspi	Menu:4	full			Mail	0	0			0	
 68	gnome-maps	nixpkgs	22.702	gtk4-adwaita	full	atspi	Main Menu:1 | File:3 | Edit:2 | View:5 | Actions:8	full			Maps	0	0			0	
-69	gnome-weather	nixpkgs	22.544	gtk4-adwaita	no-window			no-window				0	0			0	
+69	gnome-weather	nixpkgs	22.544	gtk4-adwaita	full	atspi	Menu:3 | Actions:1	full			Weather	0	0			0	
 70	krita	nixpkgs	22.31	qt6-widgets	none	x11		none			Krita	0	1	org.kde.krita			
 71	gnome-music	nixpkgs	21.921	gtk4-adwaita	full	atspi	Menu:1 | Playback:9	full			Music	0	0			0	
 72	obsidian	nixpkgs-unfree	21.84	electron	none	x11		full	electron+libdbusmenu	File:3 | Edit:9 | View:6 | Window:3 | Help:4	Obsidian	0	0				
@@ -448,7 +448,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 447	showtime	nixpkgs	4.55	gtk4-adwaita	full	atspi	Main Menu:1 | File:3 | View:4 | Actions:6 | Playback:8	full			Video Player	0	0			0	
 448	sunshine	nixpkgs	4.546	qt6-widgets	tray-only			tray-only				0	0				
 449	helm	nixpkgs	4.54	custom-drawn	none	x11		none			Helm	0	0				
-450	flathub:com.overwolf.curseforge	flathub	4.534	electron	no-window			no-window				0	1				
+450	flathub:com.overwolf.curseforge	flathub	4.534	electron	full	atspi	window:7 | View:3	full			CurseForge	0	1				
 451	shortwave	nixpkgs	4.498	gtk4-adwaita	full	atspi	Main Menu:1 | Playback:9	full			Shortwave	0	0			0	
 452	flathub:io.github.jeffshee.Hidamari	flathub	4.491	gtk4-adwaita?	full	x11	Menu:4	full				0	1			0	
 453	scribus	nixpkgs	4.49	qt6-widgets	none	x11		none			scribus	0	0				
@@ -649,7 +649,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 648	snes9x	nixpkgs-unfree	3.135	unknown											no-entry		
 649	flathub:com.poweriso.PowerISO	flathub	3.135	qt6-widgets?	none	x11		full	flatpak+registrar	File:9 | View:7 | Action:9 | Tools:6 | Options:1 | Help:4	PowerISO - New Image File	0	1				
 650	upscaler	nixpkgs	3.125	gtk4-adwaita	full	atspi	Main Menu:1 | File:1 | Edit:1	full			Upscaler	0	0				
-651	mixxx	nixpkgs	3.12	qt6-widgets	no-window			no-window				0	0				
+651	mixxx	nixpkgs	3.12	qt6-widgets	full	dbusmenu	File:5 | Library:4 | View:9 | Options:5 | Help:6	full			Mixxx	0	0				
 652	flathub:com.github.zocker_160.SyncThingy	flathub	3.108	qt6-widgets	full	dbusmenu	File:10 | Edit:5 | View:7 | History:6 | Tools:10 | Profiles:3 | Help:1	full			nixos | Syncthing - Brave	0	1				
 653	flathub:io.github.hmlendea.geforcenow-electron	flathub	3.104	electron	none	x11		none			GeForce NOW	0	1				
 654	flathub:com.google.ChromeDev	flathub	3.104	electron	none	x11		none			Google Chrome and ChromeOS Additional Terms of Service	0	1				
@@ -663,7 +663,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 662	jetbrains.pycharm-oss	nixpkgs-uncached	3.087	unknown	none	x11		none			PyCharm User Agreement	0	1	com.jetbrains.PyCharm-Community			
 663	super-productivity	nixpkgs	3.08	electron	full	atspi	:2 | Super Productivity:1 | Edit:6	full				0	0				
 664	zeroad-unwrapped	nixpkgs-uncached	3.079	wx-gtk3	none	x11		none			0 A.D.	0	1	com.play0ad.zeroad			
-665	unityhub	nixpkgs-unfree	3.075	unknown	no-window			no-window				0	1	com.unity.UnityHub			
+665	unityhub	nixpkgs-unfree	3.075	unknown	full	atspi	Edit:8	full			Unity Hub 3.22.6	0	1	com.unity.UnityHub			
 666	angryipscanner	nixpkgs	3.065	java-swing	full	atspi	Scan:4 | Go to:7 | Commands:6 | Favorites:2 | Tools:4 | Help:8	full			Getting Started 	0	0				
 667	gpick	nixpkgs	3.06	gtk3	full	gtk	File:11 | Edit:4 | View:4 | Tools:4 | Help:1	full			New palette - Gpick	0	0				
 668	bruno	nixpkgs	3.059	electron	full	atspi	Edit:6 | View:5	full			Bruno	0	0				
@@ -734,7 +734,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 733	blockbench	nixpkgs	2.887	electron	none	x11		none			Blockbench	0	0				
 734	feishin	nixpkgs	2.881	electron	full	atspi	:6 | File:3 | Playback:9	full			Feishin	0	0				
 735	flathub:com.jetbrains.IntelliJ-IDEA-Ultimate	flathub	2.874	unknown	none	x11		none			IntelliJ IDEA User Agreement	0	1				
-736	wechat	nixpkgs-unfree	2.874	unknown	no-window			no-window				0	0				
+736	wechat	nixpkgs-unfree	2.874	unknown	full	x11	Actions:2	full			Weixin	0	0				
 737	ptyxis	nixpkgs	2.873	gtk4-adwaita	full	atspi	Main Menu:1 | File:2 | Actions:1	full			Terminal (Failed)	0	0				
 738	openboard	nixpkgs	2.873	qt6-mixed	full	atspi	Actions:10	full			OpenBoard	0	1	ch.openboard.OpenBoard			
 739	nuclear	nixpkgs	2.873	gtk4-adwaita											not-prebuilt		
@@ -793,7 +793,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 792	flathub:com.thincast.client	flathub	2.75	qt6-widgets	none	x11		none			Thincast Remote Desktop Client	0	1				
 793	supertux	nixpkgs	2.747	sdl-glfw	none	x11		none			SuperTux v0.7.0	0	0				
 794	metadata-cleaner	nixpkgs	2.746	gtk4-adwaita	full	atspi	Main Menu:1 | File:3 | View:1 | Actions:4	full			Metadata Cleaner	0	0				
-795	flathub:net.blip.Blip	flathub	2.742	unknown	no-window			no-window				0	1				
+795	flathub:net.blip.Blip	flathub	2.742	unknown	none	x11		none			Get Started	0	1				
 796	boxbuddy	nixpkgs	2.739	gtk4-adwaita	full	atspi	Menu:1 | File:1 | Actions:2	full			BoxBuddy	0	0				
 797	clementine	nixpkgs	2.738	qt5-widgets	full	dbusmenu	Music:10 | Playlist:13 | Tools:10 | Extras:5 | Help:2	full			Clementine	0	0				
 798	flathub:io.github.Soundux	flathub	2.737	gtk4-adwaita?	no-window			no-window				0	1				
@@ -1039,7 +1039,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 1038	tiny-wii-backup-manager	nixpkgs	2.329	gtk4-adwaita	none	x11		none			TinyWiiBackupManager  ›  No drive selected	0	1	it.mq1.TinyWiiBackupManager			
 1039	addwater	nixpkgs	2.325	gtk4-adwaita	no-window			no-window				0	0				
 1040	flathub:nl.jknaapen.fladder	flathub	2.324	flutter	full	atspi	Playback:7	full			Fladder	0	1				
-1041	wesnoth	nixpkgs	2.321	sdl-glfw	no-window			no-window				0	0				
+1041	wesnoth	nixpkgs	2.321	sdl-glfw	none	x11		none			The Battle for Wesnoth - 1.18.7	0	0				
 1042	caprine	nixpkgs	2.321	electron	full	atspi	:2 | File:2 | Edit:8 | View:7	full			Caprine	0	0				
 1043	ksnip	nixpkgs	2.319	qt6-widgets	no-window			no-window				0	0				
 1044	pitivi	nixpkgs	2.317	gtk3	full	atspi	Menu:1 | Edit:2 | Actions:1	full			Pitivi	0	0				
@@ -1065,7 +1065,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 1064	nomacs	nixpkgs	2.292	qt6-widgets	full	dbusmenu	File:21 | Edit:11 | Adjustments:18 | View:23 | Panels:15 | Tools:6 | Sync:5 | Plugins:6 | Help:4	full			nomacs | Image Lounge	0	0				
 1065	lenspect	nixpkgs	2.291	gtk4-adwaita	full	atspi	Main Menu:1 | File:4 | View:2 | Actions:4	full			Lenspect	0	0				
 1066	haguichi	nixpkgs	2.291	gtk4-adwaita	full	atspi	Main Menu:1 | General:6 | Connection:2 | Network List:7 | Commands:1	full			Haguichi	0	0				
-1067	nestopia-ue	nixpkgs	2.289	fltk	no-window			no-window				0	0				
+1067	nestopia-ue	nixpkgs	2.289	fltk	full	x11	File:1 | Emulator:1 | Help:1	full			Nestopia UE	0	0				
 1068	flathub:io.gpt4all.gpt4all	flathub	2.288	qt6-widgets	full	atspi	Actions:4	full			GPT4All v3.10.0	0	1				
 1069	ringracers	nixpkgs	2.287	sdl-glfw	none	x11		none			Dr. Robotnik's Ring Racers v2.4	0	0				
 1070	flathub:com.cassidyjames.butler	flathub	2.287	gtk4-adwaita?	full	atspi	Main Menu:1 | File:2 | View:4 | Actions:2	full			Butler	0	1				
@@ -1208,7 +1208,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 1207	flathub:io.github.sugarycandybar.Hosty	flathub	2.145	gtk4-adwaita?	full	atspi	Main Menu:3 | File:2 | View:1	full			Hosty	0	1				
 1208	flathub:io.github.fabrialberio.pinapp	flathub	2.145	gtk4-adwaita?	full	atspi	Main Menu:3 | General:4	full			pinapp	0	1				
 1209	amiberry	nixpkgs	2.144	sdl-glfw	none	x11		none			Amiberry GUI	0	0				
-1210	flathub:com.cherry_ai.CherryStudio	flathub	2.141	electron	no-window			no-window				0	1				
+1210	flathub:com.cherry_ai.CherryStudio	flathub	2.141	electron	none	x11		full	flatpak+registrar	File:1 | Edit:7 | View:7 | Window:3	Cherry Studio	0	1				
 1211	flathub:io.github.Micro856.KittiesGtk	flathub	2.137	gtk4-adwaita?	full	atspi	Main Menu:6 | Edit:6 | Go:2 | General:4 | Image:7	full			Kitties	0	1				
 1212	flathub:org.sonic3air.Sonic3AIR	flathub	2.136	unknown	none	x11		none			Game file not found	0	1				
 1213	flathub:br.eng.silas.qpdftools	flathub	2.136	qt6-widgets	none	x11		none			Qpdf Tools	0	1				
@@ -1529,7 +1529,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 1528	flathub:com.github.scrivanolabs.scrivano	flathub	1.865	qt6-widgets	none	x11		none			Untitled — Scrivano	0	1				
 1529	bino3d	nixpkgs	1.864	qt6-widgets	full	dbusmenu	File:4 | Tracks:1 | Playlist:10 | 3D Modes:16 | Media:12 | View:3 | Help:1	full			Bino	0	0				
 1530	flathub:io.github.prateekmedia.pstube	flathub	1.862	unknown	none	x11		none			PsTube	0	1				
-1531	gitfourchette	nixpkgs	1.862	qt6-widgets	no-window			no-window				0	1	org.gitfourchette.gitfourchette			
+1531	gitfourchette	nixpkgs	1.862	qt6-widgets	full	dbusmenu	File:10 | Edit:3 | View:19 | Repo:17 | Commands:0 | Mount:0 | Help:5	full			GitFourchette	0	1	org.gitfourchette.gitfourchette			
 1532	neothesia	nixpkgs	1.861	gtk4-adwaita	none	x11		none			Neothesia	0	0				
 1533	enpass	nixpkgs-unfree	1.861	gtk3	full	x11	File:1 | Edit:1 | View:1 | Item:1 | Tools:1 | Window:1 | Help:1	full			Enpass	0	0				
 1534	flathub:io.github.loot.loot	flathub	1.859	qt6-widgets	full	dbusmenu	File:5 | Game:16 | Plugin:6 | Help:4	full			LOOT	0	1				
@@ -2251,7 +2251,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 2250	flathub:io.github.dzheremi2.lrcmake-gtk	flathub	1.476	gtk4-adwaita?	full	atspi	Menu:3 | File:4 | Edit:1 | View:1 | Actions:6	full			Chronograph	0	1				
 2251	flathub:io.github.sigmasd.VirtAudio	flathub	1.476	unknown	none	x11		none			Virtual Audio Streamer	0	1				
 2252	flathub:de.easyroam.easyroam	flathub	1.476	gtk4-adwaita?	none	x11		none			easyroam_connect_desktop	0	1				
-2253	lx-music-desktop	nixpkgs	1.475	electron	no-window			no-window				0	0				
+2253	lx-music-desktop	nixpkgs	1.475	electron													
 2254	flathub:com.lynnmichaelmartin.TimeTracker	flathub	1.475	gtk4-adwaita?	full	atspi	Menu:1 | File:5 | Edit:4 | Actions:5	full			Time Tracker	0	1				
 2255	flathub:io.github.CardiJey.schulrechner	flathub	1.475	electron	none	x11		none			Schulrechner	0	1				
 2256	denemo	nixpkgs	1.474	gtk3	full	atspi	File:14 | Navigation:9 | Edit:23 | View:23 | Input:8 | Playback/Record:15 | More:3 | Educational:5 | Help:9	full			Denemo Print View	0	0				
@@ -2582,7 +2582,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 2581	flathub:moe.emmaexe.ntfyDesktop	flathub	1.349	qt6-widgets	full	dbusmenu	File:6 | Edit:2 | Help:6	full			Ntfy Desktop	0	1				
 2582	flathub:org.munadi.Munadi	flathub	1.349	qt6-quick	full	atspi	Actions:2	full			Munadi	0	1				
 2583	waylyrics	nixpkgs	1.347	gtk4	full	atspi	Menu:1 | File:2 | Edit:1 | Actions:5	full			Waylyrics	0	0				
-2584	flathub:io.github.savantsavior.t-crisis4	flathub	1.347	sdl-glfw	no-window			no-window				0	1				
+2584	flathub:io.github.savantsavior.t-crisis4	flathub	1.347	sdl-glfw													
 2585	flathub:io.wavebox.Wavebox	flathub	1.347	electron	none	x11		full	flatpak+registrar	File:10 | Edit:5 | View:7 | History:7 | Tools:10 | Profiles:3 | Help:1	Wavebox - Wavebox	0	1				
 2586	flathub:io.github.tangsangsimida.easykiconverter	flathub	1.347	qt6-widgets	none	x11		none			EasyKiConverter - Component Converter	0	1				
 2587	flathub:org.flozz.calcleaner	flathub	1.347	gtk4-adwaita?	full	atspi	Menu:3	full			Calendar Cleaner	0	1				
@@ -2857,7 +2857,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 2856	pw3270	nixpkgs	1.239	gtk3	no-window			no-window				0	0				
 2857	nootka	nixpkgs	1.239	qt5-widgets	full	atspi	Actions:5	full			Nootka	0	0				
 2858	ausweiskopie	nixpkgs	1.239	unknown	none	x11		none			Meine Ausweiskopie	0	0				
-2859	flathub:org.d3cod3.Mosaic	flathub	1.239	gtk4-adwaita?	no-window			no-window				0	1				
+2859	flathub:org.d3cod3.Mosaic	flathub	1.239	gtk4-adwaita?				full	flatpak+registrar	File:1 | Objects:1 | Examples:1 | Sound:1 | System:1 | View:1 | Help:1							
 2860	ripcord	nixpkgs-unfree	1.239	qt5-widgets	full	registrar	View:16 | Accounts:7 | Tools:1 | Help:5	full			Accounts	0	0				
 2861	flathub:io.github.hafmed.Basic-Numerical-Methods-qml	flathub	1.239	qt6-quick	full	atspi	⋮:4	full			Basic Numerical Methods	0	1				
 2862	atomix	nixpkgs	1.237	gtk3	full	atspi	Menu:7	full			Atomix	0	0				
@@ -3141,7 +3141,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 3140	flathub:org.tryton.Tryton-82	flathub	1.129	gtk4-adwaita?	none	x11		none			Tryton - Login	0	1				
 3141	flathub:ro.go.hmlendea.SokoGrump	flathub	1.126	sdl-glfw	none	x11		none			SokoGrump	0	1				
 3142	flathub:com.github.avojak.paint-spill	flathub	1.126	gtk4-adwaita?	full	atspi	Menu:8	full			How to Play Paint Spill	0	1				
-3143	flathub:io.github.ptitSeb.hydracastlelabyrinth	flathub	1.126	sdl-glfw	no-window			no-window				0	1				
+3143	flathub:io.github.ptitSeb.hydracastlelabyrinth	flathub	1.126	sdl-glfw	none	x11		none			HCL	0	1				
 3144	flathub:org.dash.dash-core	flathub	1.126	qt6-widgets?	none	x11		none			Welcome	0	1				
 3145	flathub:org.quelea.Quelea	flathub	1.126	java-swing	none	x11		none			Quelea 2024.1	0	1				
 3146	flathub:org.shadered.SHADERed	flathub	1.124	unknown	full	x11	File:9 | Project:7 | Window:10 | Help:1 | Supporters:1	full			SHADERed	0	1				
@@ -3305,7 +3305,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 3304	flathub:io.github.nostar.DroidStar	flathub	1.058	qt6-widgets	none	x11		none			DroidStar	0	1				
 3305	flathub:org.syntalos.syntalos	flathub	1.058	qt6-widgets?	full	x11	File:7 | Tool:2 | Diagnostics:4 | Help:6	full			Syntalos	0	1				
 3306	qctools	nixpkgs	1.055	qt5-widgets	full	dbusmenu	File:6 | View:21 | Options:1 | Export:10 | Help:6	full			QCTools	0	0				
-3307	flathub:com.musixmatch.Musixmatch	flathub	1.055	electron	no-window			no-window				0	1				
+3307	flathub:com.musixmatch.Musixmatch	flathub	1.055	electron	none	x11		none			Musixmatch - Song Lyrics and Translations	0	1				
 3308	hikounomizu	nixpkgs-uncached	1.055	sdl-glfw	none	x11		none			Hikou no mizu	0	1	org.hikounomizu.HikouNoMizu			
 3309	flathub:games.zetsubou.MaxMassacre	flathub	1.055	unknown	none	x11		none			Max Massacre	0	1				
 3310	flathub:io.gitlab.JBeaumont81.Etesync-Knotes	flathub	1.055	qt6-widgets	none	x11		none			EteSync-Knotes	0	1				
@@ -4127,7 +4127,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 4126	jamin	nixpkgs	0.043	gtk3	full	gtk	File:6 | Edit:3 | Ports:2 | Help:5	full			jamin - default.jam - 0.98.9	0	0				
 4127	maptool	nixpkgs	0.043	javafx	full	x11	File:15 | Edit:8 | Map:17 | View:15 | Tool:11 | Window:15 | Help:10	full			MapTool v1.18.6 - Anonymous User (GM) - [Default]-Grasslands	0	0				
 4128	kopia-ui	nixpkgs	0.043	electron	none	x11		full	electron+libdbusmenu	File:1 | Edit:7 | View:7 | Window:3	KopiaUI v0.23.1	0	0				
-4129	lomiri-qt6.morph-browser	nixpkgs	0.042	qt6-mixed	no-window			no-window				0	0				
+4129	lomiri-qt6.morph-browser	nixpkgs	0.042	qt6-mixed	none	x11		none			Morph Web Browser	0	0				
 4130	pympress	nixpkgs	0.041	java-swing	full	gtk	File:6 | Presentation:18 | Navigation:7 | Starting Configuration:5 | Help:2	full			Pympress Presenter	0	0				
 4131	veroroute	nixpkgs	0.039	qt6-widgets	full	dbusmenu	File:22 | Edit:10 | Add:23 | View:12 | Track Style:8 | Windows:9 | Layers:7 | Help:5	full			Untitled	0	0				
 4132	colmap	nixpkgs	0.039	qt5-widgets	full	dbusmenu	File:12 | Processing:3 | Reconstruction:9 | Render:3 | Extras:10 | Help:4	full			COLMAP	0	0				
@@ -4399,7 +4399,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 4398	windsend	nixpkgs	0.0	flutter	none	x11		none			wind_send	0	0				
 4399	windsend-rs	nixpkgs	0.0	gtk3	no-window			no-window				0	0				
 4400	pantheon.wingpanel-with-indicators	nixpkgs	0.0	gtk4-adwaita											not-prebuilt		
-4401	wesnoth-devel	nixpkgs	0.0	sdl-glfw	no-window			no-window				0	0				
+4401	wesnoth-devel	nixpkgs	0.0	sdl-glfw	none	x11		none			The Battle for Wesnoth - 1.19.24	0	0				
 4402	wayst	nixpkgs	0.0	custom-drawn	none	x11		none			ben@nixos: ~ - Wayst	0	0				
 4403	waytator	nixpkgs	0.0	gtk4-adwaita											not-prebuilt		
 4404	web-eid-app	nixpkgs	0.0	qt6-widgets	none	x11		none			Web eID	0	0				
@@ -4660,7 +4660,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 4659	librum	nixpkgs	0.0	qt6-mixed	no-window			no-window				0	0				
 4660	librepods	nixpkgs	0.0	qt6-mixed	none	x11		none			LibrePods	0	0				
 4661	libgda5	nixpkgs	0.0	gtk3	none	x11		none			Connection opening	0	0				
-4662	liberation-circuit	nixpkgs	0.0	gtk3	no-window			no-window				0	0				
+4662	liberation-circuit	nixpkgs	0.0	gtk3	none	x11		none			libcirc	0	0				
 4663	libfm	nixpkgs	0.0	gtk3	none	x11		none			Preferred Applications	0	0				
 4664	libation	nixpkgs	0.0	dotnet	none	x11		none			Welcome to Libation	0	0				
 4665	ledger-live-desktop	nixpkgs	0.0	gtk4-adwaita											not-prebuilt		
@@ -4755,7 +4755,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 4754	kdePackages.fcitx5-with-addons	nixpkgs	0.0	qt5-widgets											not-prebuilt		
 4755	fdt-viewer	nixpkgs	0.0	qt6-widgets	full	dbusmenu	File:5 | View:1 | Property:1 | Window:1 | Help:1	full			Flattened Device Tree Viewer 0.8.1	0	0				
 4756	feather	nixpkgs	0.0	qt6-widgets	none	x11		none			Welcome to Feather Wallet	0	0				
-4757	feyngame	nixpkgs	0.0	java-swing	no-window			no-window				0	0				
+4757	feyngame	nixpkgs	0.0	java-swing	none	none		none			FeynGame v3.0.0 | 08.01.2025 14:31:20	0	0				
 4758	faustlive	nixpkgs	0.0	qt5-widgets	none	x11		none			FaustLive	0	0				
 4759	factor-lang	nixpkgs	0.0	gtk4	none	x11		none			Listener	0	0				
 4760	experienced-pixel-dungeon	nixpkgs	0.0	java-swing	none	x11		none			Experienced Pixel Dungeon	0	0				
