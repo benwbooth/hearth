@@ -87,6 +87,11 @@ MouseArea {
     property bool monochrome: Settings.menubar.monochromeIcons !== false
     // Recolour only the colourless parts (app tray icons; see below).
     property bool adaptive: false
+    // Monochrome at the icon's own coverage (shaders/monoicon.frag): apps'
+    // tray icons, whose thin gaps and inner detail the bolder default
+    // (every edge pixel full strength) filled in. hearth's own status icons
+    // keep the default: their 1 px strokes read as solid lines with it.
+    property bool exactMono: false
     default property alias overlay: overlayItem.data
 
     hoverEnabled: true
@@ -146,8 +151,15 @@ MouseArea {
             // the text colour (shaders/trayicon.frag), so white "template"
             // icons made for dark panels read on a light bar too.
             layer.enabled: root.menuBarItem && (root.monochrome || root.adaptive)
-            layer.effect: root.monochrome ? monoFx : adaptiveFx
+            layer.effect: root.monochrome ? (root.exactMono ? exactMonoFx : monoFx) : adaptiveFx
             Component { id: monoFx; MultiEffect { brightness: Theme.barDark ? 1 : -1; saturation: -1 } }
+            Component {
+                id: exactMonoFx
+                ShaderEffect {
+                    fragmentShader: "../shaders/monoicon.frag.qsb"
+                    readonly property color target: Theme.barDark ? "#ffffff" : "#000000"
+                }
+            }
             Component {
                 id: adaptiveFx
                 ShaderEffect {

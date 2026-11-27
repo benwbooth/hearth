@@ -213,6 +213,7 @@ Row {
         // Everything else: white or grey pictures (an update checker, Claude)
         // still follow the bar's text colour; colourful icons keep theirs.
         adaptive: Settings.menubar.monochromeIcons !== false && !monochrome
+        exactMono: true
         tooltip: modelData.tooltipTitle || modelData.title || modelData.id
         tooltipSub: modelData.tooltipDescription
 
