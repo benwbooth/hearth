@@ -2032,7 +2032,10 @@ class Assistant:
 #                              ("qwen3.5:4b", "lmstudio/x"): whatever runs a
 #                              model by that name answers
 #   POST /v1/chat/completions  OpenAI chat, streamed or not; tools pass through
-#                              to local servers. Cloud CLIs answer only with
+#                              to local servers.
+#   POST /v1/completions       plain text continuation (autocomplete with a base
+#                              coder model; "suffix" for fill-in-the-middle
+#                              where the server takes it), local models only. Cloud CLIs answer only with
 #                              ai.allowCloud, as one non-streamed reply.
 
 import hmac         # noqa: E402
@@ -2230,7 +2233,8 @@ class ApiHandler(httpserver.BaseHTTPRequestHandler):
         if not self.authorized():
             return
         path = self.path.split("?")[0].rstrip("/")
-        if path not in ("/v1/chat/completions", "/chat/completions"):
+        chat = path in ("/v1/chat/completions", "/chat/completions")
+        if not chat and path not in ("/v1/completions", "/completions"):
             self.error(404, "Not found: POST %s" % path)
             return
         try:
@@ -2254,6 +2258,9 @@ class ApiHandler(httpserver.BaseHTTPRequestHandler):
         stream = bool(body.get("stream"))
         try:
             if isinstance(p, AgentCli):
+                if not chat:
+                    self.error(400, "%s can't continue text (no /completions): use a local model" % p.label)
+                    return
                 if not cfg.get("allowCloud"):
                     self.error(403, "%s sends what you type to the cloud. Allow cloud AI in Settings > AI first."
                                % p.label, "permission_error")
@@ -2267,8 +2274,10 @@ class ApiHandler(httpserver.BaseHTTPRequestHandler):
                 p.load(model, keep_minutes(cfg))
                 ARB.mem.note(key, loadSec=round(time.time() - t0, 1), loadMeasured=True)
             url = api_chat_url(p, model)
+            if not chat:   # plain text continuation (autocomplete, fill-in-the-middle with "suffix")
+                url = url[:-len("/chat/completions")] + "/completions"
             fwd = dict(body, model=model)
-            if isinstance(p, Ollama) and "reasoning_effort" not in fwd:
+            if chat and isinstance(p, Ollama) and "reasoning_effort" not in fwd:
                 fwd["reasoning_effort"] = "none"   # as the assistant: no thinking out loud
             ARB.mem.note(key, lastActive=time.time())
             self.relay(url, fwd)

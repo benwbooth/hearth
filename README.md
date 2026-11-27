@@ -722,7 +722,9 @@ One hub for every model the desktop uses: `helpers/hearth-ai`,
   whatever here runs a model by that name answers (a 404 otherwise).
   `POST /v1/chat/completions` streams through to the model's own server
   (tools pass through), after the memory manager makes room; a model unit,
-  Magnitude model or loose GGUF starts first. Ollama gets
+  Magnitude model or loose GGUF starts first. `POST /v1/completions`
+  (plain continuation, for autocomplete with a base coder model) goes the
+  same way, local models only. Ollama gets
   `reasoning_effort: "none"` unless the app sends its own. Cloud CLIs answer
   only with "Allow cloud AI" on, as one reply. Only the shell's own
   hearth-ai serves (a test shell with `HEARTH_SESSION_DRYRUN=1` doesn't,
