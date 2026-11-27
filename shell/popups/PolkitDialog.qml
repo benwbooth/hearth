@@ -162,11 +162,37 @@ Scope {
                     Layout.fillWidth: true
                     spacing: 8
                     Item { Layout.fillWidth: true }
-                    PushButton {
+                    // Just a fingerprint: wakes the reader again.
+                    Item {
+                        id: fpButton
                         visible: root.sawFinger && !!root.flow && root.flow.isResponseRequired && !root.restarting
-                        text: "Use Fingerprint"
-                        tooltip: "Turn the fingerprint reader on again, if you missed it"
-                        onClicked: root.useFingerprint()
+                        implicitWidth: 32
+                        implicitHeight: 32
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: width / 2
+                            color: Theme.fg
+                            opacity: fpMouse.pressed ? 0.18 : fpMouse.containsMouse ? 0.1 : 0
+                        }
+                        Icon {
+                            anchors.centerIn: parent
+                            implicitSize: 22
+                            name: "fingerprint-symbolic"
+                            fallback: "fingerprint"
+                        }
+                        MouseArea {
+                            id: fpMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.useFingerprint()
+                        }
+                        Tooltip {
+                            anchorItem: fpButton
+                            hovered: fpMouse.containsMouse
+                            text: "Use your fingerprint"
+                            subtext: "Turns the fingerprint reader on again, if you missed it"
+                        }
                     }
                     Label {
                         visible: root.restarting
