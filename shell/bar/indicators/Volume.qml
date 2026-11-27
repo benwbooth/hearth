@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Services.Pipewire
 import "../../widgets"
+import "../../services"
 import "../.."
 
 // Volume: default output volume/mute in the bar (scroll = ±5%, middle click
@@ -46,6 +47,7 @@ Indicator {
     }
 
     shown: sink !== null
+    closeOnOsd: true
     icon: volIcon(volume, muted)
     tooltip: muted ? "Volume: muted" : "Volume: " + pct(volume)
     tooltipSub: nodeName(sink)
@@ -145,7 +147,7 @@ Indicator {
                 iconFallback: row.appIcon ? "audio-x-generic" : "audio-volume-high"
                 opacity: row.appIcon && row.mute ? 0.4 : 1
                 tooltip: row.mute ? "Unmute" : "Mute"
-                onClicked: if (row.node?.audio) row.node.audio.muted = !row.node.audio.muted
+                onClicked: if (row.node?.audio) { ShellState.osdQuietUntil = Date.now() + 400; row.node.audio.muted = !row.node.audio.muted; }
             }
             Slider {
                 Layout.fillWidth: true
@@ -153,6 +155,7 @@ Indicator {
                 dim: row.mute
                 onMoved: v => {
                     if (!row.node?.audio) return;
+                    ShellState.osdQuietUntil = Date.now() + 400;
                     row.node.audio.muted = false;
                     row.node.audio.volume = v;
                 }

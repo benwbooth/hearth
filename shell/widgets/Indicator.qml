@@ -43,6 +43,14 @@ BarButton {
         for (let i = 0; i < Math.min(Math.abs(n), 5); i++) root.scrolled(n > 0 ? 120 : -120);
     }
 
+    // The menu of the level the on-screen slider shows (volume,
+    // brightness) closes when that slider pops up: one control at a time.
+    property bool closeOnOsd: false
+    Connections {
+        target: root.closeOnOsd ? ShellState : null
+        function onOsdShowingChanged() { if (ShellState.osdShowing) pop.close(); }
+    }
+
     Connections {
         target: ShellState
         function onOpenIndicator(name) {

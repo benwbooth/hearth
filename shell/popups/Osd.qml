@@ -70,6 +70,7 @@ Scope {
 
     function showVolume() {
         if (!root.armed || !root.sink || !root.sink.audio) return;
+        if (Date.now() < ShellState.osdQuietUntil) return;
         const a = root.sink.audio;
         const v = a.volume;
         const icon = a.muted || v <= 0 ? "audio-volume-muted"

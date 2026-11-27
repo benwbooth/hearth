@@ -15,6 +15,10 @@ Singleton {
     // The volume/brightness panel (popups/Osd.qml) is up: tooltips stand
     // down (the volume item's "Volume: 30%" under its own panel, doubled).
     property bool osdShowing: false
+    // Changes made in the volume menu itself (its sliders, Mute) bring up
+    // no on-screen slider until then (ms since epoch): the menu shows the
+    // level, and the slider showing would close the menu under the pointer.
+    property real osdQuietUntil: 0
     property real tooltipWarmUntil: 0
     // Dock window previews (bar/TaskButton.qml): one is open, or was a
     // moment ago, so the next app's opens at once.

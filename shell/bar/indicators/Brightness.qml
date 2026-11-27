@@ -14,6 +14,7 @@ Indicator {
     tooltip: "Brightness " + Brightness.percent + "%"
     tooltipSub: Brightness.nightLight ? `Night light on (${Brightness.temperature} K)` : ""
 
+    closeOnOsd: true
     onScrolled: delta => Brightness.step(delta > 0 ? 5 : -5, true)
     onMiddleClicked: Brightness.setNightLight(!Brightness.nightLight)
 
