@@ -358,6 +358,8 @@ def rebuild():
         # Read only with the Java bridge's Flatpak override: these go into
         # hearth.globalMenu.javaFlatpaks (nix/global-menu.nix).
         pr = probes.get(r["attr"]) or {}
+        if r["solution"].startswith("general:"):  # kept rows: strip earlier runs' tag
+            r["solution"] = "+".join(p for p in r["solution"].split("+") if p != "java-flatpak")
         if pr.get("java_override") and r["status"] == "done" and r["solution"].startswith("general:"):
             r["solution"] += "+java-flatpak"
     with open(TSV, "w") as f:
