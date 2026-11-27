@@ -11,6 +11,6 @@ e.mkApp {
   defaultPackageText = "pkgs.antigravity";
   wrap = { package, extraWrapperArgs }: e.wrapWayland {
     exe = "antigravity"; inherit package;
-    args = e.globalMenuArgs ++ extraWrapperArgs;
+    args = extraWrapperArgs;
   };
 } args

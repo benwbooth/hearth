@@ -5,7 +5,10 @@ self:
 { config, lib, pkgs, ... }:
 let
   cfg = config.hearth.apps.vscode;
-  adjusted = cfg.package.override { commandLineArgs = "--password-store=gnome-libsecret"; };
+  # The global menu: VS Code draws its menu bar in the page, which hearth
+  # reads over AT-SPI with the accessibility flags (electron.nix).
+  adjusted = cfg.package.override { commandLineArgs = lib.concatStringsSep " "
+    ([ "--password-store=gnome-libsecret" ] ++ self.lib.globalMenu.electronFlags); };
 in
 {
   options.hearth.apps.vscode = {

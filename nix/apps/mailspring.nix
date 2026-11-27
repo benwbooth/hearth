@@ -6,6 +6,7 @@ self:
 { config, lib, pkgs, ... }:
 let
   cfg = config.hearth.apps.mailspring;
+  e = import ./electron.nix self { inherit lib pkgs; };
   wrapped = pkgs.symlinkJoin {
     name = "mailspring-wayland";
     paths = [ cfg.package ];
@@ -14,7 +15,8 @@ let
       wrapProgram $out/bin/mailspring \
         --set ELECTRON_OZONE_PLATFORM_HINT auto \
         --add-flags "--enable-features=UseOzonePlatform" \
-        --add-flags "--ozone-platform=wayland"
+        --add-flags "--ozone-platform=wayland" \
+        ${lib.concatStringsSep " " e.globalMenuArgs}
       rm $out/share/applications/Mailspring.desktop
       cp ${cfg.package}/share/applications/Mailspring.desktop $out/share/applications/Mailspring.desktop
       substituteInPlace $out/share/applications/Mailspring.desktop \

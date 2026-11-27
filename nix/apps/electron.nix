@@ -29,8 +29,9 @@ rec {
   globalMenuArgs = map (f: "--add-flags ${f}") self.lib.globalMenu.electronFlags
     ++ [ "--prefix LD_LIBRARY_PATH : ${pkgs.libdbusmenu}/lib" ];
 
-  # Wayland, the Secret Service, no colour management; `args` are more
-  # makeWrapper arguments (globalMenuArgs, an app's own fixes).
+  # Wayland, the Secret Service, no colour management, the global menu
+  # (globalMenuArgs, always: ChatGPT and ZCode had no menus without them);
+  # `args` are more makeWrapper arguments (an app's own fixes).
   wrapWayland = { exe, package, args ? [ ] }: pkgs.symlinkJoin {
     name = "${exe}-ozone";
     paths = [ package ];
@@ -40,7 +41,8 @@ rec {
       makeWrapper ${package}/bin/${exe} $out/bin/${exe} \
         --set ELECTRON_OZONE_PLATFORM_HINT auto \
         --add-flags --password-store=gnome-libsecret \
-        --add-flags --disable-features=WaylandWpColorManagerV1 ${lib.concatStringsSep " " args}
+        --add-flags --disable-features=WaylandWpColorManagerV1 \
+        ${lib.concatStringsSep " " (globalMenuArgs ++ args)}
     '';
   };
 

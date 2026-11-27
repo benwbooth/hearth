@@ -5,13 +5,15 @@ self:
 { config, lib, pkgs, ... }:
 let
   cfg = config.hearth.apps.teams-for-linux;
+  e = import ./electron.nix self { inherit lib pkgs; };
   wrapped = pkgs.symlinkJoin {
     name = "teams-for-linux";
     paths = [ cfg.package ];
     buildInputs = [ pkgs.makeWrapper ];
     postBuild = ''
       wrapProgram $out/bin/teams-for-linux \
-        --add-flags "--password-store=gnome-libsecret"
+        --add-flags "--password-store=gnome-libsecret" \
+        ${lib.concatStringsSep " " e.globalMenuArgs}
     '';
   };
 in

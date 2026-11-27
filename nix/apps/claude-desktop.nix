@@ -9,6 +9,6 @@ e.mkApp {
   description = "Claude Desktop, adjusted for the Hearth desktop (Wayland, global menu, Secret Service)";
   wrap = { package, extraWrapperArgs }: e.wrapWayland {
     exe = "claude-desktop"; inherit package;
-    args = e.globalMenuArgs ++ extraWrapperArgs;
+    args = extraWrapperArgs;
   };
 } args

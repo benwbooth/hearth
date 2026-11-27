@@ -16,7 +16,8 @@ let cfg = config.hearth.apps.google-chrome; in
   };
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [
-      (cfg.package.override { commandLineArgs = "--password-store=gnome-libsecret"; })
+      (cfg.package.override { commandLineArgs = lib.concatStringsSep " "
+        ([ "--password-store=gnome-libsecret" ] ++ self.lib.globalMenu.electronFlags); })
     ];
   };
 }
