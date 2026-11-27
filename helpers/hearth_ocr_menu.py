@@ -23,8 +23,8 @@ import tempfile
 import zlib
 
 SCALE = 3  # upscale before OCR
-MOD_RE = re.compile(r"^(?:(?:Ctrl|Shift|Alt|Meta|Super)\+)+[^+\s]+$")
-KEY_RE = re.compile(r"^(?:(?:Ctrl|Shift|Alt|Meta|Super)\+)+\S+$|^F(?:[1-9]|1[0-2])$|^(?:Del|Delete|Esc|Return|Enter|Backspace|Tab)$")
+MOD_RE = re.compile(r"^(?:(?:Ctrl|Shift|Alt|Meta|Super)\+)+[^+\s]+$|^F(?:[1-9]|1[0-2])\+\S+$")
+KEY_RE = re.compile(r"^(?:(?:Ctrl|Shift|Alt|Meta|Super)\+)+\S+$|^F(?:[1-9]|1[0-2])(?:\+\S+)?$|^(?:Del|Delete|Esc|Return|Enter|Backspace|Tab)$")
 
 
 # ------------------------------------------------------------------ images
@@ -95,13 +95,26 @@ def write_grey_png(path, w, h, rows):
 
 
 def upscaled(w, h, rows, box=None):
-    """The rows (cropped to box=(x0, y0, x1, y1)) scaled SCALE times."""
+    """The rows (cropped to box=(x0, y0, x1, y1)) scaled SCALE times: by
+    linear interpolation for a small area (pixel fonts, DOSBox-X's, read far
+    better smoothed), by repeating pixels for a large one (faster)."""
     x0, y0, x1, y1 = box or (0, 0, w, h)
+    W, H = x1 - x0, y1 - y0
+    if W * H > 160_000:
+        out = []
+        for r in rows[y0:y1]:
+            big = bytes(b for b in r[x0:x1] for _ in range(SCALE))
+            out.extend([big] * SCALE)
+        return W * SCALE, H * SCALE, out
+    k = SCALE
+    xs = [(x0 + min(X // k, W - 1), x0 + min(X // k + 1, W - 1), (X % k) / k) for X in range(W * k)]
     out = []
-    for r in rows[y0:y1]:
-        big = bytes(b for b in r[x0:x1] for _ in range(SCALE))
-        out.extend([big] * SCALE)
-    return (x1 - x0) * SCALE, (y1 - y0) * SCALE, out
+    for Y in range(H * k):
+        y, ty = Y // k, (Y % k) / k
+        a, b = rows[y0 + min(y, H - 1)], rows[y0 + min(y + 1, H - 1)]
+        out.append(bytes(int((a[xa] * (1 - tx) + a[xb] * tx) * (1 - ty) + (b[xa] * (1 - tx) + b[xb] * tx) * ty)
+                         for xa, xb, tx in xs))
+    return W * k, H * k, out
 
 
 # --------------------------------------------------------------------- OCR
@@ -175,6 +188,21 @@ def norm(s):
     return re.sub(r"[^a-z0-9]", "", s.lower())
 
 
+def same_text(label, row_text, at_least=0.75):
+    """Whether a re-read line is the item read before: OCR of the same
+    line differs by a letter or two between reads ('Conf iguration' and
+    'Configuration'), so a close enough match counts."""
+    import difflib
+    a, b = norm(label), norm(row_text)
+    if not a or not b:
+        return False
+    if a in b:
+        return True
+    best = max((difflib.SequenceMatcher(None, a, b[i:i + len(a)]).ratio()
+                for i in range(0, max(1, len(b) - len(a) + 1))), default=0)
+    return best >= at_least
+
+
 def menu_rows(before, after):
     """The popup's rows: in `after` and not in `before`, in one column."""
     old = {norm(r["text"]) for r in before}
@@ -209,6 +237,19 @@ def text_column(rows):
     return max(set(starts), key=starts.count) * 4 if starts else None
 
 
+def fix_key_token(t):
+    """OCR's usual misreads in an F-key shortcut: 'F1Z2+R', 'F1Z+M',
+    'Fi0' -> F12+R, F12+M, F10 (Z for 2, l/I/i/| for 1, a doubled digit)."""
+    m = re.match(r"^F([0-9IlZzi|]{1,4})((?:\+\S+)?)$", t)
+    if not m:
+        return t
+    digits = m.group(1).translate(str.maketrans("IlZzi|", "112211"))
+    for n in (digits[:2], digits[:1]):
+        if n.isdigit() and 1 <= int(n) <= 12:
+            return "F" + n + m.group(2)
+    return t
+
+
 def items_of(rows):
     """[(label, shortcut, (cx, cy))] from the popup's rows: a leading icon
     read as a stray character dropped, a trailing key combination split
@@ -218,7 +259,7 @@ def items_of(rows):
     col = text_column(rows)
     res = []
     for r in rows:
-        ws = list(r["words"])
+        ws = [dict(d, t=fix_key_token(d["t"])) for d in r["words"]]
         if col is not None:
             ws = [d for d in ws if d["x1"] > col - 2]
         # A shortcut: the last word(s) after a wide gap, shaped like a key.
@@ -235,7 +276,7 @@ def items_of(rows):
                 # A key with modifiers is never part of a label: split it
                 # off however narrow the gap (a narrow menu).
                 sc, ws = ws[-1]["t"], ws[:-1]
-        while ws and ws[-1]["t"] in (">", "›", "»", "▸", "▶"):
+        while ws and ws[-1]["t"] in (">", "›", "»", "▸", "▶", ")", "»>"):
             ws = ws[:-1]
         label = " ".join(d["t"] for d in ws).strip(" .")
         if r["text"].rstrip().endswith("..."):
@@ -245,6 +286,93 @@ def items_of(rows):
         x0 = ws[0]["x0"] if ws else r["x0"]
         res.append((label, sc, ((x0 + r["x1"]) / 2, (r["y0"] + r["y1"]) / 2)))
     return res
+
+
+def _longest_run(flags):
+    best, start = (0, -1, -1), None
+    for i, f in enumerate(flags + [False]):
+        if f and start is None:
+            start = i
+        elif not f and start is not None:
+            if i - start > best[0]:
+                best = (i - start, start, i)
+            start = None
+    return best[1], best[2]
+
+
+def changed_box(a, b, pad=2, step=24):
+    """Where a menu opened between two grey captures of the same size: the
+    block in which nearly every pixel changed (by more than `step`). A
+    redraw's scattered differences (DOSBox-X repaints its whole screen, a
+    cursor blinks) don't make such a block. None if there's no clear one."""
+    if not a or not b or a[0] != b[0] or a[1] != b[1]:
+        return None
+    w, h, ra = a
+    _, _, rb = b
+    cols = [0] * w
+    rows = [0] * h
+    for y in range(h):
+        p, q = ra[y], rb[y]
+        if p == q:
+            continue
+        n = 0
+        for x in range(w):
+            if abs(p[x] - q[x]) > step:
+                cols[x] += 1
+                n += 1
+        rows[y] = n
+    if not any(cols):
+        return None
+    cmax = max(cols)
+    x0, x1 = _longest_run([c > cmax * 0.4 for c in cols])
+    if x0 < 0 or x1 - x0 < 20:
+        return None
+    width = x1 - x0
+    # Rows of that block: most of its columns changed there.
+    band = []
+    for y in range(h):
+        p, q = ra[y], rb[y]
+        n = sum(1 for x in range(x0, x1) if abs(p[x] - q[x]) > step) if rows[y] else 0
+        band.append(n > width * 0.15)
+    y0, y1 = _longest_run(band)
+    if y0 < 0 or y1 - y0 < 10:
+        return None
+    return (max(0, x0 - pad), max(0, y0 - pad), min(w, x1 + pad), min(h, y1 + pad))
+
+
+STD_TITLES = {"file", "edit", "view", "help", "tools", "go", "window", "options", "settings", "insert",
+              "format", "main", "game", "emulator", "image", "video", "sound", "audio"}
+
+
+def menu_bar(rows, k=1.0, top=70):
+    """A menu bar drawn in the window (SDL, FLTK: no accessibility): the
+    first row near the top with three or more words, one a standard title.
+    [(title, (x, y))] in the capture's pixels."""
+    for r in sorted(rows, key=lambda r: r["y0"]):
+        if r["y0"] > top * k:
+            break
+        words = [d for d in r["words"] if any(ch.isalpha() for ch in d["t"])]
+        if len(words) < 3:
+            continue
+        if not {d["t"].strip(".:").lower() for d in words} & STD_TITLES:
+            continue
+        return [(d["t"], ((d["x0"] + d["x1"]) / 2, (d["y0"] + d["y1"]) / 2)) for d in words]
+    return []
+
+
+def window_size(window):
+    """The window's logical size from arbor (no accessibility to ask)."""
+    import json
+    try:
+        r = subprocess.run(["arbor", "msg", "-j", "windows"], capture_output=True, text=True, timeout=5)
+        for w in json.loads(r.stdout):
+            if w.get("id") == window:
+                ws = (w.get("layout") or {}).get("window_size")
+                if ws:
+                    return ws[0], ws[1]
+    except Exception:
+        pass
+    return None
 
 
 class Session:
@@ -266,7 +394,8 @@ class Session:
         if not p:
             return None, None
         try:
-            w, h, _ = read_png(p)
+            w, h, px = read_png(p)
+            self.before_px = (w, h, px)  # for read_popup's changed area
             return ocr_rows(p, box), (w, h)
         except (OSError, ValueError, zlib.error):
             return None, None
@@ -285,18 +414,42 @@ class Session:
         if not p:
             return [], None
         try:
-            w, h, _ = read_png(p)
-            rows = menu_rows(before or [], ocr_rows(p))
+            w, h, px = read_png(p)
+            # Only where the window changed (the menu drawn over the page:
+            # DOSBox-X's console text beside it would join its lines).
+            box = changed_box(getattr(self, "before_px", None), (w, h, px))
+            rows = menu_rows(before or [], ocr_rows(p, box))
             col = text_column(rows)
             if rows and col is not None:
+                right = box[2] if box else min(w, int(max(r["x1"] for r in rows)) + 60)
                 box = (max(0, int(col) - 3), max(0, int(min(r["y0"] for r in rows)) - 4),
-                       min(w, int(max(r["x1"] for r in rows)) + 60), min(h, int(max(r["y1"] for r in rows)) + 4))
+                       right, min(h, int(max(r["y1"] for r in rows)) + 4))
                 again = ocr_rows(p, box)
                 if len(again) >= len(rows):
                     rows = sorted(again, key=lambda r: r["y0"])
             return items_of(rows), (w, h)
         except (OSError, ValueError, zlib.error):
             return [], None
+        finally:
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
+
+    def bar(self):
+        """The window's drawn menu bar ([(title, (x, y))]) and the capture's
+        scale (pixels per logical pixel), or ([], 1)."""
+        p = self.shot()
+        if not p:
+            return [], 1.0
+        try:
+            w, h, _ = read_png(p)
+            ws = window_size(self.window)
+            k = w / ws[0] if ws and ws[0] else 1.0
+            rows = ocr_rows(p, (0, 0, w, min(h, int(80 * k))))
+            return menu_bar(rows, k), k
+        except (OSError, ValueError, zlib.error):
+            return [], 1.0
         finally:
             try:
                 os.unlink(p)

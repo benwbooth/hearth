@@ -378,6 +378,7 @@ class AtspiMenu:
         self.tree_read = False  # burger: the whole ☰ is in self.cache
         self.ids, self.paths = {}, {}
         self.cache = {}  # container path -> [item dicts] from the last look
+        self.ocrbar = None
         self.find()
 
     def same(self, other):
@@ -428,6 +429,21 @@ class AtspiMenu:
         # Only Chromium (lazy tree); Qt/GTK/Gecko answer the first time.
         if self.lazy and attempt < len(self.RETRY):
             later(self.RETRY[attempt], lambda: self.find(attempt + 1))
+        elif attempt == 0 and self.window:
+            # Nothing on the bus: a menu bar the app draws itself, read off
+            # the screen (DOSBox-X, Nestopia).
+            later(0.8, self.try_ocr_bar)
+
+    def try_ocr_bar(self):
+        if not self.alive or self.kind is not None:
+            return
+        try:
+            bar = OcrBar(self)
+            if bar.detect():
+                self.ocrbar, self.kind = bar, "ocrbar"
+                self.emit()
+        except Exception as e:
+            err(f"ocr menu bar: {e}")
 
     def apps(self, A):
         desk = A.get_desktop(0)
@@ -1045,6 +1061,14 @@ class AtspiMenu:
     def emit(self):
         if not self.alive or self.kind is None:
             return
+        if self.kind == "ocrbar":
+            tops = []
+            for path, label, _ in self.ocrbar.tops():
+                nid = self.nid(path)
+                kids = self.ocrbar.menu_items(path[0]) or self.placeholder(nid)
+                tops.append(item(nid, label, submenu=True, children=kids))
+            out({"type": "menu", "key": self.key, "source": "atspi", "menu": item(0, children=tops)})
+            return
         tops = []
         try:
             for path, label, kept in self.tops():
@@ -1364,6 +1388,16 @@ class AtspiMenu:
     def open(self, nid):
         path = self.paths.get(nid)
         if not path or self.busy or self.kind is None:
+            return
+        if self.kind == "ocrbar":
+            self.busy = True
+            self.probe(True)
+            try:
+                self.ocrbar.open(path)
+            finally:
+                self.probe(False)
+                self.busy = False
+            self.emit()
             return
         if self.kind == "kept":
             o = self.node(path)
@@ -1692,7 +1726,7 @@ class AtspiMenu:
                            min(w, int((x + 260) * k)), min(h, int((y + 14) * k)))
                     want = om.norm(it["label"])
                     rows = om.ocr_rows(p, box)
-                    ok = any(want and want in om.norm(r["text"]) for r in rows)
+                    ok = any(om.same_text(it["label"], r["text"]) for r in rows)
                     if os.environ.get("HEARTH_OCR_DEBUG"):
                         err(f"ocr click {it['label']!r} at {x},{y} (x{k:.2f}): {ok} {[r['text'] for r in rows]}")
                 except Exception as e:
@@ -1950,6 +1984,13 @@ class AtspiMenu:
 
     def click(self, nid):
         path = self.paths.get(nid)
+        if self.kind == "ocrbar" and path and not self.busy:
+            self.busy = True
+            try:
+                self.ocrbar.click(path)
+            finally:
+                self.busy = False
+            return
         if os.environ.get("HEARTH_OCR_DEBUG"):
             err(f"click {nid}: path {path}, kind {self.kind}, busy {self.busy}")
         if not path or self.kind is None or len(path) < 2 and self.kind != "kept":
@@ -2008,6 +2049,111 @@ class AtspiMenu:
             self.burger_open = False  # choosing an item closes the menu
         finally:
             self.busy = False
+
+
+class OcrBar:
+    """A menu bar the app draws itself with nothing on the accessibility
+    bus (DOSBox-X's SDL menu, Nestopia's FLTK one): read off captures of
+    the window (hearth_ocr_menu). Its titles from the top strip; a title's
+    menu read when it opens (a click on the title, the new lines against
+    the window before it); an item chosen by clicking where it was read,
+    after checking that line still says the same."""
+
+    NONE = set()  # app binaries whose windows showed no drawn menu bar
+
+    def __init__(self, owner):
+        self.o = owner
+        self.titles = []  # [(title, (x, y))] in logical pixels
+        self.items = {}   # title index -> [(label, shortcut, (x, y))]
+
+    def detect(self):
+        import hearth_ocr_menu as om
+        exe = self.o.exe()
+        if exe and exe in OcrBar.NONE:
+            return False
+        ses = om.Session(self.o.window)
+        try:
+            bar, k = ses.bar()
+        finally:
+            ses.close()
+        self.titles = [(t, (x / k, y / k)) for t, (x, y) in bar]
+        if not self.titles and exe:
+            OcrBar.NONE.add(exe)
+        return bool(self.titles)
+
+    def click_at(self, x, y):
+        return arbor("click-window", "--id", str(self.o.window), "--x", f"{x:.1f}", "--y", f"{y:.1f}", "--geometry")
+
+    def read(self, i):
+        """Open title i, read its menu, close it again."""
+        import hearth_ocr_menu as om
+        ses = om.Session(self.o.window)
+        try:
+            before, _ = ses.rows()
+            x, y = self.titles[i][1]
+            if before is None or not self.click_at(x, y):
+                return
+            time.sleep(0.6)
+            found, size = ses.read_popup(before)
+            ws = om.window_size(self.o.window)
+            k = size[0] / ws[0] if size and ws and ws[0] else 1.0
+            # The bar's own titles aren't the menu's.
+            # The bar's own row (its highlighted title is in the changed
+            # area) isn't the menu's.
+            names = {om.norm(t) for t, _ in self.titles}
+            self.items[i] = [(l, sc, (px / k, py / k)) for l, sc, (px, py) in found
+                             if om.norm(l) not in names
+                             and sum(om.norm(w) in names for w in l.split()) < 2]
+            self.click_at(x, y)  # a second click on the title closes it
+        finally:
+            ses.close()
+
+    def tops(self):
+        return [((i,), t, None) for i, (t, _) in enumerate(self.titles)]
+
+    def menu_items(self, i):
+        res = []
+        for j, (label, sc, _) in enumerate(self.items.get(i) or []):
+            nid = self.o.nid((i, j))
+            res.append(item(nid, label, shortcut=sc))
+        return res
+
+    def open(self, path):
+        if len(path) == 1 and path[0] < len(self.titles):
+            self.read(path[0])
+
+    def click(self, path):
+        import hearth_ocr_menu as om
+        if len(path) != 2:
+            return
+        i, j = path
+        its = self.items.get(i) or []
+        if j >= len(its):
+            return
+        label, _, (ix, iy) = its[j]
+        x, y = self.titles[i][1]
+        ses = om.Session(self.o.window)
+        try:
+            if not self.click_at(x, y):
+                return
+            time.sleep(0.5)
+            p = ses.shot()
+            ok = False
+            if p:
+                w, h, _ = om.read_png(p)
+                ws = om.window_size(self.o.window)
+                k = w / ws[0] if ws and ws[0] else 1.0
+                box = (max(0, int((ix - 260) * k)), max(0, int((iy - 14) * k)),
+                       min(w, int((ix + 260) * k)), min(h, int((iy + 14) * k)))
+                want = om.norm(label)
+                ok = any(om.same_text(label, r["text"]) for r in om.ocr_rows(p, box))
+            if not ok:
+                self.click_at(x, y)  # the menu changed: close it, read it again next time
+                self.items.pop(i, None)
+                return
+            self.click_at(ix, iy)
+        finally:
+            ses.close()
 
 
 def arbor(*args):
