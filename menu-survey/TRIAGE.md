@@ -108,6 +108,14 @@ Ben, 2026-11-26: "impossible" doesn't mean giving up: it parks an app until
 a new route exists, and the list is revisited then (DOSBox-X moved from here
 to done with the screen-read menu bar, 6b7458a).
 
+- **Tiny bitmap-font menu bars (xfig, Xaw apps):** the bar is plainly on
+  screen (File Edit View Snap Help), but tesseract reads 10 px bordered
+  Xaw buttons as "BFile [Bedit Bview" at best, at any upscale, binarized or
+  not, any page mode (2026-11-27). Retry with a vision model reading the
+  bar, or Xaw's own widget tree (editres protocol), later. Until then a
+  no-tree app whose screen reading found no bar is not proof it has none,
+  so those stay todo rather than none-needed.
+
 ## Proposed impossible (for Ben's triage, 2026-11-25)
 
 Groups no general fix reaches, with why. Not decided: each needs your call.
