@@ -192,6 +192,15 @@ def main():
                 if argv and not argv[0].startswith("/") and argv[0] not in ("env", "flatpak"):
                     argv[0] = shutil.which(argv[0], path=SEARCH) or argv[0]
                 v = ["flatpak", fid] if fid else argv
+                if fid and "run" in argv:
+                    # The launcher's own `flatpak run` line: its app id and
+                    # options (Stremio's beta and stable launchers pass
+                    # --branch; their desktop ids aren't the app id).
+                    rest = argv[argv.index("run") + 1:]
+                    opts = [a for a in rest if a.startswith("--") and not a.startswith("--command")
+                            and a.split("=")[0] in ("--branch", "--arch")]
+                    app = next((a for a in rest if not a.startswith("-")), fid)
+                    v = ["flatpak", app] + opts
                 if v in EXEC.values():
                     new.pop()  # another launcher of the same program (devloop-almanac, almanac)
                     continue

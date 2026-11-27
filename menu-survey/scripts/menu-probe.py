@@ -57,7 +57,8 @@ def rmtree(path):
     real = os.path.realpath(path)
     user = os.environ.get("USER", "ben")
     roots = (f"/var/tmp/menu-rig-{user}/", os.path.expanduser("~/.cache/hearth-menu-survey/"))
-    if not real.startswith(roots) or real.rstrip("/") in {r.rstrip("/") for r in roots}:
+    short_tmp = re.fullmatch(r"/tmp/menu-rig-\d+-\d+", real.rstrip("/"))
+    if not (short_tmp or real.startswith(roots)) or real.rstrip("/") in {r.rstrip("/") for r in roots}:
         print(f"menu-probe: refusing to delete {path}", file=sys.stderr, flush=True)
         return
     for dp, dn, fn in os.walk(path):
@@ -709,6 +710,15 @@ def attempt(attr, argv, variant, extra_env, extra_args, wait_win=50, wait_menu=1
     for k, d in dirs.items():
         os.makedirs(os.path.join(base, d), mode=0o700, exist_ok=True)
         env[k] = os.path.join(base, d)
+    if argv[0] != "bwrap":
+        # A short TMPDIR: Chromium puts its SingletonSocket there and dies
+        # when the path passes the 108-byte socket limit (ChatGPT, Brave,
+        # Spotify under ~/.cache/... never opened a window).
+        tmp = f"/tmp/menu-rig-{WORKER or 0}-{SCOPE['n'] + 1}"
+        rmtree(tmp)
+        os.makedirs(tmp, mode=0o700, exist_ok=True)
+        env["TMPDIR"] = tmp
+        APPDIRS.append(tmp)
     # The rig's PipeWire (menu-rig.sh): a PulseAudio server and JACK through
     # PipeWire's libjack, for apps that won't start without sound.
     rig_run = os.path.join(RIGDIR, "run")
@@ -1486,7 +1496,7 @@ def probe_installed(attr):
         # otherwise hide the user one.
         fid = argv[1]
         rows = [attempt(attr, ["env", "FLATPAK_USER_DIR=" + os.path.expanduser("~/.local/share/flatpak"),
-                               "flatpak", "run", "--unshare=network", fid], "session", {}, [])]
+                               "flatpak", "run", "--unshare=network", *argv[2:], fid], "session", {}, [])]
         r = rows[0]
         r["hearth"] = HEARTH_PKG or "installed"
         if r.get("result") != "no-window" and not (r.get("inspect") or {}).get("atspi", {}).get("found"):
