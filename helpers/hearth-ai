@@ -1628,6 +1628,12 @@ TOOLS = [
     tool("change_volume", "Turn the volume up or down by percent points (negative for down).",
          {"delta": {"type": "number"}}, ["delta"]),
     tool("mute", "Mute or unmute the speakers.", {"muted": {"type": "boolean"}}, ["muted"]),
+    tool("media", "Play, pause or skip music and videos (Spotify, browsers, any MPRIS player). play resumes "
+         "the player's last music and starts the player if it isn't running (no launch_app needed). For any "
+         "music request call this first, with nothing before it; never click in a music app.", {
+        "action": {"type": "string", "enum": ["play", "pause", "toggle", "next", "previous", "now_playing"]},
+        "player": dict(S, description="optional, e.g. 'spotify'; default: the one playing or last used"),
+    }, ["action"]),
     tool("desktop_action", "Run a desktop action.", {
         "action": {"type": "string", "enum": ["lock_screen", "sleep", "dark_mode_on", "dark_mode_off",
                                               "do_not_disturb_on", "do_not_disturb_off", "screenshot",
@@ -2082,7 +2088,8 @@ def system_prompt(ctx, computer=False, commands=False, turbine=False):
     return (
         "You are the voice assistant of the user's Linux desktop (hearth). Each message starts with the date and "
         "time (and where the user is, when known). "
-        "Do what the user asks by calling tools; you may call several in a row. Never take an action the user didn't "
+        "Do what the user asks by calling tools; you may call several in a row. For music, call media "
+        "directly (it opens the player itself); 'play something' means media play. Never take an action the user didn't "
         "ask for (don't open apps, files or websites unless asked). "
         "For files the user 'edited yesterday' etc., work out the dates and pass modified_after/modified_before. "
         "When a search finds what they asked to open, open the best match. If a search finds nothing, search again "
@@ -2124,6 +2131,50 @@ def user_message(text, ctx=None):
     when = time.strftime("%A, %B %-d, %Y, %-I:%M %p")
     place = (ctx or {}).get("place")
     return {"role": "user", "content": "[%s%s] %s" % (when, ("; in %s" % place) if place else "", text)}
+
+
+def media(action, player=""):
+    """playerctl for the media tool. A player that isn't running is
+    started first (Spotify registers on the bus a few seconds in)."""
+    def ctl(*a, timeout=5):
+        r = subprocess.run(["playerctl"] + (["-p", player] if player else []) + list(a),
+                           capture_output=True, text=True, timeout=timeout)
+        return r.returncode, (r.stdout or r.stderr or "").strip()
+
+    player = (player or "").strip().lower()
+    running = subprocess.run(["playerctl", "-l"], capture_output=True, text=True, timeout=5).stdout.split()
+    if player and not any(p.split(".")[0].lower() == player for p in running):
+        if action != "play":
+            return "%s isn't running." % player.title()
+        exe = shutil.which(player)
+        if not exe:
+            return "%s isn't running; open it with launch_app, then call media play." % player.title()
+        if not os.environ.get("HEARTH_AI_DRYRUN"):
+            subprocess.Popen(["systemd-run", "--user", "--collect", "--", exe], stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True)
+        for _ in range(30):
+            time.sleep(0.5)
+            running = subprocess.run(["playerctl", "-l"], capture_output=True, text=True, timeout=5).stdout.split()
+            if any(p.split(".")[0].lower() == player for p in running):
+                time.sleep(1.5)   # Spotify answers before it has loaded its last song
+                break
+        else:
+            return "Started %s, but it isn't ready to play yet." % player.title()
+    if not running and not player:
+        return "No music or video player is running. Open one (for example Spotify) with media play and player."
+    if action == "now_playing":
+        code, out = ctl("metadata", "--format", "{{status}}: {{artist}} - {{title}} ({{playerName}})")
+        return out if code == 0 else "Nothing is playing."
+    verb = {"toggle": "play-pause"}.get(action, action)
+    if os.environ.get("HEARTH_AI_DRYRUN"):
+        _, now = ctl("metadata", "--format", "{{artist}} - {{title}}")
+        return "Playing: %s" % now if action in ("play", "toggle") else "Done."
+    code, out = ctl(verb)
+    if code:
+        return "Couldn't %s: %s" % (action, out or "no player")
+    time.sleep(0.6)
+    _, now = ctl("metadata", "--format", "{{status}}: {{artist}} - {{title}}")
+    return now or "Done."
 
 
 class Assistant:
@@ -2182,6 +2233,8 @@ class Assistant:
                 return done + " (dry run)"
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
             return done if r.returncode == 0 else "Couldn't change the volume: " + (r.stderr or "").strip()
+        if name == "media":
+            return media(args.get("action", "play"), args.get("player", ""))
         if name == "calculate":
             r = subprocess.run(["qalc", "-t", "-defaults", "-s", "max_decimals 4", args.get("expression", "")],
                                capture_output=True, text=True, timeout=5)
