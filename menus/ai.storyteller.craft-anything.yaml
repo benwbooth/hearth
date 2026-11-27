@@ -1,0 +1,32 @@
+# Craft Anything (storytold, nix-craftapps) has a menu bar only on macOS
+# (crates/ui-egui/src/menu.rs, v0.6.1) and no control server, so this is
+# its Mac menu where Linux can run it: the command palette (Ctrl+K, which
+# also has New project, Open a file…, Export a report, the theme and the
+# Simple/Advanced and Clean room/Deep modes) and the Help links. The Mac
+# menu's Cmd+N/O/Shift+O/Comma are Mac-only menu accelerators: the app
+# doesn't take them as keys elsewhere. Zoom is egui's own keys
+# (gui_zoom::kb_shortcuts, handled in lib.rs).
+schema: hearth-menu-module/1
+id: ai.storyteller.craft-anything
+version: 1
+app:
+  match:
+    app_id: [ai.storyteller.craft-anything, craft-anything]
+    desktop: [craft-anything.desktop]
+  versions: ">=0.6"
+  locales: [en]
+provenance:
+  generator: hand-written from the macOS menu (crates/ui-egui/src/menu.rs MenuBar::install, v0.6.1)
+  inputs: [source:macos-menu]
+menus:
+  - title: View
+    items:
+      - { label: Command palette, shortcut: Ctrl+K, do: { keys: Ctrl+K } }
+      - separator
+      - { label: Zoom In, shortcut: Ctrl+=, do: { keys: Ctrl+= } }
+      - { label: Zoom Out, shortcut: Ctrl+-, do: { keys: Ctrl+- } }
+      - { label: Actual Size, shortcut: Ctrl+0, do: { keys: Ctrl+0 } }
+  - title: Help
+    items:
+      - { label: Craft Anything on GitHub, do: { open_help: "https://github.com/storytold/craft-anything" } }
+      - { label: Report a problem…, do: { open_help: "https://github.com/storytold/craft-anything/issues/new/choose" } }

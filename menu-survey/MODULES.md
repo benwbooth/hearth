@@ -219,7 +219,9 @@ any new app:
      sends keys (Cut/Copy/Paste/Undo/Redo).
    No Mac menu: deckcraft, figcraft, pdfcraft, wordcraft (they stay on the
    AT-SPI route). craft-anything has one (crates/ui-egui/src/menu.rs) but
-   no control server: a keys-only module from it is still open.
+   no control server and few of its accelerators work off the Mac: a
+   module (menus/ai.storyteller.craft-anything.yaml) has what runs there,
+   the command palette, zoom and the Help links.
 6. **Keyboard sections of man pages and manuals** (TigerVNC's
    vncviewer(1), Acrobat's shortcut chapter): a table parser, with the
    menu grouping from the section headings.
