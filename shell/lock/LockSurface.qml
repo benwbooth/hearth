@@ -489,24 +489,41 @@ Item {
                     Item {
                         id: fpGlyph
                         anchors.horizontalCenter: parent.horizontalCenter
-                        visible: Lock.fieldShown && (Lock.fpState === "waiting" || Lock.fpState === "retry")
+                        // Listening: a pulsing ring. Asleep (a minute without
+                        // input, services/Lock.qml): the same glyph, still and
+                        // dimmer, and a click wakes the reader.
+                        readonly property bool asleep: Lock.fpState === "sleeping"
+                        visible: (Lock.fieldShown && (Lock.fpState === "waiting" || Lock.fpState === "retry")) || asleep
+                        opacity: asleep ? (wakeArea.containsMouse ? 0.95 : 0.6) : 1
                         width: Math.round(26 * root.k); height: width
                         property real shake: 0
+                        MouseArea {
+                            id: wakeArea
+                            anchors.fill: parent
+                            anchors.margins: -6 * root.k
+                            enabled: fpGlyph.asleep
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: Lock.wakeFingerprint()
+                        }
                         Rectangle {
                             id: pulse
                             anchors.centerIn: parent
                             width: parent.width; height: width; radius: width / 2
                             color: "transparent"
                             border.color: Lock.fpState === "retry" ? Theme.bad : Qt.rgba(1, 1, 1, 0.7)
+                            // Asleep: a still ring around the glyph.
+                            Binding on scale { when: fpGlyph.asleep; value: 1 }
+                            Binding on opacity { when: fpGlyph.asleep; value: 0.8 }
                             border.width: 1.5
                             SequentialAnimation on scale {
-                                running: fpGlyph.visible
+                                running: fpGlyph.visible && !fpGlyph.asleep
                                 loops: Animation.Infinite
                                 NumberAnimation { from: 1; to: 1.7; duration: 1600; easing.type: Easing.OutCubic }
                                 PauseAnimation { duration: 400 }
                             }
                             SequentialAnimation on opacity {
-                                running: fpGlyph.visible
+                                running: fpGlyph.visible && !fpGlyph.asleep
                                 loops: Animation.Infinite
                                 NumberAnimation { from: 0.8; to: 0; duration: 1600; easing.type: Easing.OutCubic }
                                 PauseAnimation { duration: 400 }
@@ -531,25 +548,14 @@ Item {
                             function onFpStateChanged() { if (Lock.fpState === "retry") fpShake.restart(); }
                         }
                     }
-                    // The reader sleeps a minute after locking (services/Lock.qml):
-                    // this turns it on again for another minute.
-                    LockButton {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        visible: Lock.fpState === "sleeping"
-                        k: root.k
-                        pill: true
-                        backdrop: backdrop
-                        text: "Use Fingerprint"
-                        tip: "The fingerprint reader turned off after a minute. Click to turn it on again."
-                        onClicked: Lock.wakeFingerprint()
-                    }
                     Label {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        visible: text !== "" && Lock.fieldShown
+                        visible: text !== "" && (Lock.fieldShown || Lock.fpState === "sleeping")
                         text: Lock.message !== "" ? Lock.message
                               : Lock.capsLock ? "Caps Lock is on"
                               : Lock.fpState === "retry" ? Lock.fpMessage
                               : Lock.fpState === "waiting" ? "Touch the fingerprint reader"
+                              : Lock.fpState === "sleeping" ? "Click the fingerprint to use it"
                               : ""
                         color: Lock.message !== "" ? "#ffd1d1" : Qt.rgba(1, 1, 1, 0.75)
                         font.pointSize: 0.75 * Math.round(12.5 * root.k)

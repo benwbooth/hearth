@@ -82,9 +82,10 @@ Singleton {
     // ---- fingerprint
     // off | waiting | retry | failed | unavailable | sleeping
     property string fpState: "off"
-    // The reader listens for a minute after locking, then sleeps (fprintd
-    // keeps the sensor powered and polling while a verify runs); the lock
-    // screen's fingerprint button wakes it for another minute.
+    // The reader listens from locking, and again whenever there's input on
+    // the lock screen, until a minute without any; then it sleeps (fprintd
+    // keeps the sensor powered and polling while a verify runs). Input or
+    // the lock screen's fingerprint button wakes it.
     property bool fpAsleep: false
     property string fpMessage: ""
     property int fpRestarts: 0
@@ -147,6 +148,12 @@ Singleton {
         if (!root.locked || root.unlocking) return;
         if (root.graceActive) { root.success("grace"); return; }
         if (root.fpState === "unavailable" || root.fpState === "failed") fpRetry.restart();
+        // Coming back to the lock screen wakes a sleeping reader; input
+        // while it listens keeps it up: it sleeps a minute after the last.
+        if (root.fpWanted) {
+            if (root.fpAsleep) root.wakeFingerprint();
+            else fpSleep.restart();
+        }
     }
     function showField() {
         if (!root.locked || root.unlocking) return;
