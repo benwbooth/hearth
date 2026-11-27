@@ -158,6 +158,24 @@ ColumnLayout {
         }
         SettingsDivider {}
         SettingsRow {
+            label: "Quick model"
+            note: "A small model that answers simple requests in seconds while the assistant's model isn't loaded, and hands harder ones to it."
+            tip: "Quick commands (open an app, the volume, what's open) don't need a big model, and a small one loads in a couple of seconds. It passes anything that needs reasoning, writing or several steps to the assistant's model. Once that model is loaded, it answers everything itself."
+            readonly property var fast: pane.cfg.fastAssistant || { enabled: true, provider: "ollama", model: "qwen3.5:4b" }
+            Dropdown {
+                implicitWidth: 220
+                options: [{ value: "", label: "Off" }].concat(Ai.providers.filter(p => p.kind === "local").flatMap(p =>
+                    (p.installed || []).filter(m => !m.category || m.category === "llm").map(m => ({ value: p.id + "|" + m.name, label: m.name + " · " + p.label }))))
+                value: parent.fast.enabled === false ? "" : (parent.fast.provider + "|" + parent.fast.model)
+                onPicked: v => {
+                    if (!v) { Settings.set("ai.fastAssistant", Object.assign({}, parent.fast, { enabled: false })); return; }
+                    const i = v.indexOf("|");
+                    Settings.set("ai.fastAssistant", { enabled: true, provider: v.slice(0, i), model: v.slice(i + 1) });
+                }
+            }
+        }
+        SettingsDivider {}
+        SettingsRow {
             label: "Use the computer"
             note: "Let the assistant read your windows and click and type in apps to do what you ask."
             tip: "It uses the same computer-use tools as Codex (codex-computer-use-linux). Ask: a card asks you once per request before it clicks or types (reading windows needs no OK). Always: it acts without asking. Off: it can't see or touch your apps."

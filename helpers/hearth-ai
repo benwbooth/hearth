@@ -90,6 +90,10 @@ DEFAULTS = {
     # ("low" | "medium" | "high" | ""): opening apps and clicking needs
     # little, and every second of thinking is a second of waiting.
     "assistantReasoning": "low",
+    # A small model that answers first while the assistant's own model isn't
+    # loaded: it loads in seconds and handles quick commands, and passes
+    # anything harder to the assistant's model (hand_off).
+    "fastAssistant": {"enabled": True, "provider": "ollama", "model": "qwen3.5:4b"},
     "runCommands": "ask",
     # Graphics memory kept free for the desktop when making room for a
     # model: windows squeezed out of VRAM flicker and show artifacts.
@@ -1608,6 +1612,15 @@ TOOLS = [
 ]
 SHELL_TOOLS = {"launch_app", "desktop_action", "get_weather"}
 
+HAND_OFF = tool("hand_off", "Pass this request to the larger, smarter model. Call it right away (instead of "
+                "answering) when the request needs reasoning, planning, writing, several steps in apps, or "
+                "when you're not sure what to do.", {
+    "why": dict(S, description="a few words on why"),
+}, [])
+
+FAST_NOTE = ("You are the quick assistant: answer simple requests yourself with the tools. For anything that needs "
+             "reasoning, writing, several steps in apps, or that you're unsure about, call hand_off at once. ")
+
 RUN_COMMAND = tool("run_command", "Run a shell command (bash) on the user's computer and get its output and exit "
                    "code. The user is asked to allow each command first. Use it for what no other tool does.", {
     "command": S,
@@ -1975,7 +1988,7 @@ class Assistant:
         if qu:
             qu.put(result)
 
-    def setup(self, cfg, p, ctx):
+    def setup(self, cfg, p, ctx, fast=False):
         """The tools and system prompt of a request: (tools, computer,
         commands, vision, system message). The same for every request with
         the same settings, so a server's prompt cache can reuse them."""
@@ -1992,7 +2005,11 @@ class Assistant:
             if cfg.get("runCommands", "ask") != "off":
                 tools.append(RUN_COMMAND)
                 commands = True
-        system = {"role": "system", "content": system_prompt(ctx, computer, commands)}
+        content = system_prompt(ctx, computer, commands)
+        if fast:
+            tools.append(HAND_OFF)
+            content = FAST_NOTE + content
+        system = {"role": "system", "content": content}
         return tools, computer, commands, vision, system
 
     def warm(self, req):
@@ -2010,9 +2027,12 @@ class Assistant:
             p = providers(cfg).get(pid)
             if p is None or isinstance(p, AgentCli):
                 return
+            fast = self.fast_route(cfg, pid, model)
+            if fast:
+                pid, model, p = fast
             t0 = time.time()
             loaded = make_room_for(pid, model)
-            tools, _c, _r, _v, system = self.setup(cfg, p, req.get("context") or {})
+            tools, _c, _r, _v, system = self.setup(cfg, p, req.get("context") or {}, bool(fast))
             if loaded:
                 # Probably cached already; a 1-token request makes sure.
                 p.chat(model, [system, user_message("")], tools, keep_minutes(cfg),
@@ -2051,10 +2071,51 @@ class Assistant:
             emit({"type": "reply", "id": rid, "done": True, "error": True,
                   "text": "%s sends what you say to the cloud. Allow cloud AI in Settings > AI first." % p.label})
             return
+        fast = self.fast_route(cfg, pid, model)
+        if fast:
+            fpid, fmodel, fp = fast
+            out = self.run(rid, req, cfg, fpid, fmodel, fp, fast=True)
+            if out is None:
+                return
+            # Handed off: free the small model's memory for the big one.
+            emit({"type": "step", "id": rid, "name": "hand_off", "args": {"why": out.get("why", "")}})
+            try:
+                fp.unload(fmodel)
+            except Exception:  # noqa: BLE001
+                pass
+            req = dict(req)
+            if out.get("done"):
+                req["text"] = req.get("text", "") + "\n(A quicker model already did: %s.)" % "; ".join(out["done"])
+        self.run(rid, req, cfg, pid, model, p, fast=False)
+
+    def fast_route(self, cfg, pid, model):
+        """The small model to try first, or None: only while the assistant's
+        own model isn't loaded (once it is, it's the quicker one)."""
+        f = cfg.get("fastAssistant") or {}
+        if not f.get("enabled") or not f.get("model"):
+            return None
+        fpid, fmodel = f.get("provider", "ollama"), f["model"]
+        if (fpid, fmodel) == (pid, model):
+            return None
+        provs = providers(cfg)
+        main, fp = provs.get(pid), provs.get(fpid)
+        if fp is None or isinstance(fp, AgentCli) or isinstance(main, AgentCli):
+            return None
+        st = ARB.last or ARB.snapshot(False)
+        key = pid if pid.startswith("service:") else "%s:%s" % (pid, model)
+        if key in {e["key"] for e in st["loaded"]}:
+            return None
+        if not any(r["provider"] == fpid and r["model"] == fmodel for i in st["installed"] for r in i["runners"]):
+            return None
+        return fpid, fmodel, fp
+
+    def run(self, rid, req, cfg, pid, model, p, fast):
+        """One model's tool loop. Replies itself and returns None, or (the
+        small model) returns {"why", "done": [what it did]} to hand off."""
         was_loaded = True
         if not isinstance(p, AgentCli):
             was_loaded = make_room_for(pid, model)
-        tools, computer, commands, vision, system = self.setup(cfg, p, req.get("context") or {})
+        tools, computer, commands, vision, system = self.setup(cfg, p, req.get("context") or {}, fast)
         if not was_loaded:
             # Typed questions (Spotlight) get the saved prompt too. A warm-up
             # still running from Voice has it under way: wait for it.
@@ -2069,15 +2130,20 @@ class Assistant:
         messages += req.get("history") or []
         messages.append(user_message(req.get("text", "")))
         call = 0
+        done = []
         try:
-            for _ in range(30 if computer else 8):
+            for _ in range(6 if fast else 30 if computer else 8):
                 if rid in self.cancelled:
-                    return
+                    return None
                 text, calls, raw = p.chat(model, messages, tools, keep_minutes(cfg),
                                           cfg.get("assistantReasoning", "low") or None)
+                if fast and any(c["name"] == "hand_off" for c in calls):
+                    why = next(c["args"].get("why", "") for c in calls if c["name"] == "hand_off")
+                    log("fast model handed off: %s" % why)
+                    return {"why": why, "done": done}
                 if not calls:
                     emit({"type": "reply", "id": rid, "done": True, "text": (text or "").strip() or "Done."})
-                    return
+                    return None
                 if isinstance(p, AgentCli):
                     messages.append(raw)
                 else:
@@ -2088,7 +2154,7 @@ class Assistant:
                     emit({"type": "step", "id": rid, "name": c["name"], "args": c["args"]})
                     images = []
                     if rid in self.cancelled:
-                        return
+                        return None
                     if c["name"] in SHELL_TOOLS:
                         result = self.shell_tool(rid, call, c["name"], c["args"])
                     elif c["name"] == "run_command" and commands:
@@ -2127,16 +2193,24 @@ class Assistant:
                     if isinstance(p, AgentCli):
                         tm = {"role": "user", "content": "Result of %s: %s" % (c["name"], result)}
                     messages.append(tm)
+                    done.append("%s -> %s" % (c["name"], str(result)[:120]))
                     if images and vision:
                         # Tool messages can't carry images in the OpenAI format: hand it over as the user.
                         messages.append({"role": "user", "content": [{"type": "text", "text": "The screenshot:"}] + [
                             {"type": "image_url", "image_url": {"url": "data:%s;base64,%s" % im}} for im in images[:1]]})
+            if fast:
+                return {"why": "too many steps", "done": done}
             emit({"type": "reply", "id": rid, "done": True, "text": "That took too many steps; I stopped."})
         except urllib.error.URLError as e:
+            if fast:
+                return {"why": "the quick model isn't reachable", "done": done}
             emit({"type": "reply", "id": rid, "done": True, "error": True,
                   "text": "I can't reach %s (%s). Is it running? See Settings > AI." % (p.label, e.reason)})
         except Exception as e:  # noqa: BLE001
+            if fast:
+                return {"why": "the quick model failed: %s" % e, "done": done}
             emit({"type": "reply", "id": rid, "done": True, "error": True, "text": "Something went wrong: %s" % e})
+        return None
 
 
 # --- the app API ------------------------------------------------------------------

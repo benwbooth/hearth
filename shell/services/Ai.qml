@@ -146,6 +146,12 @@ Singleton {
     // The assistant asking before it runs a command or uses the computer:
     // { id, call, kind: "command"|"computer", title, detail } or null.
     property var approval: null
+    // The assistant's own model, by name ("Inkling 2 Mini"), for messages.
+    readonly property string assistantName: {
+        const a = cfg.assistant || {};
+        const m = loaded.concat(installed).find(x => x.provider === a.provider) || null;
+        return m ? m.name : (a.model || "the assistant's model");
+    }
     function answerApproval(allow) {
         if (!approval) return;
         send({ cmd: "toolResult", id: approval.id, call: approval.call, result: allow ? "allow" : "deny" });

@@ -175,6 +175,7 @@ Singleton {
         case "calculate": return "Calculating " + (a.expression || "");
         case "web_search": return "Searching the web";
         case "desktop_action": return String(a.action || "").replace(/_/g, " ");
+        case "hand_off": return "Asking " + Ai.assistantName + " (needs more thought)";
         case "run_command": return "Running " + String(a.command || "").split("\n")[0].slice(0, 60);
         case "list_windows": return "Looking at the open windows";
         case "focused_window": return "Checking the active window";
