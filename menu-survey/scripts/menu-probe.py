@@ -47,7 +47,10 @@ DISKDIR = os.path.join("/var/tmp", "menu-rig-" + os.environ.get("USER", "ben"), 
 # sandbox mounts them and then can't make its /var/tmp symlink ("destination
 # exists": Evolution never started). Sandboxed AppImages keep DISKDIR (their
 # sandbox hides your home).
-APPROOT = os.path.join(os.path.expanduser("~/.cache/hearth-menu-survey"), "menu-rig-survey" + WORKER)
+# Short (/tmp is on disk here): a Flatpak'd Chromium puts its SingletonSocket
+# in HOME/.var/app/ID/cache/scoped_dir.../ and dies past the 108-byte socket
+# limit (Tidal HiFi, Unity Hub, Cherry Studio under ~/.cache/...).
+APPROOT = f"/tmp/mr{WORKER or 0}"
 
 
 def rmtree(path):
@@ -57,7 +60,7 @@ def rmtree(path):
     real = os.path.realpath(path)
     user = os.environ.get("USER", "ben")
     roots = (f"/var/tmp/menu-rig-{user}/", os.path.expanduser("~/.cache/hearth-menu-survey/"))
-    short_tmp = re.fullmatch(r"/tmp/menu-rig-\d+-\d+", real.rstrip("/"))
+    short_tmp = re.fullmatch(r"/tmp/menu-rig-\d+-\d+|/tmp/mr\d+/apps/\d+(/.*)?", real.rstrip("/"))
     if not (short_tmp or real.startswith(roots)) or real.rstrip("/") in {r.rstrip("/") for r in roots}:
         print(f"menu-probe: refusing to delete {path}", file=sys.stderr, flush=True)
         return
@@ -569,7 +572,10 @@ def desktop_exec(out):
         if e.get("Type", "Application") != "Application" or e.get("NoDisplay", "").lower() == "true" \
                 or e.get("Hidden", "").lower() == "true" or e.get("Terminal", "").lower() == "true":
             continue
-        ex = e.get("Exec", "")
+        # Desktop-entry string escapes come first (\\$SHELL is \$SHELL to
+        # the Exec quoting, then $SHELL: scrcpy's line ran "$SHELL" literally).
+        ex = re.sub(r"\\([\\snrt])", lambda m: {"s": " ", "n": "\n", "r": "\r", "t": "\t"}.get(m[1], m[1]), e.get("Exec", ""))
+        ex = ex.replace("\\$", "$").replace("\\`", "`")  # shlex keeps these inside "..."
         try:
             argv = shlex.split(ex)
         except ValueError:
@@ -604,7 +610,7 @@ def desktop_exec(out):
         return (named or hits)[:1], did
     # A shell line (Mixxx: sh -c "pasuspender -- mixxx || mixxx") stays a
     # shell line; the app's own name inside it resolves on PATH below.
-    if argv and argv[0] in ("sh", "bash") and "-c" in argv[1:2]:
+    if argv and argv[0] in ("sh", "bash", "/bin/sh", "/bin/bash") and "-c" in argv[1:2]:
         bindir = os.path.join(out, "bin")
         argv = ["/bin/sh", "-c", f'PATH="{bindir}:$PATH"; ' + argv[2]] if len(argv) > 2 else argv
         return argv, did
