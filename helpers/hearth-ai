@@ -2177,6 +2177,19 @@ def media(action, player=""):
     return now or "Done."
 
 
+# Commands Claude may run itself as the assistant (Bash prefixes): what
+# hearth's own tools do, by hand. Everything else needs runCommands "allow".
+CLAUDE_COMMANDS = ["playerctl", "wpctl", "qalc", "xdg-open", "gtk-launch", "hearth-search", "date",
+                   "busctl --user call org.freedesktop.FileManager1"]
+CLAUDE_NOTE = (
+    "Tools: the computer-use tools (list_apps, get_app_state, click, type_text, press_key, ...) read and work "
+    "the user's apps. With Bash you can run: playerctl (music and videos over MPRIS: playerctl -p spotify "
+    "play, next, metadata; prefer it over clicking in a music app), wpctl (volume: wpctl set-volume "
+    "@DEFAULT_AUDIO_SINK@ 50%%), gtk-launch <desktop id> or xdg-open to open apps, files and URLs, "
+    "hearth-search --once '{\"q\": \"words\"}' to find files, qalc to calculate. "
+    "Be quick: the user is waiting for a spoken answer, so take the fewest steps. ")
+
+
 class Assistant:
     def __init__(self):
         self.pending = {}     # (id, call) -> Queue
@@ -2251,6 +2264,72 @@ class Assistant:
                              start_new_session=True)
             return "Opened the browser."
         return "Unknown tool."
+
+    def run_claude(self, rid, req, cfg, model, p):
+        """Claude Code as the assistant: one `claude -p` run with its own
+        agent loop (much quicker than a CLI start per step), the
+        computer-use MCP server and a few commands; its tool calls stream
+        to the card as steps."""
+        ctx = req.get("context") or {}
+        computer = cfg.get("computerUse", "ask") != "off" and COMPUTER.available()
+        commands = cfg.get("runCommands", "ask") == "allow"
+        system = system_prompt(ctx, computer, False, False).replace(
+            "Do what the user asks by calling tools; you may call several in a row. ", CLAUDE_NOTE)
+        allowed = ["Bash(%s:*)" % c for c in CLAUDE_COMMANDS] if not commands else ["Bash"]
+        argv = [p.bin, "-p", "--output-format", "stream-json", "--verbose", "--no-session-persistence",
+                "--setting-sources", "", "--strict-mcp-config", "--tools", "Bash",
+                "--model", model if model and model != "default" else "sonnet", "--system-prompt", system]
+        if computer:
+            argv += ["--mcp-config", json.dumps({"mcpServers": {"computer": {
+                "command": sys.executable, "args": [os.path.abspath(__file__), "--computer-mcp"]}}})]
+            if cfg.get("computerUse") == "allow":
+                allowed.append("mcp__computer")
+            else:   # reading needs no OK; acting waits for Settings > AI > Always
+                COMPUTER.start()
+                allowed += ["mcp__computer__" + n for n in sorted(COMPUTER.readonly)]
+        argv += ["--allowedTools"] + allowed
+        convo = "".join("%s: %s\n" % (m["role"].title(), m.get("content") or "") for m in req.get("history") or [])
+        text = user_message(req.get("text", ""), ctx)["content"]
+        argv += ["--", ("Earlier in this conversation:\n%s\n" % convo if convo else "") + text]
+        cwd = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "hearth", "claude-assistant")
+        os.makedirs(cwd, exist_ok=True)
+        t0 = time.time()
+        proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL,
+                                text=True, cwd=cwd, start_new_session=True)
+        threading.Thread(target=lambda: (time.sleep(240), proc.poll() is None and proc.kill()), daemon=True).start()
+        answer, error = "", ""
+        for line in proc.stdout:
+            if rid in self.cancelled:
+                proc.kill()
+                return None
+            try:
+                m = json.loads(line)
+            except ValueError:
+                continue
+            if m.get("type") == "assistant":
+                for c in (m.get("message") or {}).get("content") or []:
+                    if c.get("type") != "tool_use":
+                        continue
+                    name, args = c.get("name", ""), c.get("input") or {}
+                    if name == "Bash":
+                        name, args = "run_command", {"command": args.get("command", "")}
+                    elif name.startswith("mcp__computer__"):
+                        name = name[len("mcp__computer__"):]
+                    emit({"type": "step", "id": rid, "name": name, "args": args})
+            elif m.get("type") == "result":
+                answer = str(m.get("result") or "").strip()
+                if m.get("is_error"):
+                    error = answer or m.get("subtype", "")
+        proc.wait()
+        log("claude assistant: %.1f s" % (time.time() - t0))
+        if rid in self.cancelled:
+            return None
+        if error or (proc.returncode and not answer):
+            err = error or (proc.stderr.read().strip().splitlines() or ["exit %d" % proc.returncode])[-1]
+            emit({"type": "reply", "id": rid, "done": True, "error": True, "text": "Claude couldn't answer: %s" % err})
+        else:
+            emit({"type": "reply", "id": rid, "done": True, "text": answer or "Done."})
+        return None
 
     def shell_tool(self, rid, call, name, args):
         qu = queue.Queue()
@@ -2409,6 +2488,8 @@ class Assistant:
     def run(self, rid, req, cfg, pid, model, p, fast):
         """One model's tool loop. Replies itself and returns None, or (the
         small model) returns {"why", "done": [what it did]} to hand off."""
+        if isinstance(p, AgentCli) and p.id == "claude" and not fast:
+            return self.run_claude(rid, req, cfg, model, p)
         was_loaded = True
         if not isinstance(p, AgentCli):
             # A warm-up still running from Voice is loading the model or
@@ -2962,9 +3043,61 @@ def make_room_cli(arg):
     ARB.mem.save(force=True)
 
 
+def computer_mcp_proxy():
+    """The computer-use MCP server with hearth's trimming, for Claude as
+    the assistant: the same tools minus setup ones (ComputerUse.HIDDEN),
+    results through compact_result (a window's state was 2.3 MB of JSON
+    with a screenshot; Claude saved it to a file and dug through it with
+    jq for 15 s), images only from the screenshot tool."""
+    child = subprocess.Popen(COMPUTER.command(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                             stderr=subprocess.DEVNULL, text=True, bufsize=1)
+    calls = {}   # request id -> tool name
+
+    def down():
+        for line in child.stdout:
+            try:
+                m = json.loads(line)
+            except ValueError:
+                continue
+            r = m.get("result")
+            if isinstance(r, dict) and isinstance(r.get("tools"), list):
+                r["tools"] = [t for t in r["tools"] if t.get("name") not in ComputerUse.HIDDEN]
+            name = calls.pop(m.get("id"), None)
+            if name and isinstance(r, dict):
+                texts = [c.get("text", "") for c in r.get("content") or [] if c.get("type") == "text"]
+                if r.get("structuredContent") and not texts:
+                    texts = [json.dumps(r["structuredContent"])]
+                text = compact_result("\n".join(texts).strip(), name) or ("Error." if r.get("isError") else "Done.")
+                if len(text) > 8000:
+                    text = text[:8000] + "\n[cut: %d more characters]" % (len(text) - 8000)
+                content = [{"type": "text", "text": text}]
+                if name == "screenshot":
+                    content += [c for c in r.get("content") or [] if c.get("type") == "image"][:1]
+                r["content"] = content
+                r.pop("structuredContent", None)
+            sys.stdout.write(json.dumps(m, separators=(",", ":"), ensure_ascii=False) + "\n")
+            sys.stdout.flush()
+
+    threading.Thread(target=down, daemon=True).start()
+    for line in sys.stdin:
+        try:
+            m = json.loads(line)
+            if m.get("method") == "tools/call":
+                calls[m.get("id")] = (m.get("params") or {}).get("name", "")
+        except ValueError:
+            pass
+        child.stdin.write(line)
+        child.stdin.flush()
+    child.stdin.close()
+    child.wait(timeout=5)
+
+
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "--state":
         print(json.dumps(full_state(True), indent=1))
+        return
+    if len(sys.argv) > 1 and sys.argv[1] == "--computer-mcp":
+        computer_mcp_proxy()
         return
     if len(sys.argv) > 2 and sys.argv[1] == "--make-room":
         make_room_cli(sys.argv[2])
