@@ -79,6 +79,23 @@ def load_probes():
     return rows
 
 
+def load_looked():
+    """data/looked.tsv: what a person saw in a no-tree window's top strip
+    (strips.py contact sheets): attr, verdict, note. Verdicts: none (no
+    menu bar, no menu button: nothing to show), bar (a drawn menu bar),
+    button (a drawn ☰/⋮ or named menu button), dialog (the first window was
+    a dialog or splash, not the app's main window)."""
+    out = {}
+    try:
+        for line in open(os.path.join(ROOT, "data", "looked.tsv")):
+            f = line.rstrip("\n").split("\t")
+            if len(f) >= 2 and not line.startswith("#"):
+                out[f[0]] = (f[1], f[2] if len(f) > 2 else "")
+    except OSError:
+        pass
+    return out
+
+
 MENU_BUTTON_NAMES = {"menu", "main menu", "application menu", "app menu", "open menu", "primary menu",
                      "more options", "options menu", "more actions", "...", "…", "⋮", "☰", "options",
                      "settings", "help", "help & about", "help and about", "more", "tools", "preferences"}
@@ -290,6 +307,7 @@ def rebuild():
     db.row_factory = sqlite3.Row
     rows = [machine_row(r) for r in db.execute("select * from results order by rank")]
     probes = load_probes()
+    looked = load_looked()
     berrs = load_build_errors()
     cats = app_categories()
     lever = {r["attr"]: r["lever"] for r in db.execute("select attr, lever from results where best = 'full'")}
@@ -315,6 +333,14 @@ def rebuild():
                 # emulators with Qt/GTK front ends are classified by those.
                 r["status"], r["solution"], r["gap"] = "none-needed", "none-needed:game", ""
                 r["notes"] = r["notes"] or "game: menus are in-game"
+            elif r["gap"].startswith(("no-a11y:", "flatpak-no-a11y", "electron-no-a11y")) and r["attr"] in looked:
+                v, note = looked[r["attr"]]
+                if v == "none":
+                    r["status"], r["solution"], r["gap"] = "none-needed", "none-needed:looked", ""
+                else:
+                    r["gap"] = {"bar": "drawn-menubar", "button": "drawn-menu-button",
+                                "dialog": "first-window-dialog"}.get(v, r["gap"])
+                r["notes"] = note or r["notes"]
             elif r["gap"] == "no-menus-visible":
                 # On AT-SPI, but no menu bar, no menu button, no shortcuts
                 # window, no commands exported: nothing a menu could show.
@@ -433,6 +459,9 @@ GAP_NOTES = {
     "no-a11y:custom-drawn": "Draws its own UI (GPU/canvas): menu modules from its key bindings",
     "no-a11y:java-swing": "Java: retest with the bridge (Flatpaks with the javaFlatpaks override); LWJGL games fall to the game rule",
     "no-a11y:javafx": "JavaFX: no AT-SPI on Linux: menu modules",
+    "drawn-menubar": "A menu bar the app draws itself (seen on its window) that screen reading doesn't find yet",
+    "drawn-menu-button": "A ☰/⋮ menu button the app draws itself (seen on its window): no tree to open it through",
+    "first-window-dialog": "Measured on a first dialog or splash, not the main window",
     "flatpak-no-a11y": "A Flatpak without a reachable tree: per-app look (a11y portal, first-run screen)",
     "no-a11y:gtk4-adwaita": "GTK 4 app without a tree in the rig: mostly mixed toolkits (SDL, EFL) or first-run screens; retest",
     "no-a11y:gtk3": "Links GTK 3 but draws with another kit (SDL, gdraw, giu): modules",
