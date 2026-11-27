@@ -1,0 +1,83 @@
+# Warp (warp-terminal) draws its own window and exports no menus (no
+# accessibility tree either). These are its documented default Linux
+# shortcuts (docs.warp.dev, Keyboard Shortcuts > Linux, 2026-11-26) as
+# macOS-style menus; the input editor's emacs-style keys are left out.
+# Remapped shortcuts in Warp's keybindings editor won't match.
+schema: hearth-menu-module/1
+id: dev.warp.Warp
+version: 1
+app:
+  match:
+    app_id: [dev.warp.Warp]
+    desktop: [dev.warp.Warp.desktop]
+    nixpkgs: [warp-terminal]
+  locales: [en]
+provenance:
+  generator: hand-written from Warp's documented Linux shortcuts (docs.warp.dev/getting-started/keyboard-shortcuts)
+  inputs: [docs:keyboard-shortcuts]
+menus:
+  - title: Shell
+    items:
+      - { label: New Tab, shortcut: Ctrl+Shift+T, do: { keys: Ctrl+Shift+T } }
+      - { label: Reopen Closed Tab, shortcut: Ctrl+Alt+T, do: { keys: Ctrl+Alt+T } }
+      - separator
+      - { label: Split Pane Right, shortcut: Ctrl+Shift+D, do: { keys: Ctrl+Shift+D } }
+      - { label: Split Pane Down, shortcut: Ctrl+Shift+E, do: { keys: Ctrl+Shift+E } }
+      - { label: Toggle Maximize Active Pane, shortcut: Ctrl+Shift+Enter, do: { keys: Ctrl+Shift+Return } }
+      - separator
+      - { label: Command Search, shortcut: Ctrl+R, do: { keys: Ctrl+R } }
+      - { label: Workflows, shortcut: Ctrl+Shift+R, do: { keys: Ctrl+Shift+R } }
+      - { label: Warpify Subshell, shortcut: Ctrl+I, do: { keys: Ctrl+I } }
+      - { label: Focus Terminal Input, shortcut: Ctrl+Shift+L, do: { keys: Ctrl+Shift+L } }
+  - title: Edit
+    items:
+      - { label: Undo, shortcut: Ctrl+Z, do: { keys: Ctrl+Z } }
+      - { label: Redo, shortcut: Ctrl+Shift+Z, do: { keys: Ctrl+Shift+Z } }
+      - separator
+      - { label: Copy, shortcut: Ctrl+Shift+C, do: { keys: Ctrl+Shift+C } }
+      - { label: Paste, shortcut: Ctrl+Shift+V, do: { keys: Ctrl+Shift+V } }
+      - separator
+      - { label: Find…, shortcut: Ctrl+Shift+F, do: { keys: Ctrl+Shift+F } }
+      - { label: Find Next, shortcut: F3, do: { keys: F3 } }
+      - { label: Find Previous, shortcut: Shift+F3, do: { keys: Shift+F3 } }
+  - title: Blocks
+    items:
+      - { label: Select All Blocks, shortcut: Ctrl+Shift+A, do: { keys: Ctrl+Shift+A } }
+      - { label: Select Previous Block, shortcut: Ctrl+Up, do: { keys: Ctrl+Up } }
+      - { label: Select Next Block, shortcut: Ctrl+Down, do: { keys: Ctrl+Down } }
+      - separator
+      - { label: Copy Command, shortcut: Ctrl+Shift+C, do: { keys: Ctrl+Shift+C } }
+      - { label: Copy Command Output, shortcut: Ctrl+Shift+Alt+C, do: { keys: Ctrl+Shift+Alt+C } }
+      - { label: Reinput Selected Commands, shortcut: Ctrl+Shift+I, do: { keys: Ctrl+Shift+I } }
+      - { label: Bookmark Selected Block, shortcut: Ctrl+Shift+B, do: { keys: Ctrl+Shift+B } }
+      - { label: Share Selected Block, shortcut: Ctrl+Shift+S, do: { keys: Ctrl+Shift+S } }
+      - separator
+      - { label: Clear Blocks, shortcut: Ctrl+Shift+K, do: { keys: Ctrl+Shift+K } }
+  - title: View
+    items:
+      - { label: Command Palette, shortcut: Ctrl+Shift+P, do: { keys: Ctrl+Shift+P } }
+      - { label: Warp Drive, shortcut: Ctrl+Shift+\, do: { keys: "Ctrl+Shift+backslash" } }
+      - separator
+      - { label: Increase Font Size, shortcut: Ctrl+=, do: { keys: "Ctrl+equal" } }
+      - { label: Decrease Font Size, shortcut: Ctrl+-, do: { keys: "Ctrl+minus" } }
+      - { label: Reset Font Size, shortcut: Ctrl+0, do: { keys: Ctrl+0 } }
+      - separator
+      - { label: Scroll to Top, shortcut: Home, do: { keys: Home } }
+      - { label: Scroll to Bottom, shortcut: End, do: { keys: End } }
+  - title: Window
+    items:
+      - { label: Previous Tab, shortcut: Ctrl+PgUp, do: { keys: "Ctrl+Prior" } }
+      - { label: Next Tab, shortcut: Ctrl+PgDn, do: { keys: "Ctrl+Next" } }
+      - { label: Move Tab Left, shortcut: Ctrl+Shift+Left, do: { keys: Ctrl+Shift+Left } }
+      - { label: Move Tab Right, shortcut: Ctrl+Shift+Right, do: { keys: Ctrl+Shift+Right } }
+      - separator
+      - { label: Previous Pane, shortcut: "Ctrl+Shift+[", do: { keys: "Ctrl+Shift+bracketleft" } }
+      - { label: Next Pane, shortcut: "Ctrl+Shift+]", do: { keys: "Ctrl+Shift+bracketright" } }
+      - { label: Pane Above, shortcut: Ctrl+Alt+Up, do: { keys: Ctrl+Alt+Up } }
+      - { label: Pane Below, shortcut: Ctrl+Alt+Down, do: { keys: Ctrl+Alt+Down } }
+      - { label: Pane Left, shortcut: Ctrl+Alt+Left, do: { keys: Ctrl+Alt+Left } }
+      - { label: Pane Right, shortcut: Ctrl+Alt+Right, do: { keys: Ctrl+Alt+Right } }
+  - title: Settings
+    items:
+      - { label: Settings…, shortcut: "Ctrl+,", do: { keys: "Ctrl+comma" } }
+      - { label: Resource Center, shortcut: "Ctrl+Shift+/", do: { keys: "Ctrl+Shift+slash" } }
