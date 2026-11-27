@@ -31,7 +31,7 @@ start() { u=$1; W=$2; shift 2
   # The whole survey (workers, their rigs, every probed app's scope) in one
   # slice: 8 GB in all, whatever any one app does (Ben, 2026-11-26: 11
   # workers once held 40 GB).
-  systemctl --user set-property --runtime menusurvey.slice MemoryHigh=6G MemoryMax=8G CPUWeight=idle IOWeight=1 2>/dev/null || true; }
+  systemctl --user set-property --runtime menusurvey.slice MemoryHigh=6G MemoryMax=8G TasksMax=2048 CPUWeight=idle IOWeight=1 2>/dev/null || true; }
 # Six workers (each skips what any worker measured already).
 start w0 "" --sources nixpkgs
 start w2 2 --sources flathub,nixpkgs-uncached,nixpkgs-unfree --stride 2 --offset 0

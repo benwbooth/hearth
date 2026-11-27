@@ -1626,7 +1626,7 @@ def app_rows():
 
 
 SLICE = "menusurvey.slice"
-SLICE_LIMITS = ["MemoryHigh=6G", "MemoryMax=8G", "CPUWeight=idle", "IOWeight=1"]
+SLICE_LIMITS = ["MemoryHigh=6G", "MemoryMax=8G", "TasksMax=2048", "CPUWeight=idle", "IOWeight=1"]
 
 
 def ensure_slice():
