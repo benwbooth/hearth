@@ -1818,13 +1818,17 @@ class ScreenReader:
 # launcher starts each app with its control port on (127.0.0.1 only) and
 # records port and token in $XDG_RUNTIME_DIR/hearth/craft/<pid>.json (0600,
 # in a 0700 folder). Exposure: on 127.0.0.1 any local process of any user
-# can connect; five of these servers (designcraft, effectcraft, lightcraft,
-# soundcraft, vectorcraft) have no token, so such a process could run
+# can connect; seven of these servers (deckcraft, designcraft, effectcraft,
+# figcraft, lightcraft, soundcraft, vectorcraft) have no token, so such a process could run
 # their menu commands. They reject HTTP, so web pages can't. Ben's choice
 # (2026-11-26); a Unix socket in the runtime folder (preloaded bind shim)
 # would close it.
 CRAFT_DIR = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "hearth", "craft")
 CRAFT_TIMEOUT = 4.0  # (File › Open in cadcraft/gridcraft holds their UI thread: don't wait)
+
+
+def craft_info_ok(info):
+    return info.get("app") in CRAFT_APPS and (int(info.get("port", 0) or 0) > 0 or bool(info.get("control_file")))
 
 
 def craft_control_for_pid(pid):
@@ -1834,7 +1838,8 @@ def craft_control_for_pid(pid):
     try:
         with open(os.path.join(CRAFT_DIR, f"{int(pid)}.json")) as f:
             info = json.load(f)
-        if info.get("app") in CRAFT_APPS and int(info.get("port", 0)) > 0:
+        if craft_info_ok(info):
+            info["pid"] = int(pid)
             return info
     except (OSError, ValueError):
         pass
@@ -1853,7 +1858,29 @@ class CraftConn:
     thread (the helper's loop never waits on an app)."""
 
     def __init__(self, info):
-        self.app, self.port, self.token = info["app"], int(info["port"]), info.get("token", "")
+        self.app, self.port, self.token = info["app"], int(info.get("port") or 0), info.get("token", "")
+        if info.get("control_file"):
+            # pdfcraft (--control FILE): it writes its own port and token there.
+            with open(info["control_file"]) as f:
+                c = json.load(f)
+            self.port, self.token = int(c["port"]), c["token"]
+        if self.app == "wordcraft" and not self.token:
+            # wordcraft writes its key to <settings>/control-key.local-<port>
+            # (0600), its settings folder by the app's own environment.
+            env = {}
+            try:
+                with open(f"/proc/{int(info.get('pid', 0))}/environ", "rb") as f:
+                    env = dict(x.split(b"=", 1) for x in f.read().split(b"\0") if b"=" in x)
+            except (OSError, ValueError):
+                pass
+            cfg = (env.get(b"XDG_CONFIG_HOME", b"").decode() or
+                   (env.get(b"HOME", b"").decode() + "/.config" if env.get(b"HOME") else "") or
+                   os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"))
+            try:
+                with open(os.path.join(cfg, "wordcraft", f"control-key.local-{self.port}")) as f:
+                    self.token = f.read().strip()
+            except OSError:
+                pass
         if self.app == "cadcraft" and not self.token:
             # cadcraft makes its own token per launch, in a 0600 file.
             try:
@@ -1869,6 +1896,8 @@ class CraftConn:
             f = sock.makefile("rwb")
 
             def send(obj):
+                if self.app == "pdfcraft":
+                    obj = dict(obj, jsonrpc="2.0")
                 f.write((json.dumps(obj) + "\n").encode())
                 f.flush()
                 line = f.readline()
@@ -1876,15 +1905,17 @@ class CraftConn:
                     raise OSError(f"{self.app}: connection closed")
                 return json.loads(line)
 
-            if style == "handshake":
-                r = send({"id": 1, "method": "auth", "params": {"token": self.token}})
-                if not r.get("ok"):
+            if style in ("handshake", "key_handshake"):
+                field = "key" if style == "key_handshake" else "token"
+                r = send({"id": 1, "method": "auth", "params": {field: self.token}})
+                if r.get("ok") is False or "error" in r:
                     raise OSError(f"{self.app}: {r.get('error')}")
             req = {"id": 2, "method": method, "params": params or {}}
             if style == "per_request":
                 req["token"] = self.token
             r = send(req)
-            if not r.get("ok"):
+            # ({"ok": …} replies, or JSON-RPC's result / error: pdfcraft.)
+            if r.get("ok") is False or "error" in r:
                 raise OSError(f"{self.app} {method}: {r.get('error')}")
             return r.get("result")
 
@@ -2076,7 +2107,135 @@ def _craft_gridcraft(c):
     return [{"label": m["title"], "children": conv(m["items"])} for m in data["menus"]]
 
 
+# Apps with no macOS menu: their ribbon (or in-app menu) from their command
+# catalog, each command's place in it as "Tab › Group" (deckcraft `menu`,
+# wordcraft `location`) or a menu name (figcraft, pdfcraft). Tabs become
+# menus, groups submenus, in the order the catalog lists them.
+CRAFT_MENU_ORDER_FIRST = ["File", "Edit"]
+CRAFT_MENU_ORDER_LAST = ["Window", "Help"]
+
+
+def craft_required_params(desc):
+    """Whether a catalog command's params description ("{theme?: name,
+    size?: [w,h]}", '{"text": string, "raw"?: bool}') names a required
+    one: such a command can't run from a menu click (deckcraft and
+    wordcraft run commands as scripts do, with no dialog asking)."""
+    if not desc or not isinstance(desc, str):
+        return False
+    start = desc.find("{")
+    if start < 0:
+        return False
+    depth, part, parts = 0, "", []
+    for ch in desc[start + 1:]:
+        if ch in "{[(":
+            depth += 1
+        elif ch in "}])":
+            if depth == 0:
+                break
+            depth -= 1
+        if ch == "," and depth == 0:
+            parts.append(part)
+            part = ""
+        else:
+            part += ch
+    parts.append(part)
+    for p in parts:
+        m = re.match(r'\s*"?([A-Za-z_][\w.]*)"?\s*(\?)?\s*:', p)
+        if m and not m.group(2):
+            return True
+    return False
+
+
+def _craft_from_catalog(rows, path_of, run_of, enabled_key="enabled", tabs=None):
+    menus, index, order = [], {}, []
+    for r in rows:
+        path = path_of(r)
+        if not path:
+            continue
+        run = run_of(r)
+        if run is None:
+            continue
+        parent, sofar = None, ()
+        for t in path:
+            sofar += (t,)
+            node = index.get(sofar)
+            if node is None:
+                node = {"label": t, "children": []}
+                index[sofar] = node
+                if parent is None:
+                    menus.append(node)
+                else:
+                    parent["children"].append(node)
+            parent = node
+        parent["children"].append({
+            "label": r.get("label") or r.get("id"), "shortcut": craft_shortcut(r.get("shortcut")),
+            "enabled": bool(r.get(enabled_key, True)), "checked": None, "run": run})
+
+    def rank(m):
+        t = m["label"]
+        if t in CRAFT_MENU_ORDER_FIRST:
+            return (0, CRAFT_MENU_ORDER_FIRST.index(t))
+        if t in CRAFT_MENU_ORDER_LAST:
+            return (2, CRAFT_MENU_ORDER_LAST.index(t))
+        return (1, 0)
+    menus = sorted(menus, key=rank)  # (stable: ribbon order in between)
+    if tabs:
+        # A ribbon has a tab for every selection (Picture Format, Table
+        # Design...): its main tabs are the menus, in ribbon order, and the
+        # rest go under More, before Window and Help.
+        by = {m["label"]: m for m in menus}
+        main = [by[t] for t in tabs if t in by]
+        tail = [m for m in menus if m["label"] in CRAFT_MENU_ORDER_LAST and m["label"] not in tabs]
+        more = [m for m in menus if m["label"] not in tabs and m not in tail]
+        menus = main + ([{"label": "More", "children": more}] if more else []) + tail
+    return menus
+
+
+def _craft_split(p, sep="›"):
+    """A menu path as a list: "Home › Font" (sep "›"), "Text/Alignment"
+    (sep "/") or a list."""
+    if not isinstance(p, str):
+        return list(p or [])
+    return [x.strip() for x in p.split(sep) if x.strip()]
+
+
+def _craft_deckcraft(c):
+    rows = c.call("engine.commands")
+    return _craft_from_catalog(
+        rows, lambda r: _craft_split(r.get("menu"), "›"),
+        lambda r: None if craft_required_params(r.get("params")) else ("engine.execute", {"command": r["id"]}),
+        tabs=["File", "Edit", "Home", "Insert", "Draw", "Design", "Transitions", "Animations",
+              "Slide Show", "Review", "View", "Arrange"])
+
+
+def _craft_wordcraft(c):
+    rows = c.call("engine.commands")
+    return _craft_from_catalog(
+        rows, lambda r: _craft_split(r.get("location"), "›"),
+        lambda r: None if craft_required_params(r.get("params")) else ("engine.execute", {"command": r["id"]}),
+        tabs=["File", "Editing", "Home", "Insert", "Draw", "Design", "Layout", "References", "Mailings",
+              "Review", "View", "Developer"])
+
+
+def _craft_figcraft(c):
+    rows = c.call("engine.commands")
+    # (ui.menu.invoke runs an item as its menu does, dialogs included.)
+    return _craft_from_catalog(rows, lambda r: _craft_split(r.get("menu"), "/"),
+                               lambda r: ("ui.menu.invoke", {"id": r["id"]}))
+
+
+def _craft_pdfcraft(c):
+    rows = c.call("ui.commands")
+    rows = rows.get("commands", rows) if isinstance(rows, dict) else rows
+    return _craft_from_catalog(rows, lambda r: _craft_split(r.get("menu"), "/"),
+                               lambda r: ("ui.command", {"id": r["id"]}))
+
+
 CRAFT_APPS = {
+    "deckcraft": {"auth": "none", "read": _craft_deckcraft},
+    "figcraft": {"auth": "none", "read": _craft_figcraft},
+    "pdfcraft": {"auth": "handshake", "read": _craft_pdfcraft},
+    "wordcraft": {"auth": "key_handshake", "read": _craft_wordcraft},
     "cadcraft": {"auth": "per_request", "read": _craft_nested},
     "designcraft": {"auth": "none", "read": _craft_designcraft},
     "effectcraft": {"auth": "none", "read": _craft_idparams},

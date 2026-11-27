@@ -217,8 +217,15 @@ any new app:
      `dialog:name`, accelerator); its items run through the control
      server (`engine.execute`, `ui.dialog`) or as keys where the Mac menu
      sends keys (Cut/Copy/Paste/Undo/Redo).
-   No Mac menu: deckcraft, figcraft, pdfcraft, wordcraft (they stay on the
-   AT-SPI route). craft-anything has one (crates/ui-egui/src/menu.rs) but
+   No Mac menu (deckcraft, figcraft, pdfcraft, wordcraft): the same route
+   with the app's ribbon or in-app menu instead, from the command catalog
+   its control server lists (`engine.commands` / `ui.commands`), where each
+   command says where it lives ("Home › Font" in deckcraft `menu` and
+   wordcraft `location`; "Text/Alignment" in figcraft and pdfcraft). Main
+   ribbon tabs are menus, groups submenus, selection-only tabs go under
+   More. Where the server runs commands as scripts do (deckcraft,
+   wordcraft: no dialog asks for input), commands with a required
+   parameter are left out. craft-anything has one (crates/ui-egui/src/menu.rs) but
    no control server and few of its accelerators work off the Mac: a
    module (menus/ai.storyteller.craft-anything.yaml) has what runs there,
    the command palette, zoom and the Help links.
