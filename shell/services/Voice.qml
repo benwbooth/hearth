@@ -93,7 +93,7 @@ Singleton {
         // unloads after the usual idle minutes if nothing follows).
         Ai.warm(askContext());
         chime("start");
-        send({ cmd: "listen" });
+        send({ cmd: "listen", follow: followingUp });
     }
     function stop() { send({ cmd: "stop" }); }
     function toggle() {

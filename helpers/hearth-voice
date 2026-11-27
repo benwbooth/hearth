@@ -11,7 +11,7 @@ is recorded while idle, and there is no wake word.
 Replies: Piper (local neural text to speech) when Settings > Voice >
 Speak replies is on and a voice is downloaded.
 
-  stdin  {"cmd": "listen"} {"cmd": "stop"} {"cmd": "cancel"}
+  stdin  {"cmd": "listen", "follow": bool} {"cmd": "stop"} {"cmd": "cancel"}
          {"cmd": "speak", "text": "..."} {"cmd": "hush"}   (Kokoro or Piper: settings ttsEngine)
          {"cmd": "voices"} {"cmd": "download", "voice": "en_US-ryan-high"}
   stdout {"type": "state", "state": "connecting|listening|transcribing|idle"}
@@ -88,18 +88,26 @@ RATE = 16000
 CHUNK = 1600  # 0.1 s
 
 
+def spoken(text):
+    """Text without Whisper's sound labels ("(chimes)", "[MUSIC PLAYING]",
+    "*beep*"): the start chime alone mustn't count as the user talking."""
+    return " ".join(re.sub(r"\([^)]*\)|\[[^\]]*\]|\*[^*]*\*", " ", text or "").split())
+
+
 class Listener:
     def __init__(self):
         self.thread = None
         self.stop_flag = threading.Event()
         self.cancel_flag = threading.Event()
+        self.follow = False
 
     def busy(self):
         return self.thread is not None and self.thread.is_alive()
 
-    def start(self):
+    def start(self, follow=False):
         if self.busy():
             return
+        self.follow = follow
         self.stop_flag.clear()
         self.cancel_flag.clear()
         self.thread = threading.Thread(target=self.run, daemon=True)
@@ -189,6 +197,9 @@ class Listener:
         spoke_at = None
         last_loud = None
         silence = cfg["silenceMs"] / 1000.0
+        # Listening again for a reply after an answer: give the user time
+        # to think before they start.
+        wait_for_speech = 10 if self.follow else 6
         try:
             while not self.stop_flag.is_set() and not self.cancel_flag.is_set():
                 buf = proc.stdout.read(CHUNK * 4)
@@ -212,9 +223,16 @@ class Listener:
                     ws.send(buf)
                 except Exception:  # noqa: BLE001
                     break
-                if spoke_at and last_loud and now - last_loud >= silence and now - spoke_at > 0.4:
+                # Quiet after speech ends listening, but only once Whisper
+                # has words: the start chime or the end of a spoken answer
+                # is loud too, and ending on the quiet after it closed a
+                # follow-up after 2 s, before the user had said anything
+                # (empty, so the conversation ended).
+                if spoke_at and last_loud and now - last_loud >= silence and now - spoke_at > 0.4 \
+                        and spoken(partial["text"]):
                     break
-                if spoke_at is None and now - started > 6:
+                if not spoken(partial["text"]) and now - started > wait_for_speech \
+                        and (last_loud is None or now - last_loud >= silence):
                     break
                 if now - started > cfg["maxSeconds"]:
                     break
@@ -245,7 +263,7 @@ class Listener:
             ws.close()
         except Exception:  # noqa: BLE001
             pass
-        text = partial["text"].strip()
+        text = partial["text"].strip() if spoken(partial["text"]) else ""
         if not text:
             emit({"type": "final", "text": "", "heard": spoke_at is not None})
         else:
@@ -473,7 +491,7 @@ def main():
         if cmd == "listen":
             speaker.hush()
             prepare_speech()
-            listener.start()
+            listener.start(bool(req.get("follow")))
         elif cmd == "stop":
             listener.stop_flag.set()
         elif cmd == "cancel":
