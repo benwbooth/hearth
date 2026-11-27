@@ -574,6 +574,10 @@ def desktop_exec(out):
             argv = shlex.split(ex)
         except ValueError:
             argv = ex.split()
+        # Field codes as a launcher fills them with no files: %c is the
+        # Name (khangman's -qwindowtitle "%c" lost its value and quit),
+        # %k the entry's path, the rest go.
+        argv = [{"%c": e.get("Name", ""), "%k": fn}.get(a, a) for a in argv]
         argv = [a for a in argv if not (len(a) == 2 and a.startswith("%"))]
         if not argv:
             continue
@@ -591,6 +595,19 @@ def desktop_exec(out):
         argv = argv[1:]
         while argv and "=" in argv[0]:
             argv = argv[1:]
+    # "gapplication launch ID" (DBus-activatable GNOME apps): the app's own
+    # binary, no arguments (it took "launch ID" as files to open and quit).
+    if argv[:2] == ["gapplication", "launch"]:
+        hits = sorted(glob.glob(os.path.join(out, "bin", "*")))
+        names = [pname] + ([argv[2].rsplit(".", 1)[-1].lower()] if len(argv) > 2 else [])
+        named = [h for h in hits if os.path.basename(h).lower() in names]
+        return (named or hits)[:1], did
+    # A shell line (Mixxx: sh -c "pasuspender -- mixxx || mixxx") stays a
+    # shell line; the app's own name inside it resolves on PATH below.
+    if argv and argv[0] in ("sh", "bash") and "-c" in argv[1:2]:
+        bindir = os.path.join(out, "bin")
+        argv = ["/bin/sh", "-c", f'PATH="{bindir}:$PATH"; ' + argv[2]] if len(argv) > 2 else argv
+        return argv, did
     if argv and not argv[0].startswith("/"):
         for o in [out] + sorted(glob.glob(out.rsplit("-", 1)[0] + "*")):
             p = os.path.join(o, "bin", argv[0])
@@ -758,6 +775,9 @@ def attempt(attr, argv, variant, extra_env, extra_args, wait_win=50, wait_menu=1
     # output once filled it (2026-11-25/26).
     os.makedirs(DISKDIR, exist_ok=True)
     log = open(os.path.join(DISKDIR, "app.log"), "w")
+    if os.environ.get("MENU_PROBE_DEBUG"):
+        log.write("probe argv: " + repr(envargs + list(argv) + list(extra_args)) + "\n")
+        log.flush()
     SCOPE["n"] += 1
     SCOPE["unit"] = f"menuprobe-{os.getpid()}-{SCOPE['n']}.scope"
     proc = subprocess.Popen(["systemd-run", "--user", "--scope", "--quiet", "--collect", "--unit", SCOPE["unit"],

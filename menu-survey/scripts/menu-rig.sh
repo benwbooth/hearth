@@ -154,6 +154,17 @@ WP
   else
     pwenv=(PIPEWIRE_REMOTE=rig-no-pipewire PULSE_SERVER=unix:/nonexistent)
   fi
+  # No first-run welcome tour: it's a window of its own over every probed
+  # app (the harness then saw no app window: 2026-11-27).
+  python3 -I - "$XDG_CONFIG_HOME/hearth/settings.json" <<'PY' || true
+import json, os, sys
+p = sys.argv[1]
+os.makedirs(os.path.dirname(p), exist_ok=True)
+try: s = json.load(open(p))
+except Exception: s = {}
+s.update(welcomeShown=True, welcomeShownArbor=True)
+json.dump(s, open(p, "w"), indent=2)
+PY
   DISPLAY=$(grep ^DISPLAY= "$R/arbor.env" | cut -d= -f2-) \
     QT_PLUGIN_PATH= QML2_IMPORT_PATH= \
     HEARTH_SESSION_DRYRUN=1 HEARTH_POLKIT=0 daemon "$R/hearth.pid" "$R/hearth.log" env "${pwenv[@]}" "$H/libexec/hearth-shell"
