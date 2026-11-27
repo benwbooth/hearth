@@ -2314,11 +2314,14 @@ CLAUDE_COMMANDS = ["playerctl", "wpctl", "qalc", "xdg-open", "gtk-launch", "hear
                    "busctl --user call org.freedesktop.FileManager1"]
 CLAUDE_NOTE = (
     "Tools: the computer-use tools (list_apps, get_app_state, click, type_text, press_key, ...) read and work "
-    "the user's apps. With Bash you can run: playerctl (music and videos over MPRIS: playerctl -p spotify "
-    "play, next, metadata; prefer it over clicking in a music app), wpctl (volume: wpctl set-volume "
+    "the user's apps; get_app_state lists a window's controls, and a screenshot shows what it doesn't. "
+    "With Bash you can run: playerctl (music and videos over MPRIS: playerctl -p spotify play, pause, "
+    "next, metadata; use it for plain play/pause/skip), xdg-open 'spotify:search:<words>' (Spotify's "
+    "search; then click a result), wpctl (volume: wpctl set-volume "
     "@DEFAULT_AUDIO_SINK@ 50%%), gtk-launch <desktop id> or xdg-open to open apps, files and URLs, "
     "hearth-search --once '{\"q\": \"words\"}' to find files, qalc to calculate. "
-    "Be quick: the user is waiting for a spoken answer, so take the fewest steps. ")
+    "The user is waiting for a spoken answer, so don't waste steps, but when they ask you to find, browse, "
+    "scroll or choose something in an app, do it in the app: scroll and click as a person would. ")
 
 
 class Assistant:

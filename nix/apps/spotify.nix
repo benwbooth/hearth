@@ -15,6 +15,11 @@ self:
 # Wayland it exports none, and hearth reads the "⋯" menu in its window over
 # AT-SPI instead (File, Edit, View, Playback, Develop, Help, with their
 # shortcuts), which CEF only builds with electron.nix's global-menu flags.
+#
+# Its page fully (=complete, after the global menu's =basic: the last one
+# counts): with basic, AT-SPI shows the window as one empty "document web",
+# so the assistant's computer use saw no tracks, search box or buttons and
+# could only click blind on screenshots.
 { config, lib, pkgs, ... }:
 let
   cfg = config.hearth.apps.spotify;
@@ -28,7 +33,8 @@ let
         --unset DISPLAY \
         --add-flags "--enable-features=UseOzonePlatform" \
         --add-flags "--ozone-platform=wayland" \
-        ${lib.concatStringsSep " " e.globalMenuArgs}
+        ${lib.concatStringsSep " " e.globalMenuArgs} \
+        --add-flags "--force-renderer-accessibility=complete"
     '';
   };
 in
