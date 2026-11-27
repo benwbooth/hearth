@@ -84,8 +84,9 @@ Singleton {
     property string fpState: "off"
     // The reader listens from locking, and again whenever there's input on
     // the lock screen, until a minute without any; then it sleeps (fprintd
-    // keeps the sensor powered and polling while a verify runs). Input or
-    // the lock screen's fingerprint button wakes it.
+    // keeps the sensor powered and polling while a verify runs). Any input
+    // (a mouse move, a key, a click) wakes it: no button, since reaching
+    // one would wake it anyway.
     property bool fpAsleep: false
     property string fpMessage: ""
     property int fpRestarts: 0
@@ -355,7 +356,7 @@ Singleton {
             root.fpMessage = "";
         }
     }
-    // The fingerprint button on the lock screen: listen again for a minute.
+    // Listen again for a minute (input on the lock screen, activity()).
     function wakeFingerprint() {
         if (!root.fpWanted) return;
         root.fpAsleep = false;
