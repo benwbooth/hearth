@@ -340,21 +340,29 @@ def changed_box(a, b, pad=2, step=24):
     return (max(0, x0 - pad), max(0, y0 - pad), min(w, x1 + pad), min(h, y1 + pad))
 
 
-STD_TITLES = {"file", "edit", "view", "help", "tools", "go", "window", "options", "settings", "insert",
-              "format", "main", "game", "emulator", "image", "video", "sound", "audio"}
+STD_TITLES = {"file", "edit", "view", "help", "tools", "go", "window", "windows", "options", "settings",
+              "insert", "format", "bookmarks", "history", "search", "project", "preferences"}
 
 
 def menu_bar(rows, k=1.0, top=70):
     """A menu bar drawn in the window (SDL, FLTK: no accessibility): the
-    first row near the top with three or more words, one a standard title.
-    [(title, (x, y))] in the capture's pixels."""
+    first row near the top of three to fourteen capitalised words (stray
+    one-letter icon reads left out), no sentence punctuation, one of them a
+    standard title (File, Edit, View, Help...). Not a line of text that
+    happens to hold "File" ("Drag Drop File onto desktop icon"), nor a
+    header bar's "View s X". [(title, (x, y))] in the capture's pixels."""
     for r in sorted(rows, key=lambda r: r["y0"]):
         if r["y0"] > top * k:
             break
-        words = [d for d in r["words"] if any(ch.isalpha() for ch in d["t"])]
-        if len(words) < 3:
+        words = [d for d in r["words"] if len(d["t"].strip("&_")) >= 2]
+        if not 3 <= len(words) <= 14:
             continue
-        if not {d["t"].strip(".:").lower() for d in words} & STD_TITLES:
+        texts = [d["t"].strip("&_") for d in words]
+        if any(not (t[0].isupper() or t[0].isdigit()) for t in texts):
+            continue
+        if any(t[-1] in ".:?!," for t in texts):
+            continue
+        if not {t.lower() for t in texts} & STD_TITLES:
             continue
         return [(d["t"], ((d["x0"] + d["x1"]) / 2, (d["y0"] + d["y1"]) / 2)) for d in words]
     return []
