@@ -495,7 +495,8 @@ class AtspiMenu:
                 mb = self.search(A, f, lambda o, r: r == A.Role.MENU_BAR, web=False)
                 kind = None
                 if mb is not None and self.has_titles(mb):
-                    kind = "kept" if mb.get_child_at_index(0).get_role() == A.Role.MENU else "live"
+                    kind = "kept" if (mb.get_child_at_index(0).get_role() == A.Role.MENU
+                                      or self.holds_closed_popup(mb.get_child_at_index(0))) else "live"
                 else:
                     mb = self.search(A, f, lambda o, r: r == A.Role.MENU_BAR and self.has_titles(o),
                                      web=True)
@@ -751,6 +752,21 @@ class AtspiMenu:
         return max(found, key=lambda t: t[0])[1] if found else None
 
     @staticmethod
+    def holds_closed_popup(o):
+        """A Qt Widgets menu bar title: a menu item whose popup menu keeps
+        its items while closed (DoomRunner's Menu), read as it is."""
+        try:
+            if o.get_role() != Atspi.Role.MENU_ITEM:
+                return False
+            for i in range(min(o.get_child_count(), 3)):
+                c = o.get_child_at_index(i)
+                if c is not None and c.get_role() in (Atspi.Role.POPUP_MENU, Atspi.Role.MENU) and c.get_child_count() > 0:
+                    return True
+        except Exception:
+            pass
+        return False
+
+    @staticmethod
     def holds_items(o):
         """A GTK 3 menu button keeps its menu's items as its own children,
         built while closed (Remmina's "Actions")."""
@@ -921,9 +937,11 @@ class AtspiMenu:
                 continue
         return texts
 
-    def convert(self, o, path, depth=0, deep=False):
+    def convert(self, o, path, depth=0, deep=False, closed=False):
         """An accessible menu item as an item dict; `deep`: its submenu's
-        items too (kept menus, whose items exist while closed)."""
+        items too (kept menus, whose items exist while closed); `closed`:
+        it sits in a Qt popup that's closed (neither showing nor visible,
+        still its menu's item)."""
         A = Atspi
         try:
             role = o.get_role()
@@ -933,7 +951,7 @@ class AtspiMenu:
             return None
         if role == A.Role.SEPARATOR:
             return item(self.nid(path), type="separator")
-        if not st.contains(A.StateType.SHOWING) and not st.contains(A.StateType.VISIBLE):
+        if not closed and not st.contains(A.StateType.SHOWING) and not st.contains(A.StateType.VISIBLE):
             return None
         label, shortcut = split_shortcut(name)
         if not label:
@@ -954,12 +972,22 @@ class AtspiMenu:
                 shortcut = gtk_accel_text(parts[2])
         except Exception:
             pass
-        sub = role == A.Role.MENU or st.contains(A.StateType.HAS_POPUP)
+        qt_popup = deep and self.holds_closed_popup(o)
+        sub = role == A.Role.MENU or st.contains(A.StateType.HAS_POPUP) or qt_popup
         kids = []
         if sub and deep and depth < 5:
             for i in range(min(o.get_child_count(), 300)):
                 c = o.get_child_at_index(i)
-                k = c and self.convert(c, list(path) + [i], depth + 1, deep)
+                if qt_popup and c is not None and c.get_role() in (A.Role.POPUP_MENU, A.Role.MENU):
+                    # Qt Widgets: the items are the closed popup's children
+                    # (path through the popup, so a click finds them).
+                    for j in range(min(c.get_child_count(), 300)):
+                        cc = c.get_child_at_index(j)
+                        k = cc and self.convert(cc, list(path) + [i, j], depth + 1, deep, closed=True)
+                        if k:
+                            kids.append(k)
+                    continue
+                k = c and self.convert(c, list(path) + [i], depth + 1, deep, closed=closed)
                 if k:
                     kids.append(k)
         toggle = ("checkmark" if role == A.Role.CHECK_MENU_ITEM
