@@ -1881,7 +1881,7 @@ class McpTools:
             self.proc.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n")
             self.proc.stdin.flush()
         tools = self._rpc("tools/list", timeout=20).get("tools") or []
-        self.defs = [t for t in tools if t["name"] not in self.HIDDEN]
+        self.defs = [hide_fixed_params(t) for t in tools if t["name"] not in self.HIDDEN]
         self.readonly = {t["name"] for t in self.defs if self.is_readonly(t)}
         return True
 
@@ -1914,7 +1914,13 @@ class McpTools:
         self.start()
         if isinstance(self, ComputerUse) and name == "get_app_state":
             args = app_state_args(args)
-        r = self._rpc("tools/call", {"name": name, "arguments": args or {}}, timeout=90)
+        r = None
+        if isinstance(self, ComputerUse) and click_as_action(name, args):
+            r = self._rpc("tools/call", {"name": "perform_action", "arguments": click_as_action(name, args)}, timeout=90)
+            if action_failed(r):
+                r = None
+        if r is None:
+            r = self._rpc("tools/call", {"name": name, "arguments": args or {}}, timeout=90)
         texts, images = [], []
         for c in r.get("content") or []:
             if c.get("type") == "text":
@@ -2049,6 +2055,7 @@ def app_state_outline(data, limit=4000):
     prompt alone. Element indexes stay the server's, so clicks still match."""
     nodes = data["accessibility_tree"]
     lines = []
+    said = set()   # names already listed: a browser engine repeats each link's words as text under it
     for n in nodes:
         role = n.get("role") or "?"
         name = " ".join(str(n.get("name") or "").split())
@@ -2069,6 +2076,10 @@ def app_state_outline(data, limit=4000):
             continue   # not on screen (a browser engine's hidden tabs and address bar, scrolled-off rows)
         if not (name or desc or content or value or acts or editable or role in ("frame", "window", "dialog")):
             continue   # layout fillers, empty list items
+        if role in ("static", "label", "text", "section", "paragraph", "generic") and not editable \
+                and (name or content) in said:
+            continue
+        said.update(x for x in (name, content) if x)
         parts = ["[%s] %s" % (n.get("index"), role)]
         if name:
             parts.append('"%s"' % brief(name, 80))
@@ -3195,10 +3206,47 @@ def app_state_args(args):
     asked; Spotify's tracks are 15-27 levels down) and no screenshot (it
     took one on every call, and the result drops it anyway)."""
     a = dict(args or {})
-    a.setdefault("max_depth", 40)
-    a.setdefault("max_nodes", 1500)
-    a.setdefault("include_screenshot", False)
+    # Fixed, not the model's choice: Claude asked for 120-900 nodes to be
+    # quick, and element indexes only hold for the latest read, so a click
+    # on [621] after a 120-node read missed (65 s of retries in Spotify).
+    a.update(max_depth=40, max_nodes=1500, include_screenshot=False)
     return a
+
+
+def click_as_action(name, args):
+    """A click on an element by its index, as that element's own action.
+    The server clicks through ydotool at the element's AT-SPI position,
+    and on Wayland a browser engine reports positions inside its window,
+    so Spotify's links and buttons were clicked somewhere else; the
+    action presses them where they are. None when it's a real click
+    (coordinates, a right or double click)."""
+    a = args or {}
+    if name != "click" or a.get("element_index") is None or any(
+            a.get(k) not in (None, "", 1, "left") for k in ("x", "y", "button", "click_count", "coordinate")):
+        return None
+    return {"element_index": a["element_index"]}
+
+
+def action_failed(result):
+    """Whether a perform_action result says it didn't press anything."""
+    if not isinstance(result, dict) or result.get("isError"):
+        return True
+    text = " ".join(c.get("text", "") for c in result.get("content") or [] if c.get("type") == "text")
+    return '"ok":false' in text.replace(" ", "")
+
+
+APP_STATE_FIXED = ("max_depth", "max_nodes", "include_screenshot", "verbose", "format", "quality",
+                   "max_bytes", "max_width", "max_height", "scale")
+
+
+def hide_fixed_params(t):
+    """get_app_state's schema without the knobs app_state_args sets."""
+    if t.get("name") == "get_app_state":
+        t = dict(t)
+        sch = dict(t.get("inputSchema") or {})
+        sch["properties"] = {k: v for k, v in (sch.get("properties") or {}).items() if k not in APP_STATE_FIXED}
+        t["inputSchema"] = sch
+    return t
 
 
 def computer_mcp_proxy():
@@ -3210,6 +3258,13 @@ def computer_mcp_proxy():
     child = subprocess.Popen(COMPUTER.command(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                              stderr=subprocess.DEVNULL, text=True, bufsize=1)
     calls = {}   # request id -> tool name
+    clicks = {}  # request id -> the original click request, sent as perform_action first
+    lock = threading.Lock()
+
+    def send(obj):
+        with lock:
+            child.stdin.write(json.dumps(obj) + "\n")
+            child.stdin.flush()
 
     def down():
         for line in child.stdout:
@@ -3217,9 +3272,13 @@ def computer_mcp_proxy():
                 m = json.loads(line)
             except ValueError:
                 continue
+            orig = clicks.pop(m.get("id"), None)
+            if orig is not None and action_failed(m.get("result") or {"isError": True}):
+                send(orig)   # no action there: the real click after all
+                continue
             r = m.get("result")
             if isinstance(r, dict) and isinstance(r.get("tools"), list):
-                r["tools"] = [t for t in r["tools"] if t.get("name") not in ComputerUse.HIDDEN]
+                r["tools"] = [hide_fixed_params(t) for t in r["tools"] if t.get("name") not in ComputerUse.HIDDEN]
             name = calls.pop(m.get("id"), None)
             if name and isinstance(r, dict):
                 texts = [c.get("text", "") for c in r.get("content") or [] if c.get("type") == "text"]
@@ -3247,10 +3306,15 @@ def computer_mcp_proxy():
                 if params.get("name") == "get_app_state":
                     params["arguments"] = app_state_args(params.get("arguments"))
                     line = json.dumps(m) + "\n"
+                act = click_as_action(params.get("name"), params.get("arguments"))
+                if act:
+                    clicks[m.get("id")] = json.loads(line)
+                    line = json.dumps(dict(m, params=dict(params, name="perform_action", arguments=act))) + "\n"
         except ValueError:
             pass
-        child.stdin.write(line)
-        child.stdin.flush()
+        with lock:
+            child.stdin.write(line)
+            child.stdin.flush()
     child.stdin.close()
     child.wait(timeout=5)
 
