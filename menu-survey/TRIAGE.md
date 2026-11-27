@@ -102,6 +102,12 @@ pointer after 400 ms, like a real click (verified: Catfish's ☰ opens), and
 the reader clicks for real when GTK 3's accessible press opens nothing, then
 reads the popover's list-box rows (hearth b54f20d: Catfish's six entries).
 
+## Impossible for now (retry later)
+
+Ben, 2026-11-26: "impossible" doesn't mean giving up: it parks an app until
+a new route exists, and the list is revisited then (DOSBox-X moved from here
+to done with the screen-read menu bar, 6b7458a).
+
 ## Proposed impossible (for Ben's triage, 2026-11-25)
 
 Groups no general fix reaches, with why. Not decided: each needs your call.
