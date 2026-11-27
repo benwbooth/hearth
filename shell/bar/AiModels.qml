@@ -45,6 +45,16 @@ ColumnLayout {
             if (tab === "more" || counts[c.id]) out.push({ id: c.id, label: c.label + (tab === "more" ? "" : " " + counts[c.id]) });
         return out;
     }
+    // "5m ago", "3h ago", "yesterday", "Nov 20": when an installed model last
+    // did work (the list is sorted by it, most recent first).
+    function usedAgo(t) {
+        const s = Math.max(0, Date.now() / 1000 - t);
+        if (s < 60) return "just now";
+        if (s < 3600) return Math.floor(s / 60) + "m ago";
+        if (s < 86400) return Math.floor(s / 3600) + "h ago";
+        if (s < 172800) return "yesterday";
+        return new Date(t * 1000).toLocaleDateString(Qt.locale(), "MMM d");
+    }
     readonly property var shown: category ? list.filter(m => m.category === category) : list
     onTabChanged: { confirmKey = ""; if (tab === "more") Ai.browse(category, search.text); }
     onCategoryChanged: if (tab === "more") Ai.browse(category, search.text)
@@ -213,6 +223,7 @@ ColumnLayout {
                         if (m.sizeText) parts.push(m.sizeText);
                         if (m.quant) parts.push(m.quant);
                         if (m.context) parts.push(root.ctxText(m.context) + " context");
+                        if (m.lastUsed && !m.loaded) parts.push("used " + root.usedAgo(m.lastUsed));
                         return parts.join(" · ");
                     }
                     sub2: {

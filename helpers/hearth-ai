@@ -1383,6 +1383,8 @@ class Arbiter:
                 self.mem.dirty = True
             if e["vram"] > h.get("peakVram", 0):
                 self.mem.note(k, peakVram=e["vram"])
+            if e.get("path") and h.get("path") != e["path"]:
+                self.mem.note(k, path=e["path"])  # ties any runner's use to the installed file
             if not h.get("loadSec"):
                 size = e.get("size") or e["vram"]
                 h["loadSec"] = round(2 + size / hm.load_speed(e.get("path", "")), 1)
@@ -1412,10 +1414,28 @@ class Arbiter:
             held.update(e.get("models") or [])
             if e.get("path"):
                 held.add("file:" + e["path"])
+        by_path = {}
+        for h in self.mem.data["models"].values():
+            if h.get("path"):
+                by_path[h["path"]] = max(by_path.get(h["path"], 0), h.get("lastActive") or 0)
         for it in inv:
             it["loaded"] = it["key"] in held or any(
                 ("%s:%s" % (r["provider"], r["model"]) in held) or
                 (r["provider"].startswith("service:") and r["provider"] in held) for r in it["runners"])
+            # When it last did work, whatever ran it (0 = never seen loaded):
+            # the lists show the models you use first.
+            used = by_path.get(it.get("path") or "", 0)
+            for k in [it["key"]] + [r["provider"] if r["provider"].startswith("service:")
+                                    else "%s:%s" % (r["provider"], r["model"]) for r in it["runners"]]:
+                h = self.mem.data["models"].get(k)
+                if h:
+                    used = max(used, h.get("lastActive") or 0)
+            if it["loaded"]:
+                used = now
+            it["lastUsed"] = int(used)
+        # Most recently used first; never-used ones keep their order
+        # (language models first, then by category and name).
+        inv.sort(key=lambda i: -i.get("lastUsed", 0))
         model_vram = sum(e["vram"] for e in loaded)
         # What no process here accounts for: buffers apps share with the
         # compositor (counted in no one's own memory), the kernel's, and
