@@ -1912,6 +1912,8 @@ class McpTools:
         """-> (text, [(mime, base64)...])"""
         name = self.unprefixed(name)
         self.start()
+        if isinstance(self, ComputerUse) and name == "get_app_state":
+            args = app_state_args(args)
         r = self._rpc("tools/call", {"name": name, "arguments": args or {}}, timeout=90)
         texts, images = [], []
         for c in r.get("content") or []:
@@ -2039,7 +2041,7 @@ QUIET_STATES = {"enabled", "sensitive", "showing", "visible", "focusable", "sele
                 "single line", "multi line", "horizontal", "vertical", "transient", "editable"}
 
 
-def app_state_outline(data):
+def app_state_outline(data, limit=4000):
     """get_app_state as one short line per control the model can use.
     The server's JSON (bounds, object paths, action descriptions, every
     state, a base64 screenshot) came to ~3,000 tokens per call after the
@@ -2063,6 +2065,8 @@ def app_state_outline(data):
             if an and an != "SetFocus" and an not in acts:
                 acts.append(an)
         editable = bool(n.get("supports_editable_text")) or "editable" in states
+        if states and "showing" not in states and role not in ("frame", "window", "dialog", "application"):
+            continue   # not on screen (a browser engine's hidden tabs and address bar, scrolled-off rows)
         if not (name or desc or content or value or acts or editable or role in ("frame", "window", "dialog")):
             continue   # layout fillers, empty list items
         parts = ["[%s] %s" % (n.get("index"), role)]
@@ -2092,13 +2096,13 @@ def app_state_outline(data):
     if not nodes and data.get("message"):
         errs.append(str(data["message"]))
     out = "\n".join([head] + errs + lines)
-    if len(out) > 4000:
-        cut = out[:4000].rsplit("\n", 1)[0]
+    if len(out) > limit:
+        cut = out[:limit].rsplit("\n", 1)[0]
         out = cut + "\n[%d more controls not shown]" % (out[len(cut):].count("\n"))
     return out
 
 
-def compact_result(text, tool=""):
+def compact_result(text, tool="", limit=4000):
     """A JSON tool result without what the model can't use (nulls, empty
     values, AT-SPI object paths): list_apps went from ~2,600 tokens to
     about half, and every token is read at a few hundred a second."""
@@ -2117,7 +2121,7 @@ def compact_result(text, tool=""):
                 apps.append("%s (pid %s)" % (n, a.get("pid")))
         return "Running apps: " + "; ".join(apps)
     if tool == "get_app_state" and isinstance(data, dict) and isinstance(data.get("accessibility_tree"), list):
-        return app_state_outline(data)
+        return app_state_outline(data, limit)
 
     def strip(v):
         if isinstance(v, dict):
@@ -3185,6 +3189,18 @@ def make_room_cli(arg):
     ARB.mem.save(force=True)
 
 
+def app_state_args(args):
+    """get_app_state's arguments with hearth's defaults: deep enough for
+    browser-engine apps (the server reads 12 levels and 120 nodes unless
+    asked; Spotify's tracks are 15-27 levels down) and no screenshot (it
+    took one on every call, and the result drops it anyway)."""
+    a = dict(args or {})
+    a.setdefault("max_depth", 40)
+    a.setdefault("max_nodes", 1500)
+    a.setdefault("include_screenshot", False)
+    return a
+
+
 def computer_mcp_proxy():
     """The computer-use MCP server with hearth's trimming, for Claude as
     the assistant: the same tools minus setup ones (ComputerUse.HIDDEN),
@@ -3209,9 +3225,10 @@ def computer_mcp_proxy():
                 texts = [c.get("text", "") for c in r.get("content") or [] if c.get("type") == "text"]
                 if r.get("structuredContent") and not texts:
                     texts = [json.dumps(r["structuredContent"])]
-                text = compact_result("\n".join(texts).strip(), name) or ("Error." if r.get("isError") else "Done.")
-                if len(text) > 8000:
-                    text = text[:8000] + "\n[cut: %d more characters]" % (len(text) - 8000)
+                text = compact_result("\n".join(texts).strip(), name, 16000) or \
+                    ("Error." if r.get("isError") else "Done.")
+                if len(text) > 16000:
+                    text = text[:16000] + "\n[cut: %d more characters]" % (len(text) - 16000)
                 content = [{"type": "text", "text": text}]
                 if name == "screenshot":
                     content += [c for c in r.get("content") or [] if c.get("type") == "image"][:1]
@@ -3225,7 +3242,11 @@ def computer_mcp_proxy():
         try:
             m = json.loads(line)
             if m.get("method") == "tools/call":
-                calls[m.get("id")] = (m.get("params") or {}).get("name", "")
+                params = m.get("params") or {}
+                calls[m.get("id")] = params.get("name", "")
+                if params.get("name") == "get_app_state":
+                    params["arguments"] = app_state_args(params.get("arguments"))
+                    line = json.dumps(m) + "\n"
         except ValueError:
             pass
         child.stdin.write(line)
