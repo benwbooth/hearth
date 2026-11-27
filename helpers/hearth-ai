@@ -26,6 +26,7 @@ JSON lines on stdin/stdout, so the shell never waits:
   {"cmd": "pull", "provider": "ollama", "model": "..."}   -> {"type": "pull", ...}
   {"cmd": "delete", "provider": "ollama", "model": "..."}
   {"cmd": "server", "provider": "llamacpp", "on": true}   (systemd user unit)
+  {"cmd": "warm", "feature": "assistant", "context": {...}}   load the model, read its prompt (voice: on listen)
   {"cmd": "ask", "id": 3, "feature": "assistant", "text": "...", "context": {...}}
       -> {"type": "tool", "id": 3, "call": 1, "name": "launch_app", "args": {...}}
       -> {"type": "approve", "id": 3, "call": 2, "kind": "command"|"computer", "title": ..., "detail": ...}
@@ -50,6 +51,7 @@ $XDG_RUNTIME_DIR/hearth/ai-api.json while this runs.
 """
 
 import glob
+import hashlib
 import json
 import os
 import queue
@@ -222,9 +224,11 @@ class Ollama:
                     continue
                 progress(ev.get("status", ""), ev.get("completed", 0), ev.get("total", 0), ev.get("error", ""))
 
-    def chat(self, model, messages, tools, keep_minutes, reasoning=None):
+    def chat(self, model, messages, tools, keep_minutes, reasoning=None, max_tokens=None):
         body = {"model": model, "messages": messages, "stream": False, "think": False,
                 "keep_alive": "%dm" % keep_minutes, "options": {"temperature": 0.2}}
+        if max_tokens:
+            body["options"]["num_predict"] = max_tokens
         if tools:
             body["tools"] = tools
         r = http(self.url + "/api/chat", body, timeout=180)
@@ -295,8 +299,10 @@ class LlamaCpp:
     def unload(self, model):
         http(self.url + "/models/unload", {"model": model}, timeout=60)
 
-    def chat(self, model, messages, tools, keep_minutes, reasoning=None):
+    def chat(self, model, messages, tools, keep_minutes, reasoning=None, max_tokens=None):
         body = {"model": model, "messages": messages, "temperature": 0.2, "stream": False}
+        if max_tokens:
+            body["max_tokens"] = max_tokens
         if tools:
             body["tools"] = tools
         if reasoning:
@@ -352,7 +358,7 @@ class AgentCli:
                    ([] if m is not None else ["-m", model]) + [prompt]
         return [self.bin] + ([] if m is not None else ["-m", model]) + ["-p", prompt]
 
-    def chat(self, model, messages, tools, keep_minutes, reasoning=None):
+    def chat(self, model, messages, tools, keep_minutes, reasoning=None, max_tokens=None):
         if not self.bin:
             raise RuntimeError("%s isn't installed" % self.label)
         tool_text = "\n".join("- %s(%s): %s" % (t["function"]["name"],
@@ -684,13 +690,13 @@ class GgufRunner(LlamaCpp):
     def chat_url(self):
         return self._chat
 
-    def chat(self, model, messages, tools, keep_minutes, reasoning=None):
+    def chat(self, model, messages, tools, keep_minutes, reasoning=None, max_tokens=None):
         r = next((x for x in self.running() if x["path"] == model), None)
         if not r:
             self.load(model, keep_minutes)
             r = next((x for x in self.running() if x["path"] == model), None)
         self._chat = "http://127.0.0.1:%d/v1/chat/completions" % r["port"]
-        return LlamaCpp.chat(self, model, messages, tools, keep_minutes, reasoning)
+        return LlamaCpp.chat(self, model, messages, tools, keep_minutes, reasoning, max_tokens)
 
 
 class Runtime(LlamaCpp):
@@ -1710,7 +1716,7 @@ class ComputerUse:
                 images.append((c.get("mimeType") or "image/png", c["data"]))
         if r.get("structuredContent") and not texts:
             texts.append(json.dumps(r["structuredContent"]))
-        text = "\n".join(texts).strip() or ("Error." if r.get("isError") else "Done.")
+        text = compact_result("\n".join(texts).strip(), name) or ("Error." if r.get("isError") else "Done.")
         if len(text) > 6000:
             text = text[:6000] + "\n[cut: %d more characters]" % (len(text) - 6000)
         if r.get("isError") and not text.startswith("Error"):
@@ -1743,6 +1749,42 @@ def slim_schema(schema):
     if isinstance(schema, list):
         return [slim_schema(v) for v in schema]
     return schema
+
+
+def compact_result(text, tool=""):
+    """A JSON tool result without what the model can't use (nulls, empty
+    values, AT-SPI object paths): list_apps went from ~2,600 tokens to
+    about half, and every token is read at a few hundred a second."""
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return text
+    if tool == "list_apps" and isinstance(data, dict) and isinstance(data.get("accessible_apps"), list):
+        # Names and pids are all the model acts on; one short line each.
+        seen = set()
+        apps = []
+        for a in data["accessible_apps"]:
+            n = (a.get("name") or "").strip()
+            if n and (n, a.get("pid")) not in seen:
+                seen.add((n, a.get("pid")))
+                apps.append("%s (pid %s)" % (n, a.get("pid")))
+        return "Running apps: " + "; ".join(apps)
+
+    def strip(v):
+        if isinstance(v, dict):
+            out = {}
+            for k, x in v.items():
+                if k in ("object_ref", "bus_name", "object_path"):
+                    continue
+                x = strip(x)
+                if x is None or x == "" or x == [] or x == {}:
+                    continue
+                out[k] = x
+            return out
+        if isinstance(v, list):
+            return [strip(x) for x in v]
+        return v
+    return json.dumps(strip(data), separators=(",", ":"), ensure_ascii=False)
 
 
 COMPUTER = ComputerUse()
@@ -1808,10 +1850,34 @@ def system_prompt(ctx, computer=False, commands=False):
     ) % (("The user is in %s. " % ctx["place"]) if ctx.get("place") else "") + extra
 
 
+def prompt_slot(p, model, tools, system, action):
+    """Save or restore a llama.cpp server's processed assistant prompt
+    (system prompt + tools) on disk: --slot-save-path. Restoring ~60 MB of
+    KV cache takes a moment; reading the prompt again takes Inkling ~20 s.
+    The file is named after the prompt, so a changed prompt or setting
+    misses and is saved again. False when the server can't."""
+    if not isinstance(p, LlamaCpp):
+        return False
+    base = re.sub(r"/v1/chat/completions$", "", p.chat_url())
+    key = hashlib.sha1(json.dumps([model, system, tools], sort_keys=True).encode()).hexdigest()[:16]
+    try:
+        r = http(base + "/slots/0?action=" + action, {"filename": "hearth-assistant-%s.bin" % key}, timeout=60)
+        return bool(r) and not r.get("error")
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def user_message(text):
+    """The user's words, after the date and time (kept out of the system
+    prompt so it stays the same and the server's prompt cache holds)."""
+    return {"role": "user", "content": "[%s] %s" % (time.strftime("%A, %B %-d, %Y, %-I:%M %p"), text)}
+
+
 class Assistant:
     def __init__(self):
         self.pending = {}     # (id, call) -> Queue
         self.cancelled = set()
+        self.warming = threading.Lock()
 
     def run_local_tool(self, name, args):
         if name == "search_files":
@@ -1909,6 +1975,66 @@ class Assistant:
         if qu:
             qu.put(result)
 
+    def setup(self, cfg, p, ctx):
+        """The tools and system prompt of a request: (tools, computer,
+        commands, vision, system message). The same for every request with
+        the same settings, so a server's prompt cache can reuse them."""
+        # Computer use and shell commands (Settings > AI), for models that
+        # call tools themselves (the agent CLIs bring their own).
+        tools = list(TOOLS)
+        computer = commands = vision = False
+        if not isinstance(p, AgentCli):
+            if cfg.get("computerUse", "ask") != "off" and COMPUTER.available():
+                vision = model_vision(p)
+                ct = COMPUTER.tools(vision)
+                computer = bool(ct)
+                tools += ct
+            if cfg.get("runCommands", "ask") != "off":
+                tools.append(RUN_COMMAND)
+                commands = True
+        system = {"role": "system", "content": system_prompt(ctx, computer, commands)}
+        return tools, computer, commands, vision, system
+
+    def warm(self, req):
+        """Get the assistant's model ready while the user is still talking:
+        load it (making room) and have the server read the system prompt and
+        tools, so the question that follows only adds its own words. The
+        model still unloads after the usual idle time."""
+        if not self.warming.acquire(blocking=False):
+            return
+        try:
+            cfg, _ = settings()
+            feature = cfg.get(req.get("feature", "assistant")) or cfg["assistant"]
+            pid = feature.get("provider", "ollama")
+            model = feature.get("model", "")
+            p = providers(cfg).get(pid)
+            if p is None or isinstance(p, AgentCli):
+                return
+            t0 = time.time()
+            loaded = make_room_for(pid, model)
+            tools, _c, _r, _v, system = self.setup(cfg, p, req.get("context") or {})
+            if loaded:
+                # Probably cached already; a 1-token request makes sure.
+                p.chat(model, [system, user_message("")], tools, keep_minutes(cfg),
+                       cfg.get("assistantReasoning", "low") or None, max_tokens=1)
+            else:
+                self.prime(p, model, tools, system, cfg)
+            log("warmed %s%s in %.1f s" % (pid, "" if loaded else " (loaded it)", time.time() - t0))
+        except Exception as e:  # noqa: BLE001
+            log("warm-up: %s" % e)
+        finally:
+            self.warming.release()
+
+    def prime(self, p, model, tools, system, cfg):
+        """A model that just loaded: restore its saved assistant prompt, or
+        read it once and save it for next time."""
+        if prompt_slot(p, model, tools, system, "restore"):
+            return
+        # The 1-token request also loads a model that's started on demand.
+        p.chat(model, [system, user_message("")], tools, keep_minutes(cfg),
+               cfg.get("assistantReasoning", "low") or None, max_tokens=1)
+        prompt_slot(p, model, tools, system, "save")
+
     def ask(self, req):
         rid = int(req.get("id", 0))
         cfg, _ = settings()
@@ -1925,26 +2051,23 @@ class Assistant:
             emit({"type": "reply", "id": rid, "done": True, "error": True,
                   "text": "%s sends what you say to the cloud. Allow cloud AI in Settings > AI first." % p.label})
             return
+        was_loaded = True
         if not isinstance(p, AgentCli):
-            make_room_for(pid, model)
-        # Computer use and shell commands (Settings > AI), for models that
-        # call tools themselves (the agent CLIs bring their own).
-        tools = list(TOOLS)
-        computer = commands = vision = False
-        if not isinstance(p, AgentCli):
-            if cfg.get("computerUse", "ask") != "off" and COMPUTER.available():
-                vision = model_vision(p)
-                ct = COMPUTER.tools(vision)
-                computer = bool(ct)
-                tools += ct
-            if cfg.get("runCommands", "ask") != "off":
-                tools.append(RUN_COMMAND)
-                commands = True
+            was_loaded = make_room_for(pid, model)
+        tools, computer, commands, vision, system = self.setup(cfg, p, req.get("context") or {})
+        if not was_loaded:
+            # Typed questions (Spotlight) get the saved prompt too. A warm-up
+            # still running from Voice has it under way: wait for it.
+            with self.warming:
+                pass
+            try:
+                self.prime(p, model, tools, system, cfg)
+            except Exception as e:  # noqa: BLE001
+                log("prime: %s" % e)
         computer_ok = cfg.get("computerUse", "ask") == "allow"
-        messages = [{"role": "system", "content": system_prompt(req.get("context") or {}, computer, commands)}]
+        messages = [system]
         messages += req.get("history") or []
-        messages.append({"role": "user", "content": "[%s] %s" % (
-            time.strftime("%A, %B %-d, %Y, %-I:%M %p"), req.get("text", ""))})
+        messages.append(user_message(req.get("text", "")))
         call = 0
         try:
             for _ in range(30 if computer else 8):
@@ -2802,6 +2925,8 @@ def main():
         elif cmd == "ask":
             asst.cancelled.discard(int(req.get("id", 0)))
             bg(asst.ask, req)
+        elif cmd == "warm":
+            bg(asst.warm, req)
         elif cmd == "toolResult":
             asst.tool_result(int(req.get("id", 0)), int(req.get("call", 0)), req.get("result", ""))
         elif cmd == "cancel":

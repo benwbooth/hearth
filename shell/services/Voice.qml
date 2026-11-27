@@ -83,6 +83,9 @@ Singleton {
         replyError = false;
         steps = [];
         phase = "connecting";
+        // Load the model and read its prompt while you talk (it still
+        // unloads after the usual idle minutes if nothing follows).
+        Ai.warm(askContext());
         chime("start");
         send({ cmd: "listen" });
     }
@@ -115,6 +118,10 @@ Singleton {
         onTriggered: Ai.refresh()
     }
 
+    // What every request tells the assistant (the same for the warm-up and
+    // the question, so the model's prompt cache matches).
+    function askContext() { return { place: Weather.hasLocation ? Weather.locationName : "" }; }
+
     // Typed questions (Spotlight's "Ask") skip the microphone.
     function ask(text) {
         text = (text || "").trim();
@@ -125,7 +132,7 @@ Singleton {
         replyError = false;
         steps = [];
         phase = "thinking";
-        const ctx = { place: Weather.hasLocation ? Weather.locationName : "" };
+        const ctx = askContext();
         const q = text;
         askId = Ai.ask(text, ctx, {
             history: root.history,

@@ -157,6 +157,10 @@ Singleton {
         send({ cmd: "ask", id: id, feature: "assistant", text: text, context: context || {}, history: h.history || [] });
         return id;
     }
+    // Get the assistant's model loaded and its prompt read before the
+    // question arrives (Voice calls this when listening starts).
+    function warm(context) { send({ cmd: "warm", feature: "assistant", context: context || {} }); }
+
     function cancel(id) {
         if (approval && approval.id === id) answerApproval(false);
         send({ cmd: "cancel", id: id });
