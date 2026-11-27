@@ -10,9 +10,10 @@ import ".."
 
 // On-screen display for volume and brightness changes, like macOS 26: a
 // glass panel under the menu bar at the top right with Control Center's
-// slider, gone 1.5 s after the last change. It takes no
-// input, and stays quiet while things settle at startup or when the default
-// output device changes.
+// slider, gone 1.5 s after the last change. While it shows, its slider
+// works: drag or click to set the level, scroll on it to step, and it stays
+// up while the pointer is on it. It stays quiet while things settle at
+// startup or when the default output device changes.
 Scope {
     id: root
 
@@ -44,7 +45,27 @@ Scope {
         root.value = value;
         root.muted = muted;
         root.showing = true;
-        hideTimer.restart();
+        if (!root.held) hideTimer.restart();
+    }
+
+    // The pointer is on the panel (or dragging its slider): it stays up,
+    // and goes 1.5 s after the pointer leaves.
+    property bool held: false
+    onHeldChanged: if (held) hideTimer.stop(); else if (showing) hideTimer.restart()
+
+    // Set from the slider: 0..1 of the track.
+    function setLevel(v) {
+        v = Math.max(0, Math.min(1, v));
+        if (root.title === "Display") {
+            Brightness.setAll(Math.round(v * 100), true);
+        } else if (root.sink && root.sink.audio) {
+            root.sink.audio.muted = false;
+            root.sink.audio.volume = Math.round(v * 100) / 100;
+        }
+    }
+    function stepLevel(n) {
+        if (root.title === "Display") Brightness.step(5 * n, true);
+        else root.setLevel(Math.round((root.value + 0.05 * n) * 20) / 20);
     }
 
     function showVolume() {
@@ -109,8 +130,9 @@ Scope {
         implicitWidth: frame.width + 2 * frame.shadowPad
         implicitHeight: frame.height + 2 * frame.shadowPad
         visible: frame.opacity > 0
-        // Clicks go through to whatever is underneath.
-        mask: Region {}
+        // The panel takes the pointer while it shows (its slider works);
+        // fading out, clicks go through to whatever is underneath.
+        mask: Region { item: root.showing ? frame : null }
 
         GlassFrame {
             id: frame
@@ -137,6 +159,20 @@ Scope {
                 text: root.muted ? "Muted" : Math.round(root.value * 100) + "%"
                 color: Theme.fgSecondary
                 font.pointSize: Theme.menuSmallFontSize
+            }
+            // Anywhere on the panel: hold it up; on the slider: drag or click
+            // to set; the wheel steps 5% a notch like the menu bar item.
+            MouseArea {
+                anchors.fill: parent
+                hoverEnabled: true
+                enabled: root.showing
+                onContainsMouseChanged: root.held = containsMouse || pressed
+                onPressedChanged: root.held = containsMouse || pressed
+                function levelAt(mx) { return (mx - track.x) / track.width; }
+                onPressed: mouse => root.setLevel(levelAt(mouse.x))
+                onPositionChanged: mouse => { if (pressed) root.setLevel(levelAt(mouse.x)); }
+                WheelNotches { id: osdNotches }
+                onWheel: w => { const n = osdNotches.feed(w); if (n) root.stepLevel(n); }
             }
             Item {
                 id: track

@@ -135,6 +135,7 @@ Singleton {
         { title: "Launchpad groups: right-click a group's title to rename it, add a group or a subgroup, move it up or down, or delete it (its apps stay); click a title to fold it", keys: "Right-click", run: () => Launchpad.show() },
         { title: "Show all windows (overview)", keys: "Super+W", run: () => ShellState.overviewRequested() },
         { title: "Control Center: Wi-Fi, Bluetooth, Focus, Dark Mode, brightness, sound, now playing", run: () => ShellState.openIndicator("controlcenter") },
+        { title: "Volume and brightness slider: appears at the top right when the level changes (keys, or scrolling on the menu bar item); drag or click it to set the level, scroll on it to step; it stays while the pointer is on it" },
         { title: "Volume chime: a pop on every volume change, so you hear the new level (turn off in Settings > Sound)", run: () => Settings.openRequested("sound") },
         { title: "Use menus with the keyboard: arrows, Enter, Esc, type a letter", keys: "↑ ↓ ← → Enter Esc", guide: "shortcuts" },
         { title: "Choose from a menu in one go: press a title, drag, release", guide: "shortcuts" },
