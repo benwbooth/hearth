@@ -1007,6 +1007,28 @@ def open_placeholders(menus, dump, win_id=None):
     return dump, menus
 
 
+def ocr_top(r):
+    """A no-tree window with no menus: what screen reading saw at its top
+    (scripts/ocr-top.py), so "no menu bar" can be told from "unreadable"."""
+    if r.get("result") != "fallback" or not (r.get("window") or {}).get("title") \
+            or ((r.get("inspect") or {}).get("atspi") or {}).get("found"):
+        return
+    wid = next((w["id"] for w in windows() if w.get("title") == r["window"]["title"]
+                and w.get("app_id") != "org.quickshell"), None)
+    helpers = os.path.join(HEARTH_PKG or "/run/current-system/sw", "share", "hearth", "helpers")
+    tess = tool("tesseract")
+    os.makedirs(os.path.join(SHOTS, "top"), exist_ok=True)
+    if wid is None or not tess or not os.path.isdir(helpers):
+        return
+    res = rig("run", "env", f"XDG_RUNTIME_DIR={os.environ['XDG_RUNTIME_DIR']}", f"PATH={tess}/bin:{os.environ.get('PATH', '')}",
+              sys.executable, "-I", os.path.join(ROOT, "scripts", "ocr-top.py"), str(wid), helpers,
+              os.path.join(SHOTS, "top", r["attr"].replace("/", "_") + ".png"), timeout=60)
+    try:
+        r["ocr_top"] = json.loads(res.stdout.strip().splitlines()[-1])
+    except (ValueError, IndexError, AttributeError):
+        r["ocr_top"] = {"error": (getattr(res, "stderr", "") or "")[-200:]}
+
+
 def late_check(rows):
     """Slow starters (Inkscape after its start screen, darktable's splash,
     Java workbenches): once more, the app's newest window as it is now. A
@@ -1577,6 +1599,7 @@ def probe_argv(attr, argv, tk, extra):
             if rr["result"] == "menus":
                 break
     late_check(rows)
+    ocr_top(rows[-1])
     rows[-1]["shot"] = shot(attr)
     if extra.get("installed") and rows[-1].get("result") not in ("no-window", "tray-only"):
         try:
