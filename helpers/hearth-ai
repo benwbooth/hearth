@@ -1565,7 +1565,14 @@ def make_room_for(pid, model):
     Returns True when the model was already loaded."""
     key = pid if pid.startswith("service:") else "%s:%s" % (pid, model)
     st = ARB.last or ARB.snapshot(False)
-    if key in {e["key"] for e in st["loaded"]}:
+    if pid.startswith("service:"):
+        # Asked fresh: ARB.last can be minutes old, and a unit it still
+        # lists after an unload made the warm-up skip the saved prompt
+        # (the 1-token request then socket-started the server and read
+        # all 4,700 tokens, ~9 s).
+        if unit_active(pid[len("service:"):]) in ("active", "reloading"):
+            return True
+    elif key in {e["key"] for e in st["loaded"]}:
         return True
     size = next((i.get("size", 0) for i in st["installed"]
                  if any(r["provider"] == pid and r["model"] == model for r in i["runners"])), 0)
@@ -1871,6 +1878,69 @@ def slim_schema(schema):
     return schema
 
 
+QUIET_STATES = {"enabled", "sensitive", "showing", "visible", "focusable", "selectable", "opaque",
+                "single line", "multi line", "horizontal", "vertical", "transient", "editable"}
+
+
+def app_state_outline(data):
+    """get_app_state as one short line per control the model can use.
+    The server's JSON (bounds, object paths, action descriptions, every
+    state, a base64 screenshot) came to ~3,000 tokens per call after the
+    6,000-character cut: each step that read a window waited ~6 s for the
+    prompt alone. Element indexes stay the server's, so clicks still match."""
+    nodes = data["accessibility_tree"]
+    lines = []
+    for n in nodes:
+        role = n.get("role") or "?"
+        name = " ".join(str(n.get("name") or "").split())
+        desc = " ".join(str(n.get("description") or "").split())
+        if desc.startswith("/") or desc == name:
+            desc = ""   # an app's executable path, or a repeat
+        states = set(n.get("states") or [])
+        text = n.get("text") or {}
+        content = " ".join(str(text.get("content") or "").replace("￼", "").split())
+        value = n.get("value") or {}
+        acts = []
+        for a in n.get("actions") or []:
+            an = a.get("name") if isinstance(a, dict) else str(a)
+            if an and an != "SetFocus" and an not in acts:
+                acts.append(an)
+        editable = bool(n.get("supports_editable_text")) or "editable" in states
+        if not (name or desc or content or value or acts or editable or role in ("frame", "window", "dialog")):
+            continue   # layout fillers, empty list items
+        parts = ["[%s] %s" % (n.get("index"), role)]
+        if name:
+            parts.append('"%s"' % brief(name, 80))
+        if desc:
+            parts.append("(%s)" % brief(desc, 60))
+        if editable:
+            parts.append("editable" + ("" if content else ", empty"))
+        if content and content != name:
+            parts.append('text "%s"' % brief(content, 100))
+        if isinstance(value, dict) and value.get("current") is not None:
+            lo, hi, cur = value.get("minimum") or 0, value.get("maximum"), value["current"]
+            parts.append("value %g" % round(cur, 1) + (" of %g–%g" % (lo, hi) if hi is not None else ""))
+        flags = sorted(s for s in states if s not in QUIET_STATES)
+        if states and "enabled" not in states:
+            flags.append("disabled")
+        if states and "showing" not in states and role in ("frame", "window", "dialog"):
+            flags.append("hidden")
+        if flags:
+            parts.append(", ".join(flags))
+        if acts and acts != ["Press"]:
+            parts.append("actions " + "/".join(acts))
+        lines.append(" ".join(parts))
+    head = "%s: %d controls" % (data.get("app_name_or_bundle_identifier") or "App", len(nodes))
+    errs = [str(data[k]) for k in ("accessibility_error", "window_error") if data.get(k)]
+    if not nodes and data.get("message"):
+        errs.append(str(data["message"]))
+    out = "\n".join([head] + errs + lines)
+    if len(out) > 4000:
+        cut = out[:4000].rsplit("\n", 1)[0]
+        out = cut + "\n[%d more controls not shown]" % (out[len(cut):].count("\n"))
+    return out
+
+
 def compact_result(text, tool=""):
     """A JSON tool result without what the model can't use (nulls, empty
     values, AT-SPI object paths): list_apps went from ~2,600 tokens to
@@ -1889,6 +1959,8 @@ def compact_result(text, tool=""):
                 seen.add((n, a.get("pid")))
                 apps.append("%s (pid %s)" % (n, a.get("pid")))
         return "Running apps: " + "; ".join(apps)
+    if tool == "get_app_state" and isinstance(data, dict) and isinstance(data.get("accessibility_tree"), list):
+        return app_state_outline(data)
 
     def strip(v):
         if isinstance(v, dict):
@@ -1911,15 +1983,22 @@ COMPUTER = ComputerUse()
 TURBINE = TurbineTools()
 
 
+VISION = {}   # server url -> whether its model takes images, as last answered
+
+
 def model_vision(p):
-    """Whether a llama.cpp-style server's model takes images (/props)."""
+    """Whether a llama.cpp-style server's model takes images (/props).
+    The last answer stands in when the server can't say right now (still
+    starting): it decides whether the screenshot tool is in the prompt, and
+    a different tool list misses the saved prompt."""
     url = getattr(p, "url", "")
     if not url:
         return False
     try:
-        return bool(((http(url + "/props", timeout=3) or {}).get("modalities") or {}).get("vision"))
+        VISION[url] = bool(((http(url + "/props", timeout=3) or {}).get("modalities") or {}).get("vision"))
     except Exception:  # noqa: BLE001
-        return False
+        pass
+    return VISION.get(url, False)
 
 
 def run_command(command, timeout=120):
@@ -1981,7 +2060,8 @@ def system_prompt(ctx, computer=False, commands=False, turbine=False):
         extra += ("run_command runs a bash command after the user allows it; use it for files, settings and "
                   "system questions a command answers directly, and give a short 'why'. ")
     return (
-        "You are the voice assistant of the user's Linux desktop (hearth). Each message starts with the date and time. %s"
+        "You are the voice assistant of the user's Linux desktop (hearth). Each message starts with the date and "
+        "time (and where the user is, when known). "
         "Do what the user asks by calling tools; you may call several in a row. Never take an action the user didn't "
         "ask for (don't open apps, files or websites unless asked). "
         "For files the user 'edited yesterday' etc., work out the dates and pass modified_after/modified_before. "
@@ -1989,7 +2069,7 @@ def system_prompt(ctx, computer=False, commands=False, turbine=False):
         "right away with fewer filters (drop the kind, then widen the dates) before telling the user. "
         "If nothing matches, say so in one sentence and offer one next step. Answer in one or two short, friendly sentences meant to be spoken aloud: no markdown, no lists, no file paths "
         "unless asked. If you can't do something, say so plainly."
-    ) % (("The user is in %s. " % ctx["place"]) if ctx.get("place") else "") + extra
+    ) + extra
 
 
 def prompt_slot(p, model, tools, system, action):
@@ -2002,17 +2082,28 @@ def prompt_slot(p, model, tools, system, action):
         return False
     base = re.sub(r"/v1/chat/completions$", "", p.chat_url())
     key = hashlib.sha1(json.dumps([model, system, tools], sort_keys=True).encode()).hexdigest()[:16]
+    name = "hearth-assistant-%s.bin" % key
+    t0 = time.time()
     try:
-        r = http(base + "/slots/0?action=" + action, {"filename": "hearth-assistant-%s.bin" % key}, timeout=60)
-        return bool(r) and not r.get("error")
-    except Exception:  # noqa: BLE001
-        return False
+        # A cold server behind its socket starts on this request (loading
+        # takes ~10-30 s, more when room has to be made first).
+        r = http(base + "/slots/0?action=" + action, {"filename": name}, timeout=360)
+        ok = bool(r) and not r.get("error")
+    except Exception as e:  # noqa: BLE001
+        r, ok = {"error": str(e)}, False
+    log("prompt %s %s: %s in %.1f s" % (action, name, "ok" if ok else "failed (%s)" % (r or {}).get("error"),
+                                       time.time() - t0))
+    return ok
 
 
-def user_message(text):
-    """The user's words, after the date and time (kept out of the system
-    prompt so it stays the same and the server's prompt cache holds)."""
-    return {"role": "user", "content": "[%s] %s" % (time.strftime("%A, %B %-d, %Y, %-I:%M %p"), text)}
+def user_message(text, ctx=None):
+    """The user's words, after the date, time and place (kept out of the
+    system prompt so it stays the same: the server's prompt cache and the
+    saved prompt's file name depend on it, and the place is empty until
+    Weather has a location)."""
+    when = time.strftime("%A, %B %-d, %Y, %-I:%M %p")
+    place = (ctx or {}).get("place")
+    return {"role": "user", "content": "[%s%s] %s" % (when, ("; in %s" % place) if place else "", text)}
 
 
 class Assistant:
@@ -2247,13 +2338,16 @@ class Assistant:
         small model) returns {"why", "done": [what it did]} to hand off."""
         was_loaded = True
         if not isinstance(p, AgentCli):
+            # A warm-up still running from Voice is loading the model or
+            # restoring its saved prompt: wait, or this request's first step
+            # races the restore (reads the whole prompt, then the restore
+            # replaces the slot under it).
+            with self.warming:
+                pass
             was_loaded = make_room_for(pid, model)
         tools, computer, commands, vision, turbine, system = self.setup(cfg, p, req.get("context") or {}, fast)
         if not was_loaded:
-            # Typed questions (Spotlight) get the saved prompt too. A warm-up
-            # still running from Voice has it under way: wait for it.
-            with self.warming:
-                pass
+            # Typed questions (Spotlight) get the saved prompt too.
             try:
                 self.prime(p, model, tools, system, cfg)
             except Exception as e:  # noqa: BLE001
@@ -2262,7 +2356,7 @@ class Assistant:
         turbine_ok = cfg.get("turbine", "ask") == "allow"
         messages = [system]
         messages += req.get("history") or []
-        messages.append(user_message(req.get("text", "")))
+        messages.append(user_message(req.get("text", ""), req.get("context")))
         call = 0
         done = []
         try:
@@ -2281,8 +2375,15 @@ class Assistant:
                 if isinstance(p, AgentCli):
                     messages.append(raw)
                 else:
-                    messages.append({"role": "assistant", "content": raw.get("content") or "",
-                                     "tool_calls": raw.get("tool_calls")})
+                    am = {"role": "assistant", "content": raw.get("content") or "",
+                          "tool_calls": raw.get("tool_calls")}
+                    if raw.get("reasoning_content"):
+                        # Sent back as generated, so the next step's prompt
+                        # starts with exactly the tokens the server holds;
+                        # without it the server dropped the step's ~50
+                        # generated tokens and read them again.
+                        am["reasoning_content"] = raw["reasoning_content"]
+                    messages.append(am)
                 for c in calls:
                     call += 1
                     emit({"type": "step", "id": rid, "name": c["name"], "args": c["args"]})
