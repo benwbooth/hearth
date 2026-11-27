@@ -120,6 +120,7 @@ Singleton {
         { title: "Assistant menu (the sparkle next to Control Center): ask by voice or by typing, the last answer, switch the assistant's model, see graphics memory (VRAM) and load or unload AI models", run: () => ShellState.openIndicator("ai") },
         { title: "AI models: GPU % and graphics memory %, which models are loaded and how much memory each takes, every installed model by category (language, speech to text, text to speech, image, video, audio, embeddings, vision), install more (Ollama, Magnitude, Hugging Face), unload or keep loaded", run: () => ShellState.openIndicator("ai") },
         { title: "Assistant can use the computer (read windows, click, type) and run terminal commands, asking first with Allow / Deny", pane: "ai" },
+        { title: "Assistant can work in the Turbine editor (open files, type, menus) through Turbine's own tools, asking first", pane: "ai" },
         { title: "Settings: AI: unload unused models after a few minutes, make room for new requests by unloading idle models, GPU use in the menu bar", pane: "ai" },
         { title: "Settings: AI: Apps: let apps such as Tessera use hearth's models (an OpenAI-compatible server on this computer), their default and fast models", pane: "ai" },
         { title: "Settings: AI: installed and loaded models (Ollama, llama.cpp), download or delete models, the assistant's model, cloud AI (Claude Code, Codex, Gemini), unload when full screen", pane: "ai" },

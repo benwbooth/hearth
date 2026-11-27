@@ -26,7 +26,9 @@ Rectangle {
             spacing: 6
             Icon {
                 implicitSize: 16
-                name: card.req && card.req.kind === "command" ? "utilities-terminal-symbolic" : "input-mouse-symbolic"
+                name: !card.req ? "input-mouse-symbolic"
+                    : card.req.kind === "command" ? "utilities-terminal-symbolic"
+                    : card.req.kind === "turbine" ? "accessories-text-editor-symbolic" : "input-mouse-symbolic"
                 fallback: "dialog-question"
             }
             Label {

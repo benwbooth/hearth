@@ -188,6 +188,18 @@ ColumnLayout {
         }
         SettingsDivider {}
         SettingsRow {
+            label: "Work in Turbine"
+            note: "Let the assistant open files, type and use menus in the Turbine editor while it runs."
+            tip: "Turbine's own tools (turbine mcp) work its windows exactly, and you watch every step. Ask: a card asks you once per request before it edits (looking needs no OK). Always: it edits without asking. Off: it leaves Turbine alone."
+            Dropdown {
+                implicitWidth: 160
+                options: [{ value: "ask", label: "Ask first" }, { value: "allow", label: "Always" }, { value: "off", label: "Off" }]
+                value: pane.cfg.turbine || "ask"
+                onPicked: v => Settings.set("ai.turbine", v)
+            }
+        }
+        SettingsDivider {}
+        SettingsRow {
             label: "Run commands"
             note: "Let the assistant run terminal commands to answer questions and get things done."
             tip: "Ask: a card shows each command with Allow and Deny before it runs. Always: commands run without asking (they can change or delete anything you can). Off: no commands."

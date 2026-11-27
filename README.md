@@ -706,6 +706,21 @@ One hub for every model the desktop uses: `helpers/hearth-ai`,
   overview, next wallpaper, brightness, open a Settings pane), the weather
   (hearth's Open-Meteo data), calculate, and web search or open a URL in the
   browser. Shell-side tools run in the shell; the rest run in the helper.
+  Beyond those, with an Allow/Deny card first ("Ask", once per request
+  before the first action; reading needs no OK), "Always" or "Off": it
+  uses the computer like you (`ai.computerUse`: codex-computer-use-linux's
+  MCP server, AT-SPI and screenshots), runs shell commands
+  (`ai.runCommands`, a card per command), and works in the Turbine editor
+  (`ai.turbine`). While a Turbine runs (`turbine` on PATH and a
+  `$XDG_RUNTIME_DIR/turbine-*.sock` that answers, or `TURBINE_SOCKET`),
+  hearth-ai starts `turbine mcp --socket <it>` and offers its tools as
+  `turbine_look`, `turbine_open`, `turbine_menu`, `turbine_click`,
+  `turbine_type`, `turbine_key`, `turbine_read` and `turbine_wait`: "open
+  main.rs in Turbine and fix the warning" goes through Turbine's widget
+  tree, exactly and on screen, instead of screenshots (look/read/wait
+  need no OK). A newer Turbine takes over the connection.
+  `scripts/test-ai-turbine.py` checks it against a Turbine in a pty and a
+  stand-in model (`TURBINE_BIN=` when it isn't on PATH).
 - Apps: hearth-ai serves the same models to any app as an OpenAI-compatible
   server on `127.0.0.1:18380` (`ai.api.port`; off with Settings > AI >
   Apps > "Let apps use these models", `ai.api.enabled`). While it runs,

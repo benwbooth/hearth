@@ -29,7 +29,7 @@ JSON lines on stdin/stdout, so the shell never waits:
   {"cmd": "warm", "feature": "assistant", "context": {...}}   load the model, read its prompt (voice: on listen)
   {"cmd": "ask", "id": 3, "feature": "assistant", "text": "...", "context": {...}}
       -> {"type": "tool", "id": 3, "call": 1, "name": "launch_app", "args": {...}}
-      -> {"type": "approve", "id": 3, "call": 2, "kind": "command"|"computer", "title": ..., "detail": ...}
+      -> {"type": "approve", "id": 3, "call": 2, "kind": "command"|"computer"|"turbine", "title": ..., "detail": ...}
          (the shell shows Allow/Deny and answers toolResult with "allow" or "deny";
          {"type": "approved", ...} follows when the question is gone)
          (the shell runs it and answers {"cmd": "toolResult", "id": 3, "call": 1, "result": "..."})
@@ -86,6 +86,9 @@ DEFAULTS = {
     # the user (codex-computer-use-linux: read windows, click, type) and run
     # shell commands. "ask" = an Allow/Deny card first, "allow", or "off".
     "computerUse": "ask",
+    # The Turbine editor's own tools (turbine mcp: its widget tree, menus,
+    # typing), while a Turbine runs: the same "ask" | "allow" | "off".
+    "turbine": "ask",
     # How hard reasoning models think before answering the assistant
     # ("low" | "medium" | "high" | ""): opening apps and clicking needs
     # little, and every second of thinking is a second of waiting.
@@ -1628,19 +1631,14 @@ RUN_COMMAND = tool("run_command", "Run a shell command (bash) on the user's comp
 }, ["command"])
 
 
-class ComputerUse:
-    """Client for the computer-use MCP server Codex uses
-    (codex-computer-use-linux, /etc/nixos packages): it reads windows
-    through AT-SPI, takes screenshots, and clicks and types through the
-    portal or ydotool. One server process, started on first use."""
+class McpTools:
+    """Client for a stdio MCP tool server: one process, started on first
+    use. Subclasses name the command; PREFIX namespaces the tools the model
+    sees (turbine_look), so two servers' tools never clash."""
 
-    # System setup, and window geometry the assistant has no use for. Each
-    # tool's description is part of every prompt, and a local model reads
-    # prompts at a few hundred tokens a second, so fewer tools answer sooner.
-    # list_windows needs a GNOME Shell backend (arbor has none): list_apps.
-    HIDDEN = {"doctor", "setup_accessibility", "setup_window_targeting", "move_window", "resize_window",
-              "drag", "focused_window", "list_windows"}
-    BIN = "codex-computer-use-linux"
+    HIDDEN = set()
+    PREFIX = ""
+    LABEL = "MCP"
 
     def __init__(self):
         self.proc = None
@@ -1648,10 +1646,17 @@ class ComputerUse:
         self.waiting = {}
         self.nid = 0
         self.defs = []          # MCP tool definitions
-        self.readonly = set()
+        self.readonly = set()   # their names (unprefixed)
+
+    def command(self):
+        """argv of the server, or None when it can't run now."""
+        return None
+
+    def env(self):
+        return None
 
     def available(self):
-        return bool(shutil.which(self.BIN))
+        return bool(self.command())
 
     def _reader(self, proc):
         for line in proc.stdout:
@@ -1675,20 +1680,35 @@ class ComputerUse:
         try:
             m = qu.get(timeout=timeout)
         except queue.Empty:
-            raise RuntimeError("the computer-use server didn't answer %s" % method)
+            raise RuntimeError("the %s server didn't answer %s" % (self.LABEL, method))
         finally:
             self.waiting.pop(rid, None)
         if m.get("error"):
             raise RuntimeError(m["error"].get("message") or str(m["error"]))
         return m.get("result") or {}
 
+    def running(self):
+        return bool(self.proc and self.proc.poll() is None)
+
+    def stop(self):
+        if self.running():
+            try:
+                self.proc.stdin.close()
+                self.proc.wait(timeout=2)
+            except Exception:  # noqa: BLE001
+                self.proc.kill()
+        self.proc = None
+
+    def is_readonly(self, t):
+        return bool((t.get("annotations") or {}).get("readOnlyHint"))
+
     def start(self):
-        if self.proc and self.proc.poll() is None:
+        if self.running():
             return True
-        exe = shutil.which(self.BIN)
-        if not exe:
+        argv = self.command()
+        if not argv:
             return False
-        self.proc = subprocess.Popen([exe, "mcp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        self.proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=self.env(),
                                      stderr=subprocess.DEVNULL, text=True, bufsize=1, start_new_session=True)
         threading.Thread(target=self._reader, args=(self.proc,), daemon=True).start()
         self._rpc("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
@@ -1698,27 +1718,35 @@ class ComputerUse:
             self.proc.stdin.flush()
         tools = self._rpc("tools/list", timeout=20).get("tools") or []
         self.defs = [t for t in tools if t["name"] not in self.HIDDEN]
-        # A screenshot changes nothing, whatever its annotation says.
-        self.readonly = {t["name"] for t in self.defs
-                         if (t.get("annotations") or {}).get("readOnlyHint") or t["name"] == "screenshot"}
+        self.readonly = {t["name"] for t in self.defs if self.is_readonly(t)}
         return True
 
-    def tools(self, vision):
+    def tools(self, vision=False):
         try:
             if not self.start():
                 return []
         except Exception as e:  # noqa: BLE001
-            log("computer use: %s" % e)
+            log("%s: %s" % (self.LABEL, e))
+            self.stop()
             return []
-        return [{"type": "function", "function": {"name": t["name"], "description": brief(t.get("description", ""), 240),
+        return [{"type": "function", "function": {"name": self.PREFIX + t["name"],
+                                                  "description": brief(t.get("description", ""), 240),
                                                   "parameters": slim_schema(t.get("inputSchema") or {"type": "object", "properties": {}})}}
                 for t in self.defs if vision or t["name"] != "screenshot"]
 
     def names(self):
-        return {t["name"] for t in self.defs}
+        return {self.PREFIX + t["name"] for t in self.defs}
+
+    def unprefixed(self, name):
+        return name[len(self.PREFIX):] if self.PREFIX and name.startswith(self.PREFIX) else name
+
+    def acts(self, name):
+        """Whether a (prefixed) tool changes something."""
+        return self.unprefixed(name) not in self.readonly
 
     def call(self, name, args):
         """-> (text, [(mime, base64)...])"""
+        name = self.unprefixed(name)
         self.start()
         r = self._rpc("tools/call", {"name": name, "arguments": args or {}}, timeout=90)
         texts, images = [], []
@@ -1732,9 +1760,88 @@ class ComputerUse:
         text = compact_result("\n".join(texts).strip(), name) or ("Error." if r.get("isError") else "Done.")
         if len(text) > 6000:
             text = text[:6000] + "\n[cut: %d more characters]" % (len(text) - 6000)
-        if r.get("isError") and not text.startswith("Error"):
+        if r.get("isError") and not text.lower().startswith("error"):
             text = "Error: " + text
         return text, images
+
+
+class ComputerUse(McpTools):
+    """The computer-use MCP server Codex uses (codex-computer-use-linux,
+    /etc/nixos packages): it reads windows through AT-SPI, takes
+    screenshots, and clicks and types through the portal or ydotool."""
+
+    # System setup, and window geometry the assistant has no use for. Each
+    # tool's description is part of every prompt, and a local model reads
+    # prompts at a few hundred tokens a second, so fewer tools answer sooner.
+    # list_windows needs a GNOME Shell backend (arbor has none): list_apps.
+    HIDDEN = {"doctor", "setup_accessibility", "setup_window_targeting", "move_window", "resize_window",
+              "drag", "focused_window", "list_windows"}
+    BIN = "codex-computer-use-linux"
+    LABEL = "computer use"
+
+    def command(self):
+        exe = shutil.which(self.BIN)
+        return [exe, "mcp"] if exe else None
+
+    def is_readonly(self, t):
+        # A screenshot changes nothing, whatever its annotation says.
+        return super().is_readonly(t) or t["name"] == "screenshot"
+
+
+class TurbineTools(McpTools):
+    """The Turbine editor's MCP server (`turbine mcp`, ~/src/turbine): it
+    drives a running Turbine through its automation socket and widget tree,
+    visibly, so edits are exact instead of screenshot clicks. Only while a
+    Turbine runs; a newer Turbine replaces the server's connection."""
+
+    PREFIX = "turbine_"
+    LABEL = "Turbine"
+    READONLY = {"look", "read", "wait"}   # turbine mcp sends no annotations
+
+    def __init__(self):
+        super().__init__()
+        self.sock = None
+
+    def socket(self):
+        """TURBINE_SOCKET, else the newest $XDG_RUNTIME_DIR/turbine-*.sock that
+        answers (a crashed Turbine leaves its file behind)."""
+        import socket as so
+        env = os.environ.get("TURBINE_SOCKET")
+        cands = [env] if env else sorted(
+            glob.glob(os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "turbine-*.sock")),
+            key=lambda p: os.path.getmtime(p) if os.path.exists(p) else 0, reverse=True)
+        for p in cands:
+            s = so.socket(so.AF_UNIX, so.SOCK_STREAM)
+            s.settimeout(0.5)
+            try:
+                s.connect(p)
+                return p
+            except OSError:
+                continue
+            finally:
+                s.close()
+        return None
+
+    def available(self):
+        return bool(shutil.which("turbine")) and bool(self.socket())
+
+    def command(self):
+        exe = shutil.which("turbine")
+        return [exe, "mcp", "--socket", self.sock] if exe and self.sock else None
+
+    def start(self):
+        # Turbine gone, or a newer one started: reconnect (or report none).
+        sock = self.socket() if shutil.which("turbine") else None
+        if sock != self.sock:
+            self.stop()
+            self.sock = sock
+            self.defs = []
+        if not sock:
+            return False
+        return super().start()
+
+    def is_readonly(self, t):
+        return t["name"] in self.READONLY
 
 
 def brief(text, limit):
@@ -1801,6 +1908,7 @@ def compact_result(text, tool=""):
 
 
 COMPUTER = ComputerUse()
+TURBINE = TurbineTools()
 
 
 def model_vision(p):
@@ -1829,6 +1937,20 @@ def run_command(command, timeout=120):
 
 
 def describe_action(name, a):
+    if name.startswith("turbine_"):
+        name = name[len("turbine_"):]
+        if name == "open":
+            return "open %s in Turbine" % (a.get("path") or "a file")
+        if name == "menu":
+            return "pick %s in Turbine's menus" % (a.get("path") or "a menu item")
+        if name == "click":
+            return "click %s in Turbine" % (a.get("target") or "in the editor")
+        if name == "type":
+            t = str(a.get("text", ""))
+            return "type “%s” in Turbine" % (t[:60] + ("…" if len(t) > 60 else ""))
+        if name == "key":
+            return "press %s in Turbine" % (a.get("key") or "a key")
+        return "%s in Turbine" % name
     if name == "click":
         what = a.get("name") or a.get("text")
         return "click %s" % (("“%s”" % what) if what else "on the screen")
@@ -1840,8 +1962,15 @@ def describe_action(name, a):
     return name.replace("_", " ")
 
 
-def system_prompt(ctx, computer=False, commands=False):
+def system_prompt(ctx, computer=False, commands=False, turbine=False):
     extra = ""
+    if turbine:
+        extra += ("The Turbine code editor is running and you can work it directly: turbine_look shows its widgets "
+                  "(ids, * marks focus) and screen as text, turbine_open opens a file, turbine_menu picks a menu item "
+                  "such as 'File/Save', turbine_click clicks a widget id, turbine_type types into what has focus, "
+                  "turbine_key presses keys such as 'Ctrl+S', turbine_read reads the active window's text and "
+                  "turbine_wait waits for text to show. For anything in Turbine use these tools, never the "
+                  "screen-reading ones; call turbine_look first and after each change, and save when you edit. ")
     if computer:
         extra += ("You can use the computer like the user does: list_apps and get_app_state read what's on screen "
                   "(get_app_state lists a window's controls as text with element_index numbers; call it before acting "
@@ -1990,13 +2119,17 @@ class Assistant:
 
     def setup(self, cfg, p, ctx, fast=False):
         """The tools and system prompt of a request: (tools, computer,
-        commands, vision, system message). The same for every request with
+        commands, vision, turbine, system message). The same for every request with
         the same settings, so a server's prompt cache can reuse them."""
         # Computer use and shell commands (Settings > AI), for models that
         # call tools themselves (the agent CLIs bring their own).
         tools = list(TOOLS)
-        computer = commands = vision = False
+        computer = commands = vision = turbine = False
         if not isinstance(p, AgentCli):
+            if cfg.get("turbine", "ask") != "off" and TURBINE.available():
+                tt = TURBINE.tools()
+                turbine = bool(tt)
+                tools += tt
             if cfg.get("computerUse", "ask") != "off" and COMPUTER.available():
                 vision = model_vision(p)
                 ct = COMPUTER.tools(vision)
@@ -2005,12 +2138,12 @@ class Assistant:
             if cfg.get("runCommands", "ask") != "off":
                 tools.append(RUN_COMMAND)
                 commands = True
-        content = system_prompt(ctx, computer, commands)
+        content = system_prompt(ctx, computer, commands, turbine)
         if fast:
             tools.append(HAND_OFF)
             content = FAST_NOTE + content
         system = {"role": "system", "content": content}
-        return tools, computer, commands, vision, system
+        return tools, computer, commands, vision, turbine, system
 
     def warm(self, req):
         """Get the assistant's model ready while the user is still talking:
@@ -2032,7 +2165,7 @@ class Assistant:
                 pid, model, p = fast
             t0 = time.time()
             loaded = make_room_for(pid, model)
-            tools, _c, _r, _v, system = self.setup(cfg, p, req.get("context") or {}, bool(fast))
+            tools, _c, _r, _v, _t, system = self.setup(cfg, p, req.get("context") or {}, bool(fast))
             if loaded:
                 # Probably cached already; a 1-token request makes sure.
                 p.chat(model, [system, user_message("")], tools, keep_minutes(cfg),
@@ -2115,7 +2248,7 @@ class Assistant:
         was_loaded = True
         if not isinstance(p, AgentCli):
             was_loaded = make_room_for(pid, model)
-        tools, computer, commands, vision, system = self.setup(cfg, p, req.get("context") or {}, fast)
+        tools, computer, commands, vision, turbine, system = self.setup(cfg, p, req.get("context") or {}, fast)
         if not was_loaded:
             # Typed questions (Spotlight) get the saved prompt too. A warm-up
             # still running from Voice has it under way: wait for it.
@@ -2126,13 +2259,14 @@ class Assistant:
             except Exception as e:  # noqa: BLE001
                 log("prime: %s" % e)
         computer_ok = cfg.get("computerUse", "ask") == "allow"
+        turbine_ok = cfg.get("turbine", "ask") == "allow"
         messages = [system]
         messages += req.get("history") or []
         messages.append(user_message(req.get("text", "")))
         call = 0
         done = []
         try:
-            for _ in range(6 if fast else 30 if computer else 8):
+            for _ in range(6 if fast else 30 if computer or turbine else 8):
                 if rid in self.cancelled:
                     return None
                 text, calls, raw = p.chat(model, messages, tools, keep_minutes(cfg),
@@ -2167,8 +2301,22 @@ class Assistant:
                                 else "Exit code 0.\n(dry run)"
                         else:
                             result = "The user didn't allow that command. Don't retry it; ask what they'd like instead."
+                    elif turbine and c["name"] in TURBINE.names():
+                        acts = TURBINE.acts(c["name"])
+                        if acts and not turbine_ok:
+                            turbine_ok = self.approve(rid, call, "turbine", "Let the assistant work in Turbine?",
+                                                      "It wants to %s, and may keep typing and editing in Turbine "
+                                                      "until this request is done." % describe_action(c["name"], c["args"]))
+                        if acts and not turbine_ok:
+                            result = "The user didn't allow working in Turbine for this request. Stop and say so."
+                        else:
+                            try:
+                                result, images = TURBINE.call(c["name"], c["args"])
+                            except Exception as e:  # noqa: BLE001
+                                TURBINE.stop()
+                                result = "Error: %s" % e
                     elif computer and c["name"] in COMPUTER.names():
-                        acts = c["name"] not in COMPUTER.readonly
+                        acts = COMPUTER.acts(c["name"])
                         if acts and not computer_ok:
                             computer_ok = self.approve(rid, call, "computer", "Let the assistant use your computer?",
                                                        "It wants to %s, and may keep clicking and typing in your apps "
