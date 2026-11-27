@@ -78,8 +78,13 @@ Indicator {
     function refresh() { if (!statusProc.running) statusProc.running = true; }
 
     // Runs `devloop <args...>` and refreshes once it has had time to act.
+    // Opening something (start, the log window) goes through Launch, as the
+    // Dock's launches do: under arbor that gives it an xdg-activation token,
+    // so `devloop start` of a terminal app (`tessera -e`, a tab in the open
+    // Tessera) brings that window forward instead of leaving it behind.
     function act(args) {
-        Quickshell.execDetached([cli].concat(args));
+        if (args[0] === "start" || args[0] === "logs-window") Launch.run([cli].concat(args), "devloop");
+        else Quickshell.execDetached([cli].concat(args));
         refreshSoon.restart();
     }
 
