@@ -96,7 +96,7 @@ DEFAULTS = {
     # A small model that answers first while the assistant's own model isn't
     # loaded: it loads in seconds and handles quick commands, and passes
     # anything harder to the assistant's model (hand_off).
-    "fastAssistant": {"enabled": True, "provider": "ollama", "model": "qwen3.5:4b"},
+    "fastAssistant": {"enabled": False, "provider": "ollama", "model": "qwen3.5:4b"},
     "runCommands": "ask",
     # Graphics memory kept free for the desktop when making room for a
     # model: windows squeezed out of VRAM flicker and show artifacts.

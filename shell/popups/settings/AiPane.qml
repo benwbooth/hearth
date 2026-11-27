@@ -161,7 +161,7 @@ ColumnLayout {
             label: "Quick model"
             note: "A small model that answers simple requests in seconds while the assistant's model isn't loaded, and hands harder ones to it."
             tip: "Quick commands (open an app, the volume, what's open) don't need a big model, and a small one loads in a couple of seconds. It passes anything that needs reasoning, writing or several steps to the assistant's model. Once that model is loaded, it answers everything itself."
-            readonly property var fast: pane.cfg.fastAssistant || { enabled: true, provider: "ollama", model: "qwen3.5:4b" }
+            readonly property var fast: pane.cfg.fastAssistant || { enabled: false, provider: "ollama", model: "qwen3.5:4b" }
             Dropdown {
                 implicitWidth: 220
                 options: [{ value: "", label: "Off" }].concat(Ai.providers.filter(p => p.kind === "local").flatMap(p =>
