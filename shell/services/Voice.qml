@@ -28,6 +28,7 @@ Singleton {
         ttsEngine: "kokoro",            // "kokoro" (natural, CPU) or "piper" (lighter)
         kokoroVoice: "af_heart",
         piperVoice: "en_US-ryan-high",
+        followUp: true,                 // listen again after an answer, for a reply
         sounds: true,                   // a chime when listening starts and ends
         edgeGlow: true                  // the glowing screen edge while listening
     })
@@ -41,6 +42,10 @@ Singleton {
     property bool replyError: false
     property var steps: []              // [{ name, text }] what the assistant did
     property bool speaking: false
+    // The question came by voice (not typed): its answer may be followed up.
+    property bool voiceAsk: false
+    // Listening again right after an answer: silence ends the conversation.
+    property bool followingUp: false
     // Kokoro-82M's English voices (a = US, b = UK; f/m = woman/man).
     readonly property var kokoroVoices: [
         { value: "af_heart", label: "Heart (US English, woman)" },
@@ -70,7 +75,7 @@ Singleton {
         proc.write(JSON.stringify(obj) + "\n");
     }
 
-    function listen() {
+    function listen(follow) {
         if (!cfg.enabled) {
             replyError = true;
             reply = "The voice assistant is turned off in Settings > Voice.";
@@ -82,6 +87,7 @@ Singleton {
         reply = "";
         replyError = false;
         steps = [];
+        followingUp = !!follow;
         phase = "connecting";
         // Load the model and read its prompt while you talk (it still
         // unloads after the usual idle minutes if nothing follows).
@@ -123,9 +129,10 @@ Singleton {
     function askContext() { return { place: Weather.hasLocation ? Weather.locationName : "" }; }
 
     // Typed questions (Spotlight's "Ask") skip the microphone.
-    function ask(text) {
+    function ask(text, byVoice) {
         text = (text || "").trim();
         if (!text) return;
+        voiceAsk = !!byVoice;
         if (askId) Ai.cancel(askId);
         heard = text;
         reply = "";
@@ -144,8 +151,15 @@ Singleton {
                 root.phase = "answer";
                 if (!err) root.history = root.history.concat([{ role: "user", content: q }, { role: "assistant", content: answer }]).slice(-8);
                 if (root.cfg.speak && !err) root.send({ cmd: "speak", text: answer });
+                else root.followUp();
             }
         });
+    }
+
+    // After an answer to a spoken question (once it has been read aloud),
+    // listen again so you can reply without the shortcut (Settings > Voice).
+    function followUp() {
+        if (phase === "answer" && voiceAsk && !replyError && cfg.followUp !== false) listen(true);
     }
 
     function describe(name, a) {
@@ -215,8 +229,12 @@ Singleton {
         case "partial": root.heard = m.text; break;
         case "final":
             root.level = 0;
-            if (m.text) root.ask(m.text);
-            else {
+            if (m.text) root.ask(m.text, true);
+            else if (root.followingUp) {
+                // No reply after an answer: the conversation is over.
+                root.followingUp = false;
+                root.dismiss();
+            } else {
                 root.reply = m.heard ? "Sorry, I didn't catch that." : "I didn't hear anything. Check the microphone in Sound settings.";
                 root.replyError = true;
                 root.phase = "answer";
@@ -227,7 +245,10 @@ Singleton {
             root.replyError = true;
             root.phase = "answer";
             break;
-        case "speaking": root.speaking = m.on; break;
+        case "speaking":
+            root.speaking = m.on;
+            if (!m.on) root.followUp();
+            break;
         case "voices": root.voices = m; break;
         case "download":
             root.download = m.finished ? null : { voice: m.voice, done: m.done, total: m.total };

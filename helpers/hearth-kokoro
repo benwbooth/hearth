@@ -89,9 +89,10 @@ def main():
         voice = req.get("voice") or "af_heart"
         try:
             pipe = pipe_for(voice)
-            play = subprocess.Popen(["pw-play", "--rate", str(RATE), "--channels", "1", "--format", "s16",
+            # --raw: without it pw-play takes "-" for a sound file and exits.
+            play = subprocess.Popen(["pw-play", "--raw", "--rate", str(RATE), "--channels", "1", "--format", "s16",
                                      "--media-role", "Assistant", "-"], stdin=subprocess.PIPE,
-                                    stderr=subprocess.DEVNULL)
+                                    stderr=subprocess.PIPE)
             with lock:
                 if gen != current["gen"]:
                     play.kill()
@@ -111,7 +112,9 @@ def main():
                 play.stdin.close()
             except OSError:
                 pass
-            play.wait()
+            if play.wait() not in (0, -9) and gen == current["gen"]:
+                err = (play.stderr.read() or b"").decode(errors="replace").strip()
+                emit({"type": "error", "message": "pw-play: " + (err.splitlines()[-1] if err else "failed")})
         except Exception as e:  # noqa: BLE001
             emit({"type": "error", "message": str(e)})
         with lock:

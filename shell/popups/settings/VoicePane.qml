@@ -110,6 +110,16 @@ ColumnLayout {
         }
     }
 
+    Label { text: "Conversation"; font.weight: Font.DemiBold }
+    SettingsGroup {
+        SettingsRow {
+            label: "Listen for a reply"
+            note: "After answering a spoken question, listen again so you can answer back. Silence ends the conversation."
+            tip: "It listens for up to 6 seconds after the answer (after it has been read aloud, when spoken replies are on). What you say continues the same conversation."
+            Toggle { checked: pane.cfg.followUp !== false; onToggled: c => Settings.set("voice.followUp", c) }
+        }
+    }
+
     Label { text: "Spoken replies"; font.weight: Font.DemiBold }
     SettingsGroup {
         SettingsRow {

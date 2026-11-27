@@ -282,15 +282,23 @@ class Kokoro:
                 emit({"type": "error", "message": "Couldn't speak: %s" % m.get("message", "")})
                 emit({"type": "speaking", "on": False})
 
+    def _start(self):
+        if not self.proc or self.proc.poll() is not None:
+            helper = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hearth-kokoro")
+            self.proc = subprocess.Popen([self.python(), helper], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                         stderr=subprocess.DEVNULL, text=True, bufsize=1)
+            threading.Thread(target=self._relay, args=(self.proc,), daemon=True).start()
+
+    def start(self):
+        with self.lock:
+            self._start()
+
     def send(self, obj):
         with self.lock:
             if not self.proc or self.proc.poll() is not None:
                 if obj.get("cmd") == "stop":
                     return
-                helper = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hearth-kokoro")
-                self.proc = subprocess.Popen([self.python(), helper], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                             stderr=subprocess.DEVNULL, text=True, bufsize=1)
-                threading.Thread(target=self._relay, args=(self.proc,), daemon=True).start()
+                self._start()
             try:
                 self.proc.stdin.write(json.dumps(obj) + "\n")
                 self.proc.stdin.flush()
@@ -299,6 +307,13 @@ class Kokoro:
 
 
 KOKORO = Kokoro()
+
+
+def prepare_speech():
+    """Start Kokoro (its model takes ~10 s to load) while the user talks."""
+    cfg = settings()
+    if cfg.get("speak") and cfg.get("ttsEngine", "kokoro") == "kokoro" and KOKORO.available():
+        KOKORO.start()
 
 
 class Speaker:
@@ -345,7 +360,7 @@ class Speaker:
             try:
                 tts = subprocess.Popen(["piper", "--model", model, "--output-raw"], stdin=subprocess.PIPE,
                                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-                play = subprocess.Popen(["pw-play", "--rate", str(rate), "--channels", "1", "--format", "s16",
+                play = subprocess.Popen(["pw-play", "--raw", "--rate", str(rate), "--channels", "1", "--format", "s16",
                                          "--media-role", "Assistant", "-"], stdin=tts.stdout,
                                         stderr=subprocess.DEVNULL)
                 with self.lock:
@@ -457,6 +472,7 @@ def main():
         cmd = req.get("cmd")
         if cmd == "listen":
             speaker.hush()
+            prepare_speech()
             listener.start()
         elif cmd == "stop":
             listener.stop_flag.set()
