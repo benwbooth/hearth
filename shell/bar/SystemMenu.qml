@@ -53,11 +53,16 @@ BarButton {
             }
             MenuSeparator {}
             MenuItem { text: "Sleep"; onTriggered: { menu.close(); Session.run("suspend"); } }
-            MenuItem { text: "Restart…"; onTriggered: { menu.close(); Session.run("reboot"); } }
-            MenuItem { text: "Shut Down…"; onTriggered: { menu.close(); Session.run("poweroff"); } }
+            MenuItem {
+                text: "Hibernate…"
+                visible: Session.canHibernate
+                onTriggered: { menu.close(); Session.request("hibernate"); }
+            }
+            MenuItem { text: "Restart…"; onTriggered: { menu.close(); Session.request("reboot"); } }
+            MenuItem { text: "Shut Down…"; onTriggered: { menu.close(); Session.request("poweroff"); } }
             MenuSeparator {}
             MenuItem { text: "Lock Screen"; shortcut: Binds.menuShortcut(/"session" "lock"/); onTriggered: { menu.close(); Session.run("lock"); } }
-            MenuItem { text: "Log Out…"; shortcut: Binds.menuShortcut(/"session" "open"/); onTriggered: { menu.close(); Session.run("logout"); } }
+            MenuItem { text: "Log Out…"; shortcut: Binds.menuShortcut(/"session" "open"/); onTriggered: { menu.close(); Session.request("logout"); } }
         }
     }
 }

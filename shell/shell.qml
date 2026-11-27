@@ -55,6 +55,7 @@ ShellRoot {
     SettingsWindow {}
     HotCorners {}
     DisplayConfirm {}
+    SessionConfirm {}
     HelpWindow {}
     SpotlightWindow {}
     LaunchpadWindow {}

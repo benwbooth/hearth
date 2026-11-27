@@ -64,7 +64,7 @@ Singleton {
         switch (p.powerButton) {
         case "sleep": Session.run("suspend"); break;
         case "lock": Session.run("lock"); break;
-        case "poweroff": Session.run("poweroff"); break;
+        case "poweroff": Session.request("poweroff"); break;
         case "displayoff": Compositor.arborAction("PowerOffMonitors", {}); break;
         case "nothing": break;
         default: Session.menu(); break;

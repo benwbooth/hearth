@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# hearth-session lock [manual|idle|sleep] [--wait]|suspend|reboot|poweroff|logout|menu
+# hearth-session lock [manual|idle|sleep] [--wait]|suspend|hibernate|reboot|poweroff|logout|menu
 #
 # One place for the session actions, used by the launcher footer, the
 # `session` IPC target and the wlogout layout (hypr/wlogout/layout).
@@ -37,6 +37,7 @@ lock)
   echo "hearth-session: hearth didn't answer, locking with hyprlock" >&2
   pidof hyprlock >/dev/null || exec hyprlock ;;
 suspend)  run systemctl suspend ;;
+hibernate) run systemctl hibernate ;;
 reboot)   run systemctl reboot ;;
 poweroff) run systemctl poweroff ;;
 logout)
@@ -62,5 +63,5 @@ menu)
   (( lr < 0 )) && lr=0; (( tb < 0 )) && tb=0
   exec wlogout -l "$here/hypr/wlogout/layout" -C "$here/hypr/wlogout/style.css" \
     -b 5 -c "$gap" -L "$lr" -R "$lr" -T "$tb" -B "$tb" -n ;;
-*) echo "usage: hearth-session lock|suspend|reboot|poweroff|logout|menu" >&2; exit 2 ;;
+*) echo "usage: hearth-session lock|suspend|hibernate|reboot|poweroff|logout|menu" >&2; exit 2 ;;
 esac
