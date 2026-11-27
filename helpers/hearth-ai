@@ -92,7 +92,7 @@ DEFAULTS = {
     # How hard reasoning models think before answering the assistant
     # ("low" | "medium" | "high" | ""): opening apps and clicking needs
     # little, and every second of thinking is a second of waiting.
-    "assistantReasoning": "low",
+    "assistantReasoning": "minimal",
     # A small model that answers first while the assistant's own model isn't
     # loaded: it loads in seconds and handles quick commands, and passes
     # anything harder to the assistant's model (hand_off).
@@ -2169,7 +2169,7 @@ class Assistant:
             if loaded:
                 # Probably cached already; a 1-token request makes sure.
                 p.chat(model, [system, user_message("")], tools, keep_minutes(cfg),
-                       cfg.get("assistantReasoning", "low") or None, max_tokens=1)
+                       cfg.get("assistantReasoning", "minimal") or None, max_tokens=1)
             else:
                 self.prime(p, model, tools, system, cfg)
             log("warmed %s%s in %.1f s" % (pid, "" if loaded else " (loaded it)", time.time() - t0))
@@ -2185,7 +2185,7 @@ class Assistant:
             return
         # The 1-token request also loads a model that's started on demand.
         p.chat(model, [system, user_message("")], tools, keep_minutes(cfg),
-               cfg.get("assistantReasoning", "low") or None, max_tokens=1)
+               cfg.get("assistantReasoning", "minimal") or None, max_tokens=1)
         prompt_slot(p, model, tools, system, "save")
 
     def ask(self, req):
@@ -2270,7 +2270,7 @@ class Assistant:
                 if rid in self.cancelled:
                     return None
                 text, calls, raw = p.chat(model, messages, tools, keep_minutes(cfg),
-                                          cfg.get("assistantReasoning", "low") or None)
+                                          cfg.get("assistantReasoning", "minimal") or None)
                 if fast and any(c["name"] == "hand_off" for c in calls):
                     why = next(c["args"].get("why", "") for c in calls if c["name"] == "hand_off")
                     log("fast model handed off: %s" % why)
