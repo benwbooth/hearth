@@ -67,8 +67,22 @@ ColumnLayout {
                 Layout.fillWidth: true
                 Label { text: "Graphics memory"; color: Theme.fgSecondary; font.pointSize: Theme.smallFontSize; Layout.fillWidth: true }
                 Label {
-                    visible: !!root.gpu && root.gpu.gttUsed > 1073741824
-                    text: root.gpu ? root.gb(root.gpu.gttUsed) + " GB spilled to RAM" : ""
+                    // Only a real spill: a loaded model with part of itself in
+                    // system RAM (slow), or a nearly full card pushing memory
+                    // out. GTT always holds a GB or two of ordinary shared
+                    // buffers (the screen's, apps' uploads): that isn't one.
+                    readonly property var spilled: root.loaded.filter(m => (m.gtt || 0) >= 268435456)
+                    readonly property string spillText: {
+                        if (!root.gpu) return "";
+                        if (spilled.length) {
+                            const gtt = spilled.reduce((a, m) => a + m.gtt, 0);
+                            return (spilled.length === 1 ? spilled[0].name : spilled.length + " models") + ": " + root.gb(gtt) + " GB spilled to RAM";
+                        }
+                        if (root.gpu.percent >= 92 && root.gpu.gttUsed > 1073741824) return root.gb(root.gpu.gttUsed) + " GB spilled to RAM";
+                        return "";
+                    }
+                    visible: spillText !== ""
+                    text: spillText
                     color: Theme.warn
                     font.pointSize: Theme.smallFontSize
                 }
