@@ -392,6 +392,66 @@ def menu_bar(rows, k=1.0, top=70):
     return []
 
 
+def _ink(w, h, rows, top):
+    """Pixels that differ clearly from their row's commonest value."""
+    m = []
+    for y in range(min(h, top)):
+        r = rows[y]
+        hist = [0] * 256
+        for v in r:
+            hist[v] += 1
+        bg = max(range(256), key=hist.__getitem__)
+        m.append([abs(v - bg) > 60 for v in r])
+    return m
+
+
+def find_burger(w, h, rows, k=1.0, top=80):
+    """A ☰ the app draws (Lapce, Lorien, Oculante: no accessibility tree):
+    three equal horizontal strokes, evenly spaced, near the window's top,
+    with nothing else drawn around them (not text, a ruler, a grid).
+    Its centre (x, y) in the capture's pixels, or None."""
+    lim = int(top * k)
+    ink = _ink(w, h, rows, lim + int(12 * k))
+    segs = []
+    for y in range(min(h, lim)):
+        r, x = ink[y], 0
+        while x < w:
+            if r[x]:
+                x0 = x
+                while x < w and r[x]:
+                    x += 1
+                segs.append((y, x0, x))
+            else:
+                x += 1
+    ss = []
+    for y, x0, x1 in segs:  # runs on consecutive rows: one stroke
+        for st in ss:
+            if st[1] == y - 1 and abs(st[2] - x0) <= 1 and abs(st[3] - x1) <= 1:
+                st[1] = y
+                break
+        else:
+            ss.append([y, y, x0, x1])
+    ss = [st for st in ss if 10 * k <= st[3] - st[2] <= 30 * k and st[1] - st[0] <= 3 * k]
+    for a in ss:
+        for b in ss:
+            if b[0] <= a[0] or abs(b[2] - a[2]) > 1 or abs(b[3] - a[3]) > 1:
+                continue
+            d = b[0] - a[0]
+            if not 3 * k <= d <= 10 * k:
+                continue
+            for c in ss:
+                if abs(c[0] - b[0] - d) > 1 or abs(c[2] - a[2]) > 1 or abs(c[3] - a[3]) > 1:
+                    continue
+                m = int(6 * k)
+                X0, X1 = max(0, a[2] - m), min(w, a[3] + m)
+                Y0, Y1 = max(0, a[0] - m), min(len(ink), c[1] + 1 + m)
+                own = {(y, x) for st in (a, b, c) for y in range(st[0], st[1] + 1) for x in range(st[2], st[3])}
+                stray = sum(ink[y][x] for y in range(Y0, Y1) for x in range(X0, X1) if (y, x) not in own)
+                if stray <= (X1 - X0) * (Y1 - Y0) * 0.03:
+                    return ((a[2] + a[3]) / 2, (a[0] + c[1]) / 2)
+    return None
+
+
 def window_size(window):
     """The window's logical size from arbor (no accessibility to ask)."""
     import json
@@ -469,8 +529,9 @@ class Session:
                 pass
 
     def bar(self):
-        """The window's drawn menu bar ([(title, (x, y))]) and the capture's
-        scale (pixels per logical pixel), or ([], 1)."""
+        """The window's drawn menu bar ([(title, (x, y))]; a drawn ☰ alone
+        is [("Menu", (x, y))]) and the capture's scale (pixels per logical
+        pixel), or ([], 1)."""
         p = self.shot()
         if not p:
             return [], 1.0
@@ -479,7 +540,14 @@ class Session:
             ws = window_size(self.window)
             k = w / ws[0] if ws and ws[0] else 1.0
             rows = ocr_rows(p, (0, 0, w, min(h, int(80 * k))))
-            return menu_bar(rows, k), k
+            bar = menu_bar(rows, k)
+            if not bar:
+                # No drawn menu bar: a drawn ☰ is a one-menu bar.
+                _, _, px = read_png(p)
+                at = find_burger(w, h, px, k)
+                if at:
+                    bar = [("Menu", at)]
+            return bar, k
         except (OSError, ValueError, zlib.error):
             return [], 1.0
         finally:
