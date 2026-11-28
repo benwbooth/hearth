@@ -1,3 +1,118 @@
 # attr	verdict (none|bar|button|dialog)	note — from strips.py contact sheets
-xfig	bar	Xaw File Edit View Snap Help, 10 px bitmap font
-lapce	button	☰ in the title bar
+CuboCore.coreterminal	none	looked 2026-11-27: no menu bar or menu button
+adlplug	button	Options button
+airshipper	none	looked 2026-11-27: no menu bar or menu button
+amdgpu_top	none	looked 2026-11-27: no menu bar or menu button
+anilibria-winmaclinux	none	looked 2026-11-27: no menu bar or menu button
+archipelago	none	looked 2026-11-27: no menu bar or menu button
+armagetronad	none	looked 2026-11-27: no menu bar or menu button
+arrow	none	looked 2026-11-27: no menu bar or menu button
+ausweisapp	none	looked 2026-11-27: no menu bar or menu button
+ausweiskopie	none	looked 2026-11-27: no menu bar or menu button
+azpainter	bar	drawn menu bar; hearth c9f0f24 reads it
+ballerburg	none	looked 2026-11-27: no menu bar or menu button
+bitbox	none	looked 2026-11-27: no menu bar or menu button
+bluejay	button	☰ button
+bonzomatic	none	looked 2026-11-27: no menu bar or menu button
+broken-sword-25	none	looked 2026-11-27: no menu bar or menu button
+caprice32	none	looked 2026-11-27: no menu bar or menu button
+cheesecutter	none	looked 2026-11-27: no menu bar or menu button
+ckan	dialog	first window is a dialog/setup
+clipqr	none	looked 2026-11-27: no menu bar or menu button
+contour	none	looked 2026-11-27: no menu bar or menu button
+coolercontrol.coolercontrol-gui	dialog	first window is a dialog/setup
+cosmic-ext-applet-minimon	none	looked 2026-11-27: no menu bar or menu button
+cosmic-ext-calculator	bar	COSMIC header View menu
+cosmic-ext-tweaks	bar	COSMIC header View menu
+cosmic-store	none	looked 2026-11-27: no menu bar or menu button
+craftos-pc	none	looked 2026-11-27: no menu bar or menu button
+crossmacro	button	☰ button
+daggerfall-unity	none	looked 2026-11-27: no menu bar or menu button
+ding	bar	drawn menu bar; hearth c9f0f24 reads it
+dirdiff	dialog	first window is a dialog/setup
+dosbox	none	looked 2026-11-27: no menu bar or menu button
+dreamweb	none	looked 2026-11-27: no menu bar or menu button
+dusklight	none	looked 2026-11-27: no menu bar or menu button
+examine	bar	COSMIC header View menu
+f3d	none	looked 2026-11-27: no menu bar or menu button
+fido2-manage	none	looked 2026-11-27: no menu bar or menu button
+galaxy-buds-client	none	looked 2026-11-27: no menu bar or menu button
+gcompris	none	looked 2026-11-27: no menu bar or menu button
+goattracker	none	looked 2026-11-27: no menu bar or menu button
+goattracker-stereo	none	looked 2026-11-27: no menu bar or menu button
+godot3	none	looked 2026-11-27: no menu bar or menu button
+godot3-mono	none	looked 2026-11-27: no menu bar or menu button
+godsvg	button	⋮ button
+helm	none	looked 2026-11-27: no menu bar or menu button
+hex-a-hop	none	looked 2026-11-27: no menu bar or menu button
+hivelytracker	none	looked 2026-11-27: no menu bar or menu button
+hyprpwcenter	none	looked 2026-11-27: no menu bar or menu button
+idescriptor	none	looked 2026-11-27: no menu bar or menu button
+jellyfin-mpv-shim	dialog	first window is a dialog/setup
+kdePackages.kapptemplate	none	looked 2026-11-27: no menu bar or menu button
+kdePackages.kdeconnect-kde	none	looked 2026-11-27: no menu bar or menu button
+kdePackages.klevernotes	none	looked 2026-11-27: no menu bar or menu button
+kdePackages.plasma-dialer	none	looked 2026-11-27: no menu bar or menu button
+kdePackages.plasma-phonebook	none	looked 2026-11-27: no menu bar or menu button
+kdePackages.qrca	none	looked 2026-11-27: no menu bar or menu button
+labelle	none	looked 2026-11-27: no menu bar or menu button
+lapce	button	☰ button
+libation	dialog	first window is a dialog/setup
+liberation-circuit	none	looked 2026-11-27: no menu bar or menu button
+librepods	none	looked 2026-11-27: no menu bar or menu button
+liquidwar	none	looked 2026-11-27: no menu bar or menu button
+lomiri-qt6.morph-browser	none	looked 2026-11-27: no menu bar or menu button
+lomiri.lomiri-calendar-app	none	looked 2026-11-27: no menu bar or menu button
+lomiri.lomiri-docviewer-app	none	looked 2026-11-27: no menu bar or menu button
+lomiri.lomiri-filemanager-app	none	looked 2026-11-27: no menu bar or menu button
+lorien	button	☰ button
+ludusavi	none	looked 2026-11-27: no menu bar or menu button
+luppp	none	looked 2026-11-27: no menu bar or menu button
+mame	none	looked 2026-11-27: no menu bar or menu button
+marble-marcher-ce	none	looked 2026-11-27: no menu bar or menu button
+material-maker	bar	drawn menu bar; hearth c9f0f24 reads it
+mcpelauncher-ui-qt	dialog	first window is a dialog/setup
+mindustry	none	looked 2026-11-27: no menu bar or menu button
+mlterm	none	looked 2026-11-27: no menu bar or menu button
+mozillavpn	none	looked 2026-11-27: no menu bar or menu button
+neothesia	none	looked 2026-11-27: no menu bar or menu button
+new-session-manager	none	looked 2026-11-27: no menu bar or menu button
+nexuiz	none	looked 2026-11-27: no menu bar or menu button
+ocelot-desktop	bar	drawn menu bar; hearth c9f0f24 reads it
+oculante	button	☰ button
+open-music-kontrollers.patchmatrix	none	looked 2026-11-27: no menu bar or menu button
+open-scq30	none	looked 2026-11-27: no menu bar or menu button
+openboardview	bar	drawn menu bar; hearth c9f0f24 reads it
+opensurge	none	looked 2026-11-27: no menu bar or menu button
+opnplug	button	Options button
+orthorobot	none	looked 2026-11-27: no menu bar or menu button
+picocrypt	none	looked 2026-11-27: no menu bar or menu button
+pixelorama	bar	drawn menu bar; hearth c9f0f24 reads it
+plex-htpc	none	looked 2026-11-27: no menu bar or menu button
+riseup-vpn	none	looked 2026-11-27: no menu bar or menu button
+rpi-imager	none	looked 2026-11-27: no menu bar or menu button
+rymdport	none	looked 2026-11-27: no menu bar or menu button
+sameboy	none	looked 2026-11-27: no menu bar or menu button
+serial-studio	none	looked 2026-11-27: no menu bar or menu button
+sniffnet	none	looked 2026-11-27: no menu bar or menu button
+srb2	none	looked 2026-11-27: no menu bar or menu button
+srb2kart	none	looked 2026-11-27: no menu bar or menu button
+st-snazzy	none	looked 2026-11-27: no menu bar or menu button
+tev	none	looked 2026-11-27: no menu bar or menu button
+tkman	dialog	first window is a dialog/setup
+tracy	none	looked 2026-11-27: no menu bar or menu button
+transito	none	looked 2026-11-27: no menu bar or menu button
+trayscale	button	☰ button
+utox	none	looked 2026-11-27: no menu bar or menu button
+veloren	none	looked 2026-11-27: no menu bar or menu button
+vidcutter	none	looked 2026-11-27: no menu bar or menu button
+vnote	dialog	first window is a dialog/setup
+wayst	none	looked 2026-11-27: no menu bar or menu button
+whatsie	none	looked 2026-11-27: no menu bar or menu button
+wiliwili	none	looked 2026-11-27: no menu bar or menu button
+xcruiser	none	looked 2026-11-27: no menu bar or menu button
+xephem	bar	Xt/Motif bar in a small bitmap font
+xfig	bar	Xt/Motif bar in a small bitmap font
+xmoji	none	looked 2026-11-27: no menu bar or menu button
+xterm	none	looked 2026-11-27: no menu bar or menu button
+zsnes	none	looked 2026-11-27: no menu bar or menu button
