@@ -2085,7 +2085,11 @@ class OcrBar:
     the window before it); an item chosen by clicking where it was read,
     after checking that line still says the same."""
 
-    NONE = set()  # app binaries whose windows showed no drawn menu bar
+    # Windows that showed no drawn menu bar (by window, not program: .NET
+    # apps all run the one dotnet binary, X11 apps without _NET_WM_PID
+    # answer with xwayland-satellite's pid; one dialog with no bar once
+    # switched off screen reading for every one of them: ILSpy).
+    NONE = set()
 
     def __init__(self, owner):
         self.o = owner
@@ -2094,8 +2098,8 @@ class OcrBar:
 
     def detect(self, remember=True):
         import hearth_ocr_menu as om
-        exe = self.o.exe()
-        if exe and exe in OcrBar.NONE:
+        exe = f"{self.o.exe()}\0{self.o.window}"
+        if exe in OcrBar.NONE:
             return False
         ses = om.Session(self.o.window)
         try:
@@ -2103,7 +2107,7 @@ class OcrBar:
         finally:
             ses.close()
         self.titles = [(t, (x / k, y / k)) for t, (x, y) in bar]
-        if not self.titles and exe and remember:
+        if not self.titles and remember:
             OcrBar.NONE.add(exe)
         return bool(self.titles)
 
