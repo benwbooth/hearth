@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Services.SystemTray
 import "../widgets"
 import "../services"
 import ".."
@@ -70,8 +71,25 @@ MouseArea {
     Timer { id: launchTimeout; interval: 6000; onTriggered: task.launching = false }
 
     // Left click: launch, focus, minimize, or cycle through windows.
+    // An app running with no window (closed to its tray icon: BlueBubbles,
+    // 2026-11-28) comes back through that icon, like clicking it in the menu
+    // bar; launching it again only reached the running copy, which kept its
+    // window hidden. Matched by the icon's id, title or icon name against
+    // the app's desktop entry id and name.
+    function trayItem() {
+        const norm = s => String(s || "").toLowerCase().replace(/\.desktop$/, "").replace(/^image:\/\/icon\//, "");
+        const keys = [entry && entry.id, entry && entry.name, modelData.key].map(norm).filter(k => k);
+        if (!keys.length) return null;
+        return SystemTray.items.values.find(i =>
+            [i.id, i.title, i.icon].map(norm).some(v => v && keys.some(k => v === k || v === k.split(".").pop()))) || null;
+    }
     function trigger() {
-        if (!running) { launch(); return; }
+        if (!running) {
+            const tray = trayItem();
+            if (tray) { tray.activate(); return; }
+            launch();
+            return;
+        }
         if (windows.length === 1) {
             const w = windows[0];
             if (w.activated) Compositor.minimizeToplevel(w);
