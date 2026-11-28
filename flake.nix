@@ -28,6 +28,7 @@
       patches = (old.patches or [ ]) ++ [
         ./nix/quickshell-child-reconnect.patch
         ./nix/quickshell-screencopy-output.patch
+        ./nix/quickshell-toplevel-capture-gone.patch
       ];
     });
 

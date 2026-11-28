@@ -1,0 +1,18 @@
+--- a/src/wayland/screencopy/hyprland_screencopy/hyprland_screencopy.cpp	2026-11-28 08:18:48.557474913 -0800
++++ b/src/wayland/screencopy/hyprland_screencopy/hyprland_screencopy.cpp	2026-11-28 08:18:48.587979739 -0800
+@@ -64,6 +64,15 @@
+ void HyprlandScreencopyContext::captureFrame() {
+ 	if (this->object()) return;
+ 
++	// The window just went away (its handle's wayland object is gone): sending
++	// a null handle is a fatal protocol marshalling error that took the whole
++	// shell's connection down (hearth, a dock preview of a closing window).
++	if (!this->handle->object()) {
++		qCWarning(logScreencopy) << "Toplevel gone before capture. Stopping" << this;
++		emit this->stopped();
++		return;
++	}
++
+ 	this->request.reset();
+ 
+ 	this->init(this->manager->capture_toplevel_with_wlr_toplevel_handle(
