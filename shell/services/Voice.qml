@@ -214,13 +214,30 @@ Singleton {
     property bool readingSelection: false
     property string selectionText: ""
     function speakSelection() {
-        if (root.speaking || selectionReader.running) { root.readingSelection = false; hush(); root.speaking = false; return; }
+        if (root.speaking || selectionReader.running) { root.readingSelection = false; hush(); root.speaking = false; closeSpeakNote(); return; }
         selectionReader.running = true;
     }
-    function speakNote(summary, body) {
+    // `stay`: until closeSpeakNote() (the "Speaking selected text" note stays up while the
+    // voice reads, and goes when it finishes or is stopped); otherwise 5 s.
+    function speakNote(summary, body, stay) {
         // Replaces the previous one (same tag) and leaves no history entry.
-        Quickshell.execDetached(["notify-send", "-a", "Speak Selection", "-i", "audio-speakers", "-e", "-t", "5000",
+        Quickshell.execDetached(["notify-send", "-a", "Speak Selection", "-i", "audio-speakers", "-e", "-t", stay ? "0" : "5000",
             "-h", "string:x-canonical-private-synchronous:hearth-speak-selection", summary, body]);
+    }
+    function closeSpeakNote() {
+        for (const n of Notifications.all.slice())
+            if (n && n.appName === "Speak Selection") Notifications.dismiss(n);
+        // Again shortly: notify-send runs apart, so after a very short text the note can
+        // arrive after the speech ended (and would then stay).
+        if (!speakNoteRecheck.running) speakNoteRecheck.restart();
+    }
+    Timer {
+        id: speakNoteRecheck
+        interval: 800
+        onTriggered: if (!root.readingSelection) {
+            for (const n of Notifications.all.slice())
+                if (n && n.appName === "Speak Selection" && String(n.summary).startsWith("Speaking")) Notifications.dismiss(n);
+        }
     }
     Process {
         id: selectionReader
@@ -282,6 +299,7 @@ Singleton {
         case "speaking":
             root.speaking = m.on;
             if (!m.on) {
+                if (root.readingSelection) root.closeSpeakNote();
                 root.readingSelection = false;
                 if (!m.stopped) root.followUp();
             }
@@ -289,7 +307,7 @@ Singleton {
         case "talking":
             if (root.readingSelection) {
                 const t = root.selectionText.replace(/\s+/g, " ");
-                root.speakNote("Speaking selected text", (t.length > 120 ? t.slice(0, 117) + "…" : t) + "\nPress the key again to stop.");
+                root.speakNote("Speaking selected text", (t.length > 120 ? t.slice(0, 117) + "…" : t) + "\nPress the key again to stop.", true);
             }
             break;
         case "voices": root.voices = m; break;
