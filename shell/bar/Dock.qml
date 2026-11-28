@@ -438,12 +438,14 @@ PanelWindow {
     }
     // arbor restarted in place (this shell survives through its Wayland
     // proxy): the new arbor starts with no slots, so send them again once
-    // the event stream is back (and the window list with it).
+    // it starts the event stream (and the window list with it). Not on the
+    // stream reconnecting: the proxy carries it over a swap without a break.
+    // Windows keep their ids across a swap, so the targets come out the same
+    // and the sentTargets check would skip them: forget what was sent.
     Connections {
-        target: Compositor.backend
+        target: Compositor
         ignoreUnknownSignals: true
-        function onStreamingChanged() {
-            if (!Compositor.backend.streaming) return;
+        function onCompositorStarted() {
             dockWin.sentTargets = "";
             resendTimer.restart();
         }
