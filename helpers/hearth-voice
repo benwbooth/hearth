@@ -18,6 +18,7 @@ Speak replies is on and a voice is downloaded.
          {"type": "level", "level": 0.0-1.0}       (about 25 a second)
          {"type": "partial", "text": "..."}  {"type": "final", "text": "..."}
          {"type": "error", "message": "..."} {"type": "speaking", "on": true}
+         {"type": "talking"} (the first sound plays) {"type": "speaking", "on": false, "stopped": true}
          {"type": "voices", "installed": [...], "available": [...]}
 
 HEARTH_VOICE_INPUT=file.wav replaces the microphone (tests).
@@ -293,7 +294,7 @@ class Kokoro:
                 continue
             t = m.get("type")
             if t == "start":
-                emit({"type": "speaking", "on": True})
+                emit({"type": "talking"})
             elif t == "done":
                 emit({"type": "speaking", "on": False})
             elif t == "error":
@@ -339,8 +340,14 @@ class Speaker:
         self.procs = []
         self.lock = threading.Lock()
 
-    def hush(self):
+    def hush(self, quiet=False):
         KOKORO.send({"cmd": "stop"})
+        # Kokoro says nothing more about a reply it was told to stop, so say
+        # it here ("stopped": not a reply that ended, no follow-up listening).
+        # Without this the shell thought it was still speaking, and every
+        # later press of the speak key only stopped again.
+        if not quiet:
+            emit({"type": "speaking", "on": False, "stopped": True})
         with self.lock:
             for p in self.procs:
                 try:
@@ -350,9 +357,12 @@ class Speaker:
             self.procs = []
 
     def speak(self, text):
-        self.hush()
+        self.hush(quiet=True)
         cfg = settings()
         if cfg.get("ttsEngine", "kokoro") == "kokoro" and KOKORO.available():
+            # Speaking from now (the model may still be loading): pressing the
+            # key again stops it. "talking" follows with the first sound.
+            emit({"type": "speaking", "on": True})
             KOKORO.send({"text": text, "voice": cfg.get("kokoroVoice") or "af_heart"})
             return
         voice = cfg["piperVoice"]

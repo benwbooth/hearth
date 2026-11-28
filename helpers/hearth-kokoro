@@ -5,7 +5,7 @@ Runs on the CPU (PyTorch, a few threads): about 4x faster than real time
 on a desktop CPU, no graphics memory, so it never competes with the
 language model and Whisper for VRAM. Stays running so the model loads
 once; each reply is spoken sentence by sentence, so the first words play
-while the rest is still being made.
+while the rest is still being made ("start" comes with the first sound).
 
 Started by hearth-voice with the Kokoro Python environment
 ($HEARTH_KOKORO_PYTHON). JSON lines:
@@ -27,6 +27,10 @@ os.environ["HIP_VISIBLE_DEVICES"] = "-1"
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 RATE = 24000
+# Where text is cut into pieces that are made and played one after another:
+# after a sentence's end (., !, ?, …, : or ; followed by a space) and at
+# line breaks.
+SPLIT = r"(?<=[.!?…:;])[\"')\]]*\s+|\n+"
 
 
 def emit(obj):
@@ -98,11 +102,18 @@ def main():
                     play.kill()
                     continue
                 current["play"] = play
-            emit({"type": "start"})
-            for _gs, _ps, audio in pipe(req["text"], voice=voice, speed=float(req.get("speed") or 1.0)):
+            started = False
+            # Sentence by sentence (Kokoro's own default splits only at line
+            # breaks: a long paragraph was made whole before a word played).
+            for _gs, _ps, audio in pipe(req["text"], voice=voice, speed=float(req.get("speed") or 1.0),
+                                        split_pattern=SPLIT):
                 if gen != current["gen"]:
                     break
                 a = audio.numpy() if hasattr(audio, "numpy") else np.asarray(audio)
+                if not started:
+                    # "start" = the first sound is about to play.
+                    started = True
+                    emit({"type": "start"})
                 try:
                     play.stdin.write((np.clip(a, -1, 1) * 32767).astype(np.int16).tobytes())
                     play.stdin.flush()

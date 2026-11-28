@@ -209,15 +209,32 @@ Singleton {
     // selected in any app (the primary selection, the middle-click one: just
     // select, no copying), aloud in Settings > Voice's voice (Kokoro or
     // Piper). Pressed again while speaking: stops.
+    // Also F13 (a spare key: a Kinesis Game Bank key, via keystone). A
+    // notification says when the voice starts.
+    property bool readingSelection: false
+    property string selectionText: ""
     function speakSelection() {
-        if (root.speaking) { hush(); return; }
+        if (root.speaking || selectionReader.running) { root.readingSelection = false; hush(); root.speaking = false; return; }
         selectionReader.running = true;
+    }
+    function speakNote(summary, body) {
+        // Replaces the previous one (same tag) and leaves no history entry.
+        Quickshell.execDetached(["notify-send", "-a", "Speak Selection", "-i", "audio-speakers", "-e", "-t", "5000",
+            "-h", "string:x-canonical-private-synchronous:hearth-speak-selection", summary, body]);
     }
     Process {
         id: selectionReader
         command: ["wl-paste", "--primary", "--no-newline", "--type", "text"]
         stdout: StdioCollector {
-            onStreamFinished: { const t = text.trim(); if (t) root.speak(t); }
+            onStreamFinished: {
+                const t = text.trim();
+                if (!t) { root.speakNote("Nothing selected", "Select some text, then press the key again."); return; }
+                root.selectionText = t;
+                root.readingSelection = true;
+                // At once, so a second press stops it even while the voice loads.
+                root.speaking = true;
+                root.speak(t);
+            }
         }
     }
 
@@ -264,7 +281,16 @@ Singleton {
             break;
         case "speaking":
             root.speaking = m.on;
-            if (!m.on) root.followUp();
+            if (!m.on) {
+                root.readingSelection = false;
+                if (!m.stopped) root.followUp();
+            }
+            break;
+        case "talking":
+            if (root.readingSelection) {
+                const t = root.selectionText.replace(/\s+/g, " ");
+                root.speakNote("Speaking selected text", (t.length > 120 ? t.slice(0, 117) + "…" : t) + "\nPress the key again to stop.");
+            }
             break;
         case "voices": root.voices = m; break;
         case "download":
