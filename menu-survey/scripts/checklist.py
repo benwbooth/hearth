@@ -48,6 +48,22 @@ COLS = ["rank", "attr", "source", "toolkit", "pop", "measured", "route", "soluti
 AUTO = {"", "todo", "retest", "partial", "none-needed", "blocked"}  # statuses the measurements may overwrite
 
 
+def load_exec_results():
+    """Per app, the result of its build/exec row when the probe never ran
+    it (terminal-only, no-entry, not-prebuilt, install-failed)."""
+    import glob, json
+    res = {}
+    for fn in sorted(glob.glob(os.path.join(ROOT, "data", "probe*.jsonl"))):
+        for l in open(fn):
+            try:
+                j = json.loads(l)
+            except ValueError:
+                continue
+            if j.get("variant") in ("build", "exec"):
+                res[j["attr"]] = j.get("result") or ""
+    return res
+
+
 def load_build_errors():
     """Latest build/exec row's error per app (why it wasn't run)."""
     import glob, json
@@ -307,6 +323,7 @@ def rebuild():
     db.row_factory = sqlite3.Row
     rows = [machine_row(r) for r in db.execute("select * from results order by rank")]
     probes = load_probes()
+    execs = load_exec_results()
     looked = load_looked()
     berrs = load_build_errors()
     cats = app_categories()
@@ -326,6 +343,18 @@ def rebuild():
                     # Evaluating /etc/nixos failed at that moment (a config
                     # mid-edit): the harness's, not the app's. Measure again.
                     r["status"], r["gap"] = "retest", ""
+            if r["status"] == "retest" and r["measured"] == "untested" and r["attr"] in execs:
+                # Never run, for a reason that stays: build_db only knows runs.
+                x = execs[r["attr"]]
+                if x == "terminal-only":
+                    r["status"], r["solution"], r["gap"] = "none-needed", "none-needed:terminal", ""
+                elif x == "no-entry":
+                    # No desktop entry found in the output built: most are
+                    # real apps (XnView MP, Snes9x) the probe must start
+                    # some other way.
+                    r["gap"] = "harness-no-entry"
+                elif x in ("not-prebuilt", "install-failed"):
+                    r["status"], r["gap"] = "blocked", "blocked:" + x
             if r["gap"] == "no-a11y:sdl-glfw" or (r["gap"].startswith(("no-a11y:", "flatpak-no-a11y"))
                                                   and is_game(cats.get(r["attr"], set()))):
                 # Games (SDL/GLFW/own engine, or Categories=Game with no a11y): their menus are

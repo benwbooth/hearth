@@ -1461,7 +1461,15 @@ def probe_store(attr, outs, err):
             break
     argv, did = desktop_exec(out)
     if not argv:
-        return [dict(attr=attr, variant="exec", result="no-entry", store=out)]
+        # No desktop file at all (XnView MP, Wire, VisualVM ship only
+        # bin/): the program named like the package, or its only one.
+        bins = sorted(b for o in outs for b in glob.glob(os.path.join(o, "bin", "*")) if os.access(b, os.X_OK))
+        pname = re.sub(r"-\d.*$", "", os.path.basename(out).split("-", 1)[-1]).lower()
+        named = [b for b in bins if os.path.basename(b).lower() in (pname, attr.split(".")[-1].lower())]
+        pick = named[:1] or (bins if len(bins) == 1 else [])
+        if not pick:
+            return [dict(attr=attr, variant="exec", result="no-entry", store=out)]
+        argv, did = pick, ""
     return probe_argv(attr, argv, toolkit_of(attr), dict(store=out, desktop=did))
 
 
