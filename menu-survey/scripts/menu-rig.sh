@@ -44,11 +44,22 @@ priv_env() {
   unset DISPLAY
   # Never the real session's arbor: a rig process that inherited its socket
   # once powered off the real monitors (2026-11-24).
-  unset ARBOR_SOCKET NIRI_SOCKET
+  unset ARBOR_SOCKET NIRI_SOCKET WAYLAND_DISPLAY WAYLAND_SOCKET
   [[ -s $R/arbor.env ]] && { export WAYLAND_DISPLAY=$(grep ^WAYLAND_DISPLAY= "$R/arbor.env" | cut -d= -f2-)
     export ARBOR_SOCKET=$(grep -E '^(ARBOR|NIRI)_SOCKET=' "$R/arbor.env" | head -1 | cut -d= -f2-)
     export NIRI_SOCKET=$ARBOR_SOCKET; }
   return 0
+}
+require_rig() {
+  # A command for the rig while it's down must fail, never fall through to
+  # the real session: with no arbor.env, a test app once opened on Ben's
+  # desktop and `arbor msg` listed his windows (2026-11-28).
+  local sock
+  sock=$({ grep -E '^(ARBOR|NIRI)_SOCKET=' "$R/arbor.env" 2>/dev/null || true; } | head -1 | cut -d= -f2-)
+  if [[ -z $sock || ! -S $sock || ! -s $R/bus ]] || ! grep -q '^WAYLAND_DISPLAY=.' "$R/arbor.env"; then
+    echo "menu-rig: rig $R is not running (no arbor socket or bus); refusing" >&2
+    exit 3
+  fi
 }
 hearth_pid() { # this rig's hearth (hearth-shell execs quickshell), never another rig's
   local p; p=$(cat "$R/hearth.pid" 2>/dev/null); [[ -n $p ]] && kill -0 "$p" 2>/dev/null && { echo "$p"; return; }
@@ -179,16 +190,16 @@ PY
   sleep 4
   echo "rig up: WAYLAND_DISPLAY=$WAYLAND_DISPLAY bus=$DBUS_SESSION_BUS_ADDRESS hearth pid=$(hearth_pid)"
   ;;
-env) priv_env; env | grep -E '^(DBUS_SESSION_BUS_ADDRESS|GSETTINGS_BACKEND|HOME|XDG_[A-Z_]*HOME|XDG_CURRENT_DESKTOP|QT_QPA_[A-Z]*|WAYLAND_DISPLAY|ARBOR_SOCKET|NIRI_SOCKET)=' | sed 's/^/export /' ;;
-run) priv_env
+env) require_rig; priv_env; env | grep -E '^(DBUS_SESSION_BUS_ADDRESS|GSETTINGS_BACKEND|HOME|XDG_[A-Z_]*HOME|XDG_CURRENT_DESKTOP|QT_QPA_[A-Z]*|WAYLAND_DISPLAY|ARBOR_SOCKET|NIRI_SOCKET)=' | sed 's/^/export /' ;;
+run) require_rig; priv_env
   # Apps get their own runtime and temp dirs, so single-instance sockets and
   # lock files never meet the live session's (or another session's) copy.
   mkdir -p -m 700 "$R/run" "$D/tmp"
   export WAYLAND_DISPLAY=$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY XDG_RUNTIME_DIR=$R/run TMPDIR=$D/tmp
   exec "$@" ;;
-dump) priv_env; exec "$QS" ipc --pid "$(hearth_pid)" call appmenu dump ;;
-ipc) priv_env; exec "$QS" ipc --pid "$(hearth_pid)" "$@" ;;
-busctl) priv_env; exec busctl --user "$@" ;;
+dump) require_rig; priv_env; exec "$QS" ipc --pid "$(hearth_pid)" call appmenu dump ;;
+ipc) require_rig; priv_env; exec "$QS" ipc --pid "$(hearth_pid)" "$@" ;;
+busctl) require_rig; priv_env; exec busctl --user "$@" ;;
 kill) # kill NAME: only processes on this rig's private bus
   for pid in $(pgrep -x "${1:?process name}"); do
     { tr '\0' '\n' < /proc/$pid/environ; } 2>/dev/null | grep -qx "DBUS_SESSION_BUS_ADDRESS=unix:path=$R/bus.sock" && kill "$pid" && echo "killed $pid"
