@@ -40,6 +40,15 @@ Row {
         return ToplevelManager.toplevels.values.filter(t => t.appId === appId);
     }
     property bool anyOpen: false
+    // The user is in the global menu (its bar under the pointer, or one of
+    // its menus open): the only time hearth opens an app's own menus to read
+    // them (AppMenu.setEngaged; the reader freezes the window's picture,
+    // arbor ProbeWindow), since then they aren't using the app itself.
+    HoverHandler { id: barHover }
+    readonly property bool engaged: barHover.hovered || anyOpen
+    readonly property string engageKey: "bar" + Math.random()
+    onEngagedChanged: AppMenu.setEngaged(engageKey, engaged)
+    Component.onDestruction: AppMenu.setEngaged(engageKey, false)
     // Room for the titles (MenuBar): titles past it are hidden.
     property real maxWidth: Infinity
     // Whether the first n titles after the app name (the app's menus, then

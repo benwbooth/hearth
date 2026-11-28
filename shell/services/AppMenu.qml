@@ -165,6 +165,17 @@ Singleton {
     signal openRequested(string label)
 
     function send(obj) { if (proc.running) proc.write(JSON.stringify(obj) + "\n"); }
+    // The user is in the global menu on some screen (GlobalMenu.engaged):
+    // the helper's accessibility reader opens an app's menus only then.
+    property var engagedBy: ({})
+    readonly property bool engaged: Object.keys(engagedBy).some(k => engagedBy[k])
+    function setEngaged(who, on) {
+        if (!!engagedBy[who] === on) return;
+        const e = Object.assign({}, engagedBy);
+        if (on) e[who] = true; else delete e[who];
+        engagedBy = e;
+    }
+    onEngagedChanged: send({ cmd: "engaged", on: engaged })
     // While the bar shows a remembered menu (`current` false: the app's
     // own is still on its way), its ids are from an earlier run: opening a
     // submenu only shows the remembered items, and a click is replayed by
@@ -241,6 +252,9 @@ Singleton {
             root.openRequested(label);
             return "ok";
         }
+        // `hearth-ipc call appmenu engage true`: as if the pointer were on the
+        // global menu bar (tests: reads that wait for it run).
+        function engage(on: bool): void { root.setEngaged("ipc", on); }
         function dump(): string { return JSON.stringify({ key: root.key, request: root.request, own: root.ownRequest, forced: root.forced, registrar: root.registrarOwned, appMenu: root.gtkAppMenu,
             // The window's menus once, merged with the extra ones (MPRIS,
             // harvested shortcuts). Sending `menu` and the merged tree both
@@ -285,7 +299,7 @@ Singleton {
         command: ["hearth-appmenu"]
         running: root.enabled
         stdinEnabled: true
-        onStarted: root.sync()
+        onStarted: { root.sync(); if (root.engaged) root.send({ cmd: "engaged", on: true }); }
         stdout: SplitParser {
             onRead: line => {
                 let m;

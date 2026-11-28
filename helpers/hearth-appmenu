@@ -2493,6 +2493,11 @@ def handle(line):
             current.close(int(c["id"]))
         elif current and cmd == "click":
             current.click(int(c["id"]))
+        elif cmd == "engaged":
+            # The user is in the global menu (shell AppMenu.engaged): the
+            # accessibility reader may open the app's menus to read them now.
+            if AtspiWorker.proc is not None and AtspiWorker.proc.poll() is None:
+                AtspiWorker.send({"cmd": "engaged", "on": bool(c.get("on"))})
     except Exception as e:
         err(e)
 

@@ -1,7 +1,10 @@
 self:
 # The ChatGPT/Codex desktop app on Wayland with the Secret Service
-# (electron.nix says why). Its menus are exported, so no global-menu
-# flags. No package in nixpkgs that matches: pass one.
+# (electron.nix says why). It exports no window menu (only its tray icon's):
+# its menu is drawn in the page and read over AT-SPI (wrapWayland's
+# global-menu flags), opened unseen while the user is in the global menu
+# (arbor ProbeWindow freezes the window's picture). No package in nixpkgs
+# that matches: pass one.
 { lib, pkgs, ... }@args:
 let e = import ./electron.nix self { inherit lib pkgs; }; in
 e.mkApp {

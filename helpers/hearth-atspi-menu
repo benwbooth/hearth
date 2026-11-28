@@ -405,23 +405,18 @@ class AtspiMenu:
             except Exception as e:
                 err(f"AT-SPI: {e}")
         if found:
-            if self.kind == "burger" and not self.burger and not self.tree_read \
-                    and not self.DRAWER.search(self.trigger.get_name() or ""):
-                # A ☰ never read (no cache for this app yet): read it now,
-                # unseen, and show its menus once read, never a "Menu" with
-                # only "…" first (Spotify: Menu, then File… Help a moment
-                # later). A drawer opens in the window, where the probe
-                # can't hide it: that one waits for the menu to be opened.
-                self.busy = True
-                self.probe(True)
-                try:
-                    self.learn_burger()
-                except Exception as e:
-                    err(f"AT-SPI: reading the ☰: {e}")
-                finally:
-                    self.probe(False)
-                    self.busy = False
-                self.refreshed = time.monotonic()
+            if self.kind == "burger" and not self.burger and not self.tree_read:
+                # A ☰ never read (no cache for this app yet): read it unseen
+                # (arbor ProbeWindow freezes the window's picture), and show
+                # its menus once read, never a "Menu" with only "…" first
+                # (Spotify: Menu, then File… Help a moment later). Only
+                # while the user is in the global menu (ENGAGED): then they
+                # aren't using the app, so nothing they do lands in the menu
+                # we opened. Otherwise when they next are (engaged()).
+                if ENGAGED:
+                    self.learn_now()
+                else:
+                    self.learn_pending = True
             self.emit()
             if self.kind == "burger" and self.window and self.only_actions():
                 # All the tree shows is a toolbar or a page's buttons (an
@@ -1335,6 +1330,26 @@ class AtspiMenu:
                 continue
         return res
 
+    def learn_now(self):
+        """Read the whole ☰ now, unseen (see the focus-time read)."""
+        self.learn_pending = False
+        self.busy = True
+        self.probe(True)
+        try:
+            self.learn_burger()
+        except Exception as e:
+            err(f"AT-SPI: reading the ☰: {e}")
+        finally:
+            self.probe(False)
+            self.busy = False
+        self.refreshed = time.monotonic()
+
+    def engaged(self):
+        """The user is in the global menu: a read that waited for it runs."""
+        if getattr(self, "learn_pending", False) and not self.busy and self.alive:
+            self.learn_now()
+            self.emit()
+
     def open_burger(self):
         """Click the ☰ and wait for its popup. A button that keeps its own
         open/closed state (Claude Desktop's) still thinks it is open after
@@ -1461,10 +1476,9 @@ class AtspiMenu:
                 self.emit()  # at once, from the cache
                 # Then read again, unseen (arbor ProbeWindow), so items the
                 # app changed (recent files, toggles) show while it's open;
-                # at most every 10 s.
-                # (Not a drawer: it's part of the window, the probe can't
-                # hide it opening; its cache is renewed when a click misses.)
-                if time.monotonic() - self.refreshed > 10 and (self.refreshed == 0 or not (self.burger or {}).get("drawer")):
+                # at most every 10 s. (A drawer too: it opens in the window,
+                # which the probe freezes on screen.)
+                if time.monotonic() - self.refreshed > 10:
                     self.refreshed = time.monotonic()
                     self.busy = True
                     self.probe(True)
@@ -1504,9 +1518,11 @@ class AtspiMenu:
         self.emit()
 
     def probe(self, on):
-        """arbor ProbeWindow around a read that opens the app's menu: its
-        popups aren't drawn and don't take the keyboard, so the read is
-        unseen. (An older arbor ignores it: the menu flashes as before.)"""
+        """arbor ProbeWindow around a read that opens the app's menu: the
+        screen shows the window frozen as it was, without its popups, and
+        they don't take the keyboard, so the read is unseen. Kept short:
+        only while the user is in the global menu, ended as soon as the read
+        or the click is done. (An older arbor ignores it: the menu flashes.)"""
         if self.window:
             arbor("probe-window", "--id", str(self.window), "--seconds", "3" if on else "0")
 
@@ -2012,9 +2028,11 @@ class AtspiMenu:
         path = self.paths.get(nid)
         if self.kind == "ocrbar" and path and not self.busy:
             self.busy = True
+            self.probe(True)
             try:
                 self.ocrbar.click(path)
             finally:
+                self.probe(False)
                 self.busy = False
             return
         if os.environ.get("HEARTH_OCR_DEBUG"):
@@ -2035,9 +2053,11 @@ class AtspiMenu:
             return
         if self.kind == "burger" and (self.burger or {}).get("ocr"):
             self.busy = True
+            self.probe(True)
             try:
                 self.click_ocr(nid)
             finally:
+                self.probe(False)
                 self.busy = False
             return
         if self.kind == "burger" and (self.burger or {}).get("drawer"):
@@ -2045,13 +2065,18 @@ class AtspiMenu:
                          if k["id"] == nid), None)
             if want:
                 self.busy = True
+                self.probe(True)
                 try:
                     if not self.click_drawer(want):
                         self.forget_tree()
                 finally:
+                    self.probe(False)
                     self.busy = False
             return
+        # (Opening the menus down to the item happens unseen; the probe ends
+        # right after the press, so what the item does shows at once.)
         self.busy = True
+        self.probe(True)
         try:
             want = None
             for k in self.cache.get(tuple(path[:-1]), []):
@@ -2074,6 +2099,7 @@ class AtspiMenu:
             self.press(c)
             self.burger_open = False  # choosing an item closes the menu
         finally:
+            self.probe(False)
             self.busy = False
 
 
@@ -2222,9 +2248,18 @@ def handle(line):
             current.open(int(c["id"]))
         elif current and cmd == "click":
             current.click(int(c["id"]))
+        elif cmd == "engaged":
+            global ENGAGED
+            ENGAGED = bool(c.get("on"))
+            if ENGAGED and current:
+                current.engaged()
     except Exception as e:
         err(e)
 
+
+# The user is in the global menu (its bar under the pointer, or one of its
+# menus open): the only time reads open the app's menus (see AtspiMenu).
+ENGAGED = False
 
 timers = []  # (when, fn)
 
