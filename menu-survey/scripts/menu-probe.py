@@ -800,7 +800,10 @@ def attempt(attr, argv, variant, extra_env, extra_args, wait_win=50, wait_menu=1
                             cwd=env["HOME"])  # apps drop logs/configs in their cwd
     t0 = time.time()
     win = None
-    while time.time() - t0 < wait_win:
+    # Up to wait_win, longer (to 150 s) while the app is still running: a
+    # .NET/Avalonia app's first start in a fresh home, at idle CPU beside
+    # the other workers, took over 50 s (OpenUtau, PixiEditor, ILSpy).
+    while time.time() - t0 < wait_win or (proc.poll() is None and time.time() - t0 < 150):
         if "flatpak" in " ".join(argv[:6]):
             throttle_flatpak_scopes()
         ws = [w for w in windows() if w["id"] not in before and w.get("app_id") != "org.quickshell"]
