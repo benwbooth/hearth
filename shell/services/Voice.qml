@@ -205,6 +205,22 @@ Singleton {
     function speak(text) { send({ cmd: "speak", text: text }); }
     function hush() { send({ cmd: "hush" }); }
 
+    // Speak selected text (Alt+Esc, like macOS's Option+Esc): reads what's
+    // selected in any app (the primary selection, the middle-click one: just
+    // select, no copying), aloud in Settings > Voice's voice (Kokoro or
+    // Piper). Pressed again while speaking: stops.
+    function speakSelection() {
+        if (root.speaking) { hush(); return; }
+        selectionReader.running = true;
+    }
+    Process {
+        id: selectionReader
+        command: ["wl-paste", "--primary", "--no-newline", "--type", "text"]
+        stdout: StdioCollector {
+            onStreamFinished: { const t = text.trim(); if (t) root.speak(t); }
+        }
+    }
+
     Process {
         id: proc
         command: ["hearth-voice"]
@@ -266,6 +282,8 @@ Singleton {
         function stop(): void { root.stop(); }
         function cancel(): void { root.dismiss(); }
         function ask(text: string): void { root.ask(text); }
+        // Read the selected text aloud, or stop reading (arbor: Alt+Esc).
+        function speakSelection(): void { root.speakSelection(); }
         // The card mid-request without a model (testing, screenshots):
         // what was heard and that many steps.
         function preview(heard: string, steps: int): void {
