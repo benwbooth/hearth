@@ -423,6 +423,11 @@ class AtspiMenu:
                     self.busy = False
                 self.refreshed = time.monotonic()
             self.emit()
+            if self.kind == "burger" and self.window and self.only_actions():
+                # All the tree shows is a toolbar or a page's buttons (an
+                # "Actions" menu): a menu bar the app draws itself beats
+                # that (DOSBox-X's SDL bar over its toolbar).
+                later(0.8, lambda: self.try_ocr_bar(upgrade=True))
             return
         if attempt == 0:
             out({"type": "none", "key": self.key})
@@ -436,15 +441,27 @@ class AtspiMenu:
 
     OCR_RETRY = (3.0, 8.0)  # seconds after the first look
 
-    def try_ocr_bar(self, attempt=0):
+    def only_actions(self):
+        """The menu found is only a toolbar's or a page's buttons."""
+        if (self.burger or {}).get("toolbar") or self.trigger is self.frame:
+            return True
+        try:
+            A = atspi()
+            return bool(A) and self.trigger is not None and self.trigger.get_role() == A.Role.TOOL_BAR
+        except Exception:
+            return False
+
+    def try_ocr_bar(self, attempt=0, upgrade=False):
         # Again a little later while nothing shows: Godot apps (Pixelorama,
         # Material Maker) draw their menu bar seconds after the window.
-        if not self.alive or self.kind is not None:
+        # upgrade: an "Actions" menu shows already; only a real drawn bar
+        # (three titles or more, not a lone ☰) replaces it.
+        if not self.alive or (self.kind is not None and not (upgrade and self.kind == "burger")):
             return
         last = attempt >= len(self.OCR_RETRY)
         try:
             bar = OcrBar(self)
-            if bar.detect(remember=last):
+            if bar.detect(remember=last) and (not upgrade or len(bar.titles) >= 3):
                 self.ocrbar, self.kind = bar, "ocrbar"
                 self.emit()
                 return
@@ -452,7 +469,7 @@ class AtspiMenu:
             err(f"ocr menu bar: {e}")
         if not last:
             later(self.OCR_RETRY[attempt] - (self.OCR_RETRY[attempt - 1] if attempt else 0.8),
-                  lambda: self.try_ocr_bar(attempt + 1))
+                  lambda: self.try_ocr_bar(attempt + 1, upgrade))
 
     def apps(self, A):
         desk = A.get_desktop(0)
