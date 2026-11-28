@@ -4,7 +4,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 3	kdePackages.discover	nixpkgs	53.046	qt6-mixed	full	atspi	Open Drawer:18	full			Home — Discover	0	0				
 4	vlc	nixpkgs	52.96	qt5-widgets	full	x11	Media:13 | Playback:14 | Audio:7 | Video:10 | Subtitle:2 | Tools:10 | View:9 | Help:2	full			VLC media player	0	0				
 5	pavucontrol	nixpkgs	52.91	gtk4	none	x11		none			Volume Control	0	0			0	
-6	steam	nixpkgs-unfree	51.63	cef	none	x11		none				0	0				
+6	steam	nixpkgs-unfree	51.63	cef	no-window			no-window				0	0				
 7	gimp	nixpkgs	50.95	gtk3	full	atspi	File:20 | Edit:23 | Select:18 | View:29 | Image:21 | Layer:15 | Colors:27 | Tools:12 | Filters:18 | Windows:6 | Help:10	full			Welcome to GIMP 3.0.8	1	0			0	
 8	kdePackages.dolphin	nixpkgs	44.46	qt6-widgets	full	dbusmenu	File:13 | Edit:13 | View:18 | Go:6 | Tools:6 | Settings:7 | Help:7	full			Home — Dolphin	0	0				
 9	kdePackages.systemsettings	nixpkgs	43.24	qt6-widgets	full	atspi	Show Menu:6	full			System Settings	0	0				
@@ -307,7 +307,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 306	kdePackages.kiriki	nixpkgs	7.6	qt6-widgets	full	dbusmenu	Game:4 | Move:2 | Settings:3 | Help:7	full			Kiriki	0	0				
 307	kdePackages.lskat	nixpkgs	7.58	qt6-widgets	full	dbusmenu	Game:4 | Settings:11 | Help:7	full			LSkat	0	0				
 308	kdePackages.kfourinline	nixpkgs	7.58	qt6-widgets	full	dbusmenu	Game:7 | Move:3 | Settings:8 | Help:7	full			KFourInLine	1	0				
-309	kdePackages.tokodon	nixpkgs	7.56	qt6-mixed	none	x11		none			Welcome — Tokodon	0	0				
+309	kdePackages.tokodon	nixpkgs	7.56	qt6-mixed											error		
 310	bottles-unwrapped	nixpkgs	7.55	gtk4-adwaita	full	atspi	Main Menu:1 | File:2 | Actions:1	full			Bottles	0	0			0	
 311	kdePackages.bomber	nixpkgs	7.54	qt6-widgets	full	dbusmenu	Game:5 | Settings:7 | Help:7	full			Bomber	0	0				
 312	kdePackages.kalzium	nixpkgs	7.53	qt6-widgets	full	dbusmenu	File:4 | View:7 | Tools:7 | Settings:6 | Help:7	full			Kalzium	0	0				
@@ -514,7 +514,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 513	flathub:eu.betterbird.Betterbird	flathub	3.803	firefox-xul	full	atspi	File:1 | Edit:1 | View:1 | :1 | :1 | :1 | :1	full			Home - Betterbird	0	1				
 514	github-desktop	nixpkgs	3.8	electron	full	atspi	File:3 | Edit:7 | View:13 | Repository:6	full			GitHub Desktop	0	0				
 515	geogebra	nixpkgs-unfree	3.788	java-swing	none	x11		none			GeoGebra Classic 5	0	0				
-516	googleearth-pro	nixpkgs-unfree	3.78	unknown	none	x11		none			Google Earth Pro	0	1	com.google.EarthPro			
+516	googleearth-pro	nixpkgs-unfree	3.78	unknown	full	x11	File:1 | Edit:1 | View:1 | Tools:1 | Add:1 | Help:1	full			Google Earth Pro	0	1	com.google.EarthPro			
 517	ytdownloader	nixpkgs	3.763	electron	none	x11		full	electron+libdbusmenu	File:1 | Edit:7 | View:7 | Window:3	ytDownloader	0	0				
 518	blanket	nixpkgs	3.76	gtk4-adwaita	full	atspi	Main Menu:1 | File:2 | View:1 | Actions:5 | Playback:5	full			Blanket	0	0			0	
 519	refine	nixpkgs	3.738	gtk4-adwaita	none	x11		none			Refine	0	0			0	
@@ -1025,7 +1025,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 1024	xnconvert	nixpkgs-unfree	2.35	unknown	none	x11		full	x11	Actions:5	Startup Wizard	0	0				
 1025	flathub:io.github._66HEX.Frame	flathub	2.35	unknown	none	x11		none			Frame	0	1				
 1026	flathub:io.github.faridjaff.StickyNotesCanvas	flathub	2.35	electron	full	atspi	File:2 | Edit:6 | View:4	full			Sticky Notes	0	1				
-1027	xsensors	nixpkgs	2.35	gtk3	no-window			no-window				0	0				
+1027	xsensors	nixpkgs	2.35	gtk3	full	atspi	xsensors:3	full			xsensors 0.80	0	0				
 1028	flathub:me.ahola.aphototoollibre	flathub	2.348	qt6-widgets	full	dbusmenu	File:4 | Edit:2 | Tools:1 | Help:3	full			A Photo Tool (Libre)	0	1				
 1029	flathub:dev.ters.LocalTranslate	flathub	2.346	firefox-xul	none	x11		none			LocalTranslate	0	1				
 1030	exhibit	nixpkgs	2.344	qt6-widgets	no-window			no-window				0	0				
@@ -1041,7 +1041,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 1040	flathub:nl.jknaapen.fladder	flathub	2.324	flutter	full	atspi	Playback:7	full			Fladder	0	1				
 1041	wesnoth	nixpkgs	2.321	sdl-glfw	none	x11		none			The Battle for Wesnoth - 1.18.7	0	0				
 1042	caprine	nixpkgs	2.321	electron	full	atspi	:2 | File:2 | Edit:8 | View:7	full			Caprine	0	0				
-1043	ksnip	nixpkgs	2.319	qt6-widgets	no-window			no-window				0	0				
+1043	ksnip	nixpkgs	2.319	qt6-widgets	full	dbusmenu	File:12 | Edit:14 | View:3 | Options:3 | Help:1	full			ksnip	0	0				
 1044	pitivi	nixpkgs	2.317	gtk3	full	atspi	Menu:1 | Edit:2 | Actions:1	full			Pitivi	0	0				
 1045	flathub:ro.go.hmlendea.DL-Desktop	flathub	2.316	electron	none	x11		none			Duolingo - The world’s most popular way to learn	0	1				
 1046	flathub:io.github.sugarycandybar.Crucible	flathub	2.316	gtk4-adwaita?	full	atspi	Main Menu:1 | Actions:1	full			Crucible	0	1				
@@ -1149,7 +1149,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 1148	flathub:io.github.rfrench3.scopebuddy-gui	flathub	2.202	qt6-widgets	full	atspi	File:1 | Edit:1 | View:1 | Tools:1 | Analysis:1 | Fitting:1 | Window:1 | Help:1	full			Scopebuddy GUI	0	1				
 1149	flathub:com.carpeludum.KegaFusion	flathub	2.201	unknown	full	x11	Fie:3 | Video:2 | Sound:25 | Options:1 | Help:1	full			Fusion 3.63x (C) Steve Snake, 2009.	0	1				
 1150	flathub:io.github.forkgram.tdesktop	flathub	2.201	gtk4-adwaita?	full	dbusmenu	File:2 | Edit:15 | Tools:4 | Help:1	full			Telegram	0	1				
-1151	unetbootin	nixpkgs	2.2	qt5-widgets	no-window			no-window				0	0				
+1151	unetbootin	nixpkgs	2.2	qt5-widgets	none	x11		none			Must run as root	0	0				
 1152	flathub:io.github.N3kosempai.klia-store	flathub	2.197	gtk4-adwaita?	none	x11		none			klia-store	0	1				
 1153	flathub:com.ktechpit.wonderwall	flathub	2.197	qt6-widgets	none	x11		none			WonderWall | 8.2.0	0	1				
 1154	flathub:moe.kopuz.kopuz	flathub	2.196	gtk4-adwaita?	full	atspi	Playback:8	full			Kopuz	0	1				
@@ -1314,7 +1314,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 1313	flathub:com.gitlab.adnan338.Nixwriter	flathub	2.046	unknown	none	x11		none			Nixwriter	0	1				
 1314	jazz2	nixpkgs	2.044	sdl-glfw	none	x11		none			Jazz² Resurrection	0	0				
 1315	flathub:jp.nonbili.nora	flathub	2.044	electron	none	x11		full	flatpak+registrar	File:1 | Edit:7 | View:7 | Window:3	Nora	0	1				
-1316	contour	nixpkgs	2.043	qt6-mixed	none	x11		none			 - Contour	0	0				
+1316	contour	nixpkgs	2.043	qt6-mixed	none	x11		none			ben@nixos: ~ - Contour	0	0				
 1317	wiliwili	nixpkgs	2.043	tui	none	x11		none			wiliwili	0	0				
 1318	coulomb	nixpkgs	2.041	java-swing	none	x11		none			Coulomb	0	0				
 1319	flathub:app.drey.Damask	flathub	2.041	gtk4-adwaita?	full	atspi	Main Menu:5 | General:3	full			Damask	0	1				
@@ -1405,7 +1405,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 1404	flathub:one.alynx.FlipClock	flathub	1.96	sdl-glfw	none	x11		none			FlipClock 0	0	1				
 1405	flathub:it.mijorus.whisper	flathub	1.96	gtk4-adwaita?	full	atspi	Menu:5 | File:2 | Actions:1	full			Whisper	0	1				
 1406	usbview	nixpkgs	1.96	gtk3	none	x11		none			USB Viewer	0	0				
-1407	flathub:eu.codepoems.xl-converter	flathub	1.96	qt6-quick	none	x11		none			XL Converter	0	1				
+1407	flathub:eu.codepoems.xl-converter	flathub	1.96	qt6-quick	full	atspi	Input:1 | Output:1 | Modify:1 | Settings:1 | About:1	full			XL Converter	0	1				
 1408	flathub:com.synology.SynologyAssistant	flathub	1.959	proprietary-bundle	none	x11		none			Synology Terms and Conditions	0	1				
 1409	flathub:com.beavernotes.beavernotes	flathub	1.959	electron	full	atspi	File:2 | Edit:5 | View:7 | Window:1	full			Beaver Notes	0	1				
 1410	flathub:me.sergiotarxz.JapaChar	flathub	1.959	gtk4-adwaita?	none	x11		none			Learn with Japachar	0	1				
@@ -1512,7 +1512,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 1511	tellico	nixpkgs	1.872	qt6-widgets	full	dbusmenu	File:11 | Edit:8 | View:1 | Collection:12 | Settings:12 | Help:8	full			My Books  — Tellico	0	0				
 1512	lagrange-tui	nixpkgs	1.872	sdl-glfw	none	x11		none			Help — Lagrange	0	0				
 1513	lagrange	nixpkgs	1.872	sdl-glfw	none	x11		none			Help — Lagrange	0	0				
-1514	flathub:org.godotengine.GodotSharp	flathub	1.872	electron	none	x11		none			Godot Engine - Project Manager	0	1				
+1514	flathub:org.godotengine.GodotSharp	flathub	1.872	electron	no-window			no-window				0	1				
 1515	flathub:moe.nomm.Nomm	flathub	1.872	gtk4-adwaita?	none	x11		none			NOMM	0	1				
 1516	rednotebook	nixpkgs	1.871	gtk3	full	gtk	Journal:8 | Edit:9 | Insert:9 | Format:6 | Help:6	full			RedNotebook - Sunday, 11/22/2026	0	0				
 1517	fstl	nixpkgs	1.871	qt5-widgets	full	dbusmenu	File:7 | View:9 | Help:1	full			fstl	0	0				
@@ -1790,7 +1790,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 1789	flathub:io.github.retux_game.retux	flathub	1.694	sdl-glfw	none	x11		none			reTux 1.6.2	0	1				
 1790	flathub:page.codeberg.Imaginer.Imaginer	flathub	1.693	gtk4-adwaita?	full	atspi	Main Menu:5 | File:1 | Actions:3	full			Imaginer	0	1				
 1791	flathub:dev.mariinkys.StarryDex	flathub	1.693	unknown	full	atspi	View:2	full			StarryDex	0	1				
-1792	flathub:com.diy_fever.DIYLayoutCreator	flathub	1.692	firefox-xul	none	x11		none			DIY Layout Creator v4.39.0 - Untitled 	0	1				
+1792	flathub:com.diy_fever.DIYLayoutCreator	flathub	1.692	firefox-xul	no-window			no-window				0	1				
 1793	flathub:fr.nytuo.cosmiccomics	flathub	1.692	gtk4-adwaita?	none	x11		none			Cosmic Comics	0	1				
 1794	flathub:dev.geopjr.Archives	flathub	1.692	gtk4-adwaita?	full	atspi	Menu:3 | General:4	full			dev.geopjr.Archives	0	1				
 1795	gnome-manuals	nixpkgs	1.691	gtk4-adwaita	full	atspi	Main Menu:4	full			Manuals	0	0				
@@ -1963,7 +1963,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 1962	zandronum	nixpkgs-uncached	1.602	gtk2	full	dbusmenu	File:7 | Options:2 | View:5 | Query:1 | Help:5	full			Doomseeker	0	1	com.zandronum.Zandronum			
 1963	flathub:io.github.b43NnUNF4vidFYFhpqaLWy2ANawtRbMtUXZY9Pf.jumpdf	flathub	1.602	gtk4-adwaita?	none	x11		none			Pick Files — Grove	0	1				
 1964	flathub:ai.loomfy.Loomfy	flathub	1.602	unknown	none	x11		none			Loomfy	0	1				
-1965	sirikali	nixpkgs	1.601	qt6-widgets	none	x11		none			SiriKali	0	0				
+1965	sirikali	nixpkgs	1.601	qt6-widgets	full	atspi	Volume:1 | Path:1 | Mount:1 | Point:1 | File:1 | System:1 | Mode:1	full			SiriKali	0	0				
 1966	pymol	nixpkgs	1.601	qt5-widgets	full	x11	File:17 | Edit:2 | Build:11 | Movie:15 | Display:23 | Setting:19 | Scene:14 | Mouse:13 | Wizard:10 | Plugin:4 | Help:9	full			PyMOL	0	0				
 1967	flathub:org.scratchmark.Scratchmark	flathub	1.601	gtk4-adwaita?	full	atspi	Menu:16 | File:5 | View:5 | Actions:2	full			Scratchmark	0	1				
 1968	wings	nixpkgs-uncached	1.601	unknown	full	atspi	File:18 | Edit:11 | View:25 | Select:21 | Tools:14 | Window:11 | Help:11	full			Wings3D 2.4.1 ()	0	1	com.wings3d.WINGS			
@@ -1981,7 +1981,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 1980	flathub:io.github.herve4m.Length	flathub	1.594	gtk4-adwaita?	full	atspi	Main Menu:5	full			Length	0	1				
 1981	tic-80	nixpkgs	1.593	sdl-glfw	none	x11		none			TIC-80 tiny computer 1.2.3049-dev ()	0	0				
 1982	flathub:cz.ondrejkolin.Barcoder	flathub	1.593	gtk4-adwaita?	full	atspi	Main Menu:3	full			Barcoder	0	1				
-1983	edmarketconnector	nixpkgs	1.592	tk	none	x11		none			E:D Market Connector	0	0				
+1983	edmarketconnector	nixpkgs	1.592	tk	full	x11	File:1 | Edit:1 | Help:1	full			E:D Market Connector	0	0				
 1984	gephi	nixpkgs-uncached	1.592	java-swing	none	x11		none			Welcome	0	1	org.gephi.Gephi			
 1985	flathub:tech.digiroad.Convertidor	flathub	1.592	gtk4-adwaita?	full	atspi	Application Menu:3	full			Convertidor	0	1				
 1986	flathub:com.tominlab.wonderpen	flathub	1.592	electron	none	x11		full	flatpak+registrar	File:4 | Edit:3 | Window:3 | Help:3	WonderPen	0	1				
@@ -2020,7 +2020,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 2019	flathub:app.shaz.pianocheetah	flathub	1.578	qt6-widgets	none	x11		none			MidiCfg	0	1				
 2020	flathub:io.github.wh201906.serialtest	flathub	1.577	qt6-widgets	none	x11		none			SerialTest - SerialPort	0	1				
 2021	flathub:io.sourceforge.xtrkcad_fork.xtrkcad	flathub	1.576	unknown	full	x11	File:1 | Edit:6 | View:7 | Add:1 | Change:1 | Draw:1 | Manage:1 | Options:1 | Macro:1 | Window:1 | Help:1	full			Unnamed Trackplan - XTrackCAD(5.3.1HS1)	0	1				
-2022	flathub:com.voxdsp.PoryDrive	flathub	1.576	unknown	none	x11		none			0 Pory | 49 Sec | 2 MPH	0	1				
+2022	flathub:com.voxdsp.PoryDrive	flathub	1.576	unknown	none	x11		none			0 Pory | 47 Sec | 2 MPH	0	1				
 2023	gtranslator	nixpkgs	1.575	gtk4-adwaita	full	atspi	Edit:9 | Go:4 | General:11 | Translation Memory:2	full			Translation Editor	0	0				
 2024	buffer	nixpkgs	1.575	gtk4-adwaita	full	atspi	Menu:1 | File:2	full			buffer	0	0				
 2025	flathub:org.tabos.roger	flathub	1.575	gtk4-adwaita?	full	atspi	General:2 | Journal:4	full			Roger Router	0	1				
@@ -2174,7 +2174,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 2173	flathub:com.alientrap.nexuiz-classic	flathub	1.508	sdl-glfw	none	x11		none			Nexuiz	0	1				
 2174	flathub:io.github.java_decompiler.jd-gui	flathub	1.508	java-swing	full	x11	File:6 | Edit:4 | Navigation:5 | Search:1 | Help:2	full			Java Decompiler	0	1				
 2175	flathub:page.codeberg.JakobDev.jdPixelUpscaler	flathub	1.508	qt6-widgets	full	dbusmenu	File:1 | ?:6	full			jdPixelUpscaler	0	1				
-2176	flathub:io.github.doukutsu_rs.doukutsu-rs	flathub	1.508	proprietary-bundle	none	x11		none			Cave Story (doukutsu-rs)	0	1				
+2176	flathub:io.github.doukutsu_rs.doukutsu-rs	flathub	1.508	proprietary-bundle	no-window			no-window				0	1				
 2177	waycheck	nixpkgs	1.507	qt6-widgets	none	x11		none			Waycheck	0	0				
 2178	teeworlds	nixpkgs	1.507	sdl-glfw	none	x11		none			Teeworlds	0	0				
 2179	bugdom	nixpkgs	1.507	sdl-glfw	none	x11		none			Bugdom 1.3.4	0	0				
@@ -2220,7 +2220,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 2219	flathub:io.github.kyuyrii.zordeer	flathub	1.491	qt6-widgets	full	dbusmenu	Invocation:5 | Transfer:3 | Manage:4 | Extra:3	full			Zordeer	0	1				
 2220	flathub:org.koderoots.musik	flathub	1.491	qt6-widgets	full	atspi	Open Drawer:1 | Playback:9	full			Musik	0	1				
 2221	mprime	nixpkgs-unfree	1.49	unknown											terminal-only		
-2222	pinegrow	nixpkgs-unfree	1.489	gtk3	none	x11		none			Pinegrow Web Editor	0	0				
+2222	pinegrow	nixpkgs-unfree	1.489	gtk3	no-window			no-window				0	0				
 2223	flathub:io.github.najepaliya.kleaner	flathub	1.489	qt6-widgets	none	x11		none			Kleaner	0	1				
 2224	flathub:org.upbge.UPBGE	flathub	1.489	unknown	none	x11		none			(Unsaved) - UPBGE 0.44 based on Blender 4.4.3	0	1				
 2225	flathub:io.github.grangerhub.Tremulous	flathub	1.489	unknown	none	x11		none			Tremulous 1.3.0	0	1				
@@ -2327,7 +2327,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 2326	flathub:it.dottorblaster.cauldron	flathub	1.444	gtk4-adwaita?	full	atspi	Menu:4	full			Cauldron	0	1				
 2327	gpx-viewer	nixpkgs	1.443	gtk3											not-prebuilt		
 2328	detect-it-easy	nixpkgs	1.441	qt5-widgets	none	x11		none			Detect It Easy v3.10 [NixOS 26.05 (Yarara)] (x86_64)	0	0				
-2329	flathub:com.alliedbits.ABCalcPlus	flathub	1.441	unknown	none	x11		none			ABCalc Plus	0	1				
+2329	flathub:com.alliedbits.ABCalcPlus	flathub	1.441	unknown	full	x11	Memory:1 | Sim:1 | Deg:1 | Dec:1 | History:1	full			ABCalc Plus	0	1				
 2330	flathub:uk.org.greenend.chiark.sgtatham.puzzles	flathub	1.441	unknown	full	atspi	Game:12 | Type:7 | Help:3	full			Mosaic	0	1				
 2331	flathub:land.arcana.TarotCanvas	flathub	1.441	qt6-widgets	full	dbusmenu	File:10 | Edit:7 | View:6 | Go:9 | Tools:1 | Settings:2 | Help:5	full			Tarot Canvas	0	1				
 2332	flathub:io.github.openlf2.OpenLF2	flathub	1.441	unknown	none	x11		none			OpenLF2	0	1				
@@ -2844,7 +2844,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 2843	flathub:io.github.NikolausB.WorkoutTimer	flathub	1.245	gtk4-adwaita?	full	atspi	Actions:2	full			Training	0	1				
 2844	flathub:io.github.RobertBeckebans.RBDoom3BFG-GL	flathub	1.243	sdl-glfw	none	x11		none			Game data files not found	0	1				
 2845	flathub:org.srb2.SRB2Kart-galaxy_azerty	flathub	1.243	proprietary-bundle	none	x11		none			SRB2Kart Galaxy(v1.6) v1.3 azerty	0	1				
-2846	flathub:net.sourceforge.mars-game	flathub	1.241	unknown	none	x11		none			M.A.R.S. - a Rough Shooter	0	1				
+2846	flathub:net.sourceforge.mars-game	flathub	1.241	unknown	none	x11		none			M.A.R.S. - a Rigged Shooter	0	1				
 2847	flathub:io.github.alamahant.Ermis	flathub	1.241	qt6-widgets	full	dbusmenu	File:5 | View:2 | Tools:7 | Help:5	full			Ermis - Steganography	0	1				
 2848	flathub:io.github.obiwankennedy.HotShots	flathub	1.241	qt6-widgets	full	atspi	Actions:12	full			HotShots - 2.2.0	0	1				
 2849	flathub:io.qt.qdbusviewer	flathub	1.241	qt6-widgets?	full	dbusmenu	File:1 | Help:2	full			QDBusViewer	0	1				
@@ -3068,7 +3068,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 3067	flathub:org.sugarlabs.ReadETexts	flathub	1.153	gtk4-adwaita?	full	x11	Actions:4	full			sugarapp	0	1				
 3068	flathub:io.sourceforge.pentobi	flathub	1.153	qt6-widgets	full	atspi	Actions:6	full			Pentobi	0	1				
 3069	flathub:eu.quelltext.open_chakra_toning	flathub	1.153	unknown	none	x11		none			open_chakra_toning	0	1				
-3070	flathub:org.robocode.Robocode	flathub	1.15	java-swing	none	x11		none			win0	0	1				
+3070	flathub:org.robocode.Robocode	flathub	1.15	java-swing	none	none		none			win0	0	1				
 3071	flathub:uk.co.electronstudio.ComicReaderUltimate	flathub	1.15	java-swing	no-window			no-window				0	1				
 3072	flathub:com.markwyner.ratio	flathub	1.15	gtk4-adwaita?	none	x11		none			Ratio	0	1				
 3073	flathub:io.github.rdybka.vht	flathub	1.15	gtk4-adwaita?	full	atspi	Menu:7 | File:2 | Actions:4	full			vht	0	1				
@@ -3089,7 +3089,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 3088	flathub:org.deidentifier.arx	flathub	1.145	java-swing	full	x11	File:10 | Edit:12 | View:7 | Help:3	full			ARX Anonymization Tool 	0	1				
 3089	flathub:com.voxdsp.VoxelPaintPro	flathub	1.145	sdl-glfw	none	x11		none			Voxel Paint Pro	0	1				
 3090	flathub:page.codeberg.JakobDev.jdDBusDebugger	flathub	1.145	qt6-widgets	full	dbusmenu	File:2 | Settings:1 | Macros:7 | Tools:4 | ?:7	full			jdDBusDebugger	0	1				
-3091	flathub:io.github.vinser.pixyne	flathub	1.145	unknown	none	x11		none			Pixyne: /home/ben/.cache/hearth-menu-survey/menu-rig-survey3/apps/180/home	0	1				
+3091	flathub:io.github.vinser.pixyne	flathub	1.145	unknown	none	x11		none			Pixyne: /tmp/mr3/apps/122/home	0	1				
 3092	flathub:io.github.georgewoodall82.jsymphonic	flathub	1.145	java-swing	none	x11		none			Configure device	0	1				
 3093	flathub:com.tenetcode.LiberDrop	flathub	1.145	unknown	none	x11		none			LiberDrop	0	1				
 3094	flathub:in.p1x.TanksOfFreedom	flathub	1.142	sdl-glfw	none	x11		none			Tanks of Freedom	0	1				
@@ -3100,7 +3100,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 3099	flathub:xyz.woxel.Woxel	flathub	1.142	sdl-glfw	none	x11		none			Woxel - Untitled	0	1				
 3100	flathub:io.github.tomluchowski.OpenDungeonsPlus	flathub	1.142	unknown	none	x11		none			OpenDungeons 0.7.1	0	1				
 3101	flathub:com.clustta.clustta	flathub	1.142	gtk4-adwaita?	no-window			no-window				0	1				
-3102	xine-ui	nixpkgs	1.14	custom-drawn	none	x11		none			xine	0	0				
+3102	xine-ui	nixpkgs	1.14	custom-drawn	none	x11		none			xine: There is no MRL.	0	0				
 3103	gpaste	nixpkgs	1.14	gtk4-adwaita	none	x11		none			Preferences	0	0				
 3104	ckan	nixpkgs	1.14	dotnet	none	x11		none			Manage Game Instances	0	0				
 3105	srain	nixpkgs	1.14	gtk3	full	atspi	Menu:1 | View:1 | Actions:1	full			srain	0	0				
@@ -3160,7 +3160,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 3159	flathub:com.github.aharotias2.parapara	flathub	1.118	gtk4-adwaita?	full	atspi	Menu:9 | File:3 | View:2	full			com.github.aharotias2.parapara	0	1				
 3160	flathub:io.github.rafaelfassi.QLogExplorer	flathub	1.118	qt6-widgets	full	dbusmenu	File:5 | Templates:3 | Utilities:1 | Help:4	full			QLogExplorer	0	1				
 3161	flathub:page.codeberg.JakobDev.jdAppStreamEdit	flathub	1.118	qt6-widgets	full	dbusmenu	File:9 | Settings:3 | Tools:6 | ?:8	full			Untitled - jdAppStreamEdit	0	1				
-3162	flathub:com.voxdsp.Spaceminer	flathub	1.118	unknown	none	x11		none			| 48.19 Sec | Fuel 100 | Speed 0.00 | Mined 0 |	0	1				
+3162	flathub:com.voxdsp.Spaceminer	flathub	1.118	unknown	none	x11		none			| 48.13 Sec | Fuel 100 | Speed 0.00 | Mined 0 |	0	1				
 3163	flathub:io.github.babaissarkar.ssplot	flathub	1.118	java-swing	no-window			no-window				0	1				
 3164	flathub:page.codeberg.jaerrib.wightwatch_keep	flathub	1.118	sdl-glfw	none	x11		none			Wightwatch Keep	0	1				
 3165	flathub:app.nestful.Nestful	flathub	1.118	gtk4-adwaita?	none	x11		none			Nestful	0	1				
@@ -3536,7 +3536,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 3535	flathub:org.hdfgroup.HDFCompass	flathub	0.917	unknown	full	x11	File:6 | Help:3	full			HDF Compass	0	1				
 3536	flathub:org.tryton.Tryton-80	flathub	0.917	gtk4-adwaita?	none	x11		none			Tryton - Login	0	1				
 3537	flathub:org.seekfast.SeekFast	flathub	0.917	unknown	no-window			no-window				0	1				
-3538	flathub:io.github.mki1967.mki3dgame	flathub	0.912	unknown	none	x11		none			MKI3D GAME	0	1				
+3538	flathub:io.github.mki1967.mki3dgame	flathub	0.912	unknown	none	x11		none			Mki3dgame	0	1				
 3539	flathub:org.gottcode.NovProg	flathub	0.912	qt6-widgets	full	atspi	Menu:4	full			Novel Progress	1	1				
 3540	flathub:io.stoplight.studio	flathub	0.912	unknown	none	x11		none			Stoplight Studio	0	1				
 3541	flathub:uk.co._69_studios.kublit	flathub	0.912	sdl-glfw	none	x11		none			Kublit	0	1				
@@ -3713,7 +3713,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 3712	gmsh	nixpkgs	0.519	fltk	none	x11		none			Gmsh - untitled.geo	0	0				
 3713	vte	nixpkgs	0.51	gtk3	none	gtk		none			Terminal	0	0				
 3714	spectmorph	nixpkgs	0.51	qt5-widgets	full	x11	Zoom:1 | File:1 | Open:12 | Preset:1 | Add:1 | Operator:1 | Help:1	full			SpectMorph JACK Client	0	0				
-3715	gram	nixpkgs	0.51	unknown	none	x11		none			empty project	0	0				
+3715	gram	nixpkgs	0.51	unknown	full	atspi	Open:2 | Recent:1 | Project:1	full			empty project	0	0				
 3716	clash-verge-rev	nixpkgs	0.51	gtk3	none	x11		none			Clash Verge	0	0				
 3717	uim	nixpkgs	0.502	gtk3	no-window			no-window				0	0				
 3718	schismtracker	nixpkgs	0.5	sdl-glfw	none	x11		none			Schism Tracker	0	0				
@@ -3866,12 +3866,12 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 3865	heidisql	nixpkgs	0.19	qt6-widgets											not-prebuilt		
 3866	flent	nixpkgs	0.19	qt6-widgets	full	x11	File:7 | View:8 | Settings:3 | Data:4 | Help:5	full			Flent GUI v2.2.0	0	0				
 3867	dsda-doom	nixpkgs	0.19	sdl-glfw	no-window			no-window				0	0				
-3868	ace-of-penguins	nixpkgs	0.187	custom-drawn	no-window			no-window				0	0				
+3868	ace-of-penguins	nixpkgs	0.187	custom-drawn	none	x11		none			The Ace of Penguins - canfield	0	0				
 3869	pdfcraft	nixpkgs	0.181	unknown											not-prebuilt		
 3870	tutanota-desktop	nixpkgs	0.18	gtk4-adwaita											not-prebuilt		
 3871	streamdeck-ui	nixpkgs	0.18	qt6-widgets	full	atspi	File:1 | Help:1	full			Stream Deck UI	0	0				
 3872	pixelflasher	nixpkgs	0.18	wx-gtk3	full	atspi	File:2 | Device:30 | Dev Tools:4 | My Tools:1 | Google Images:4 | Toolbar:7 | Language:6 | Help:9	full			PixelFlasher	0	0				
-3873	networkminer	nixpkgs	0.18	dotnet	none	x11		none			NetworkMiner 3.0	0	0				
+3873	networkminer	nixpkgs	0.18	dotnet	full	x11	File:1 | Tools:1 | Help:1	full			NetworkMiner 3.0	0	0				
 3874	bsnes-hd	nixpkgs	0.18	gtk3	full	x11	System:8 | Settings:14 | Help:5	full			bsnes-hd beta 10.6	0	0				
 3875	alarm-clock-applet	nixpkgs	0.18	gtk3	full	atspi	Menu:1 | File:1 | Edit:2 | View:2 | Actions:6	full			Alarms	0	0				
 3876	zrythm	nixpkgs	0.17	qt5-widgets	none	gtk	Shortcuts:0 | Preferences:0 | Quit:0	none			Zrythm	0	0				
@@ -3903,17 +3903,17 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 3902	llpp	nixpkgs	0.15	custom-drawn	none	x11		none			previously visited - llpp	0	0				
 3903	hdrmerge	nixpkgs	0.15	qt5-widgets	full	dbusmenu	File:3 | Edit:2 | Help:1	full			HDRMerge v0.5.0 - Raw image fusion	0	0				
 3904	doomseeker	nixpkgs	0.15	qt6-widgets	full	dbusmenu	File:7 | Options:2 | View:5 | Query:5 | Help:5	full			Doomseeker	0	0				
-3905	betaflight-configurator	nixpkgs	0.15	chromium	none	x11		none			Betaflight Configurator	0	0				
+3905	betaflight-configurator	nixpkgs	0.15	chromium	no-window			no-window				0	0				
 3906	dreamchess	nixpkgs	0.142	sdl-glfw	none	x11		none			DreamChess	0	0				
-3907	vtfedit	nixpkgs	0.14	gtk4-adwaita	none	x11		none			Wine	0	0				
+3907	vtfedit	nixpkgs	0.14	gtk4-adwaita	none	none		none			Wine	0	0				
 3908	sourcegit	nixpkgs	0.14	dotnet	none	x11		none			Repositories	0	0				
-3909	retroshare	nixpkgs	0.14	qt5-widgets	no-window			no-window				0	0				
+3909	retroshare	nixpkgs	0.14	qt5-widgets	none	x11		none			Create new profile and new Retroshare node	0	0				
 3910	qzdl	nixpkgs	0.14	qt5-widgets	none	x11		none			ZDL 3.3.0.0	0	0				
 3911	quickgui	nixpkgs	0.14	flutter	none	x11		none			Quickgui : a Flutter frontend for Quickget and Quickemu	0	0				
 3912	qlcplus	nixpkgs	0.14	qt6-mixed	full	atspi	Actions:12	full			Q Light Controller Plus - New Workspace	0	0				
 3913	qcomicbook	nixpkgs	0.14	qt5-widgets	full	dbusmenu	File:10 | View:17 | Navigation:11 | Bookmarks:3 | Settings:4 | Debug:6 | Help:4	full			QComicBook	0	0				
-3914	mkchromecast	nixpkgs	0.14	qt5-widgets	no-window			no-window				0	0				
-3915	isabelle	nixpkgs	0.14	electron	none	x11		none			Java	0	0				
+3914	mkchromecast	nixpkgs	0.14	qt5-widgets	tray-only			tray-only				0	0				
+3915	isabelle	nixpkgs	0.14	electron	no-window			no-window				0	0				
 3916	glogg	nixpkgs	0.14	qt5-widgets	full	dbusmenu	File:9 | Edit:3 | View:5 | Tools:2 | Encoding:3 | Help:1	full			glogg	0	0				
 3917	ganttproject-bin	nixpkgs	0.14	java-swing	full	x11	Project:9 | Edit:8 | View:1 | Tasks:3 | Resources:4 | Help:3	full			Updates are available	0	0				
 3918	azpainter	nixpkgs	0.14	custom-drawn	none	x11		none			untitled - AzPainter	0	0				
@@ -4108,7 +4108,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 4107	packetry	nixpkgs	0.05	gtk4											no-entry		
 4108	ovito	nixpkgs	0.05	qt6-widgets	full	dbusmenu	File:8 | Edit:3 | Help:5	full			Ovito (Open Visualization Tool) 	0	0				
 4109	labelle	nixpkgs	0.05	unknown	none	x11		none			Labelle GUI	0	0				
-4110	kermit-terminal	nixpkgs	0.05	gtk3	no-window			no-window				0	0				
+4110	kermit-terminal	nixpkgs	0.05	gtk3	none	x11		none			ben@nixos: ~	0	0				
 4111	jpilot	nixpkgs	0.05	gtk3	full	gtk	File:9 | View:7 | Plugins:3 | Help:5	full			J-Pilot 2.0.2	0	0				
 4112	gridtracker2	nixpkgs	0.05	electron	full	atspi	File:1 | Window:1	full			GridTracker2 [Band: Mixed Mode: Mixed Layer: Grids - Worked 0 Confirmed 0]	0	0				
 4113	gotraceui	nixpkgs	0.05	custom-drawn	full	atspi	File:1 | Display:1 | Analyze:1	full			gotraceui	0	0				
@@ -4225,7 +4225,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 4224	bitbox	nixpkgs	0.006	qt6-mixed	none	x11		none			BitBoxApp	0	0				
 4225	giara	nixpkgs	0.005	gtk4-adwaita	full	atspi	File:2 | Actions:6	full			Giara	0	0				
 4226	gsender	nixpkgs	0.005	gtk4-adwaita											not-prebuilt		
-4227	structorizer	nixpkgs	0.005	java-swing	no-window			no-window				0	0				
+4227	structorizer	nixpkgs	0.005	java-swing	full	x11	File:14 | Edit:10 | Diagram:13 | View:10 | Preferences:17 | Debug:6 | Help:4	full			Hint	0	0				
 4228	spotifast	nixpkgs	0.005	tui											not-prebuilt		
 4229	portprotonqt	nixpkgs	0.005	qt6-widgets											not-prebuilt		
 4230	fcitx5-lotus	nixpkgs	0.005	qt6-widgets											not-prebuilt		
@@ -4276,11 +4276,11 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 4275	fedistar	nixpkgs	0.002	gtk3	full	x11	File:1 | Help:2	full			Fedistar	0	0				
 4276	cadabra2	nixpkgs	0.002	gtk3	full	atspi	File:11 | Cell:9 | Edit:6 | View:6 | Evaluate:4 | Kernel:2 | Tools:4 | Help:3	full			Welcome to Cadabra!	0	0				
 4277	buttercup-desktop	nixpkgs	0.002	gtk4-adwaita											not-prebuilt		
-4278	bubblemail	nixpkgs	0.002	gtk4-adwaita	no-window			no-window				0	0				
+4278	bubblemail	nixpkgs	0.002	gtk4-adwaita	full	atspi	Menu:3	full			Bubblemail settings	0	0				
 4279	airgorah	nixpkgs	0.002	gtk4	no-window			no-window				0	0				
 4280	surrealist	nixpkgs	0.002	gtk3	none	x11		none			Surrealist 	0	0				
 4281	spot	nixpkgs	0.002	gtk4-adwaita	full	atspi	Menu:1 | Edit:1 | View:1 | Actions:3 | Playback:9	full			spot	0	0				
-4282	moolticute	nixpkgs	0.002	qt5-widgets	none	x11		none			Moolticute	0	0				
+4282	moolticute	nixpkgs	0.002	qt5-widgets	full	atspi	Device:1 | Settings:1 | Credentials:1 | Files:1 | Synchronization:1 | About:1	full			Moolticute	0	0				
 4283	caprice32	nixpkgs	0.002	gtk4-adwaita	none	x11		none			Caprice32 v4.6.0	0	0				
 4284	altair	nixpkgs	0.002	gtk4-adwaita											not-prebuilt		
 4285	ugs	nixpkgs	0.001	java-swing	no-window			no-window				0	0				
@@ -4427,7 +4427,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 4426	urn-timer	nixpkgs	0.0	gtk3	full	gtk	File:6	full			urn	0	0				
 4427	unsloth-desktop	nixpkgs	0.0	gtk3											not-prebuilt		
 4428	unfold	nixpkgs	0.0	gtk4-adwaita											not-prebuilt		
-4429	ultimate-doom-builder	nixpkgs	0.0	dotnet	none	x11		none			Ultimate Doom Builder R4291 (64-bit)	0	0				
+4429	ultimate-doom-builder	nixpkgs	0.0	dotnet	full	x11	File:1 | Tools:1 | Help:1	full			Ultimate Doom Builder R4291 (64-bit)	0	0				
 4430	tyrolienne	nixpkgs	0.0	gtk4-adwaita	none	x11		none			Tyrolienne	0	0				
 4431	uchmviewer	nixpkgs	0.0	qt6-widgets	full	dbusmenu	File:14 | Edit:3 | View:7 | Bookmarks:1 | Windows:1 | Settings:2 | Help:3	full			uChmViewer	0	0				
 4432	tym	nixpkgs	0.0	gtk3	none	x11		none			ben@nixos: ~	0	0				
@@ -4481,7 +4481,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 4480	spectral-mic	nixpkgs	0.0	tui											not-prebuilt		
 4481	sony-headphones-client	nixpkgs	0.0	sdl-glfw	full	dbusmenu	File:7 | Capture:14 | Help:2	full			Sony Headphones App v1.3.1	0	0				
 4482	soltys	nixpkgs	0.0	gtk3											not-prebuilt		
-4483	snappy-topology	nixpkgs	0.0	tk	none	x11		none			SnapPy Command Shell	0	0				
+4483	snappy-topology	nixpkgs	0.0	tk	full	x11	SnapPy:1 | File:1 | Edit:1 | Window:1 | Help:1	full			SnapPy Command Shell	0	0				
 4484	snekim	nixpkgs	0.0	gtk3	full	dbusmenu	File:7 | Capture:14 | Help:2	full			snekim	0	0				
 4485	snippetpixie	nixpkgs	0.0	gtk3	full	atspi	Menu:6	full			Snippet Pixie	0	0				
 4486	socalabs-sn76489	nixpkgs	0.0	custom-drawn	none	x11		none				0	0				
@@ -4597,7 +4597,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 4596	opcua-client-gui	nixpkgs	0.0	qt5-widgets	full	registrar	Actions:8 | Settings:2	full			FreeOpcUa Client	0	0				
 4597	open-ecard	nixpkgs	0.0	java-swing	none	x11		none			Open eCard App	0	0				
 4598	oneanime	nixpkgs	0.0	flutter	none	x11		none			oneanime	0	0				
-4599	oh-my-git	nixpkgs	0.0	game-engine	none	x11		none			Oh My Git!	0	0				
+4599	oh-my-git	nixpkgs	0.0	game-engine	no-window			no-window				0	0				
 4600	oklch-color-picker	nixpkgs	0.0	unknown											no-entry		
 4601	ocelot-desktop	nixpkgs	0.0	java-swing	none	x11		none			Ocelot Desktop 1.14.2 (a9bd206)	0	0				
 4602	nugget-doom	nixpkgs	0.0	sdl-glfw	none	x11		none			Nugget Doom 5.0.0	0	0				
@@ -4685,7 +4685,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 4684	jellyflix	nixpkgs	0.0	flutter	none	x11		none			jellyflix	0	0				
 4685	jetuml	nixpkgs	0.0	java-swing	none	x11		none			Tip of the day	0	0				
 4686	jbrowse	nixpkgs	0.0	gtk4-adwaita											not-prebuilt		
-4687	jaero	nixpkgs	0.0	qt5-widgets	no-window			no-window				0	0				
+4687	jaero	nixpkgs	0.0	qt5-widgets	full	registrar	File:3	full			JAERO — v1.0.4.14	0	0				
 4688	ivan	nixpkgs	0.0	sdl-glfw	none	x11		none			IVAN 0.59	0	0				
 4689	ivyterm	nixpkgs	0.0	gtk4-adwaita	none	x11		none			ivyTerm	0	0				
 4690	irccloud	nixpkgs	0.0	gtk4-adwaita											not-prebuilt		
@@ -4811,7 +4811,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 4810	deadpixi-sam-unstable	nixpkgs	0.0	unknown	no-window			no-window				0	0				
 4811	daggerfall-unity	nixpkgs	0.0	game-engine	none	x11		none			Daggerfall Unity	0	0				
 4812	cutentr	nixpkgs	0.0	qt5-widgets	none	x11		none			cuteNTR	0	0				
-4813	cutecapture	nixpkgs	0.0	tui	none	x11		none			Cute 3DS Capture (18.07 FPS)	0	0				
+4813	cutecapture	nixpkgs	0.0	tui	none	x11		none			Cute 3DS Capture (19.53 FPS)	0	0				
 4814	cwtch-ui	nixpkgs	0.0	flutter	none	x11		none			cwtch	0	0				
 4815	cyberia	nixpkgs	0.0	gtk3	none	x11		none			Cyberia	0	0				
 4816	cyberchef	nixpkgs	0.0	unknown	none	x11		none			index - WordCraft	0	0				
@@ -4825,7 +4825,7 @@ rank	attr	source	pop	toolkit	today	route_today	menus_today	best	lever	menus_leve
 4824	cosmic-reader	nixpkgs	0.0	custom-drawn	none	x11		none				0	0				
 4825	CuboCore.coretoppings	nixpkgs	0.0	qt6-widgets	no-window			no-window				0	0				
 4826	CuboCore.coreuniverse	nixpkgs	0.0	qt6-widgets	none	x11		none			About - CoreUniverse	0	0				
-4827	CuboCore.coreterminal	nixpkgs	0.0	qt6-widgets	none	x11		none			CoreTerminal	0	0				
+4827	CuboCore.coreterminal	nixpkgs	0.0	qt6-widgets	none	x11		none			CoreTerminal - ben@nixos: ~	0	0				
 4828	CuboCore.corepins	nixpkgs	0.0	qt6-widgets	none	x11		none			Speed Dial - CorePins	0	0				
 4829	communi	nixpkgs	0.0	qt5-widgets	full	atspi	Menu:18	full			Freenode - Communi	0	0				
 4830	commet-chat	nixpkgs	0.0	flutter	none	x11		none			commet	0	0				
