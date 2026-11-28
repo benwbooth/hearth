@@ -5,7 +5,8 @@ menus can be measured. Run by menu-probe.py inside the rig, with hearth's
 Python (gi/Atspi).
 
 Presses, over AT-SPI, a showing button of the app named like a wizard step:
-Finish/Done/Skip first, then Next/Continue/Get Started, then Close/OK. Never
+Finish/Done/Skip first, then Next/Continue/Get Started, then Close/OK, then
+No (a yes/no question: the answer that changes nothing). Never
 Accept/Agree (that would accept a license on the user's behalf), Cancel,
 Quit or Exit. Up to ROUNDS presses, a second apart, until none is left.
 
@@ -26,6 +27,9 @@ ORDER = [re.compile(p, re.I) for p in (
     r"^(&)?(finish|done|skip( (this|setup|tour|for now))?|not now|maybe later|later|no,? thanks)\W*$",
     r"^(&)?(next|continue|get started|start|let'?s go|begin)\W*[>›»]*$",
     r"^(&)?(close|ok|got it|dismiss)\W*$",
+    # A yes/no question in front (DOSBox-X: "use this folder as the working
+    # directory?"): No, the answer that changes nothing.
+    r"^(&)?no\W*$",
 )]
 NEVER = re.compile(r"accept|agree|cancel|quit|exit|delete|remove|install|buy|sign ?in|log ?in|register", re.I)
 ROUNDS = 8
