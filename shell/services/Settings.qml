@@ -72,6 +72,11 @@ Singleton {
             iconSize: 88,               // px
             collapsed: []               // section ids folded shut (click a section's title)
         },
+        nightShift: {
+            schedule: "off",            // "off" | "custom": warmer colours from `from` to `to` (hours)
+            from: 19,
+            to: 7,
+        },
         sound: {
             volumeFeedback: true,       // a pop on every volume change, like macOS (services/VolumeFeedback.qml)
         },
@@ -200,11 +205,15 @@ Singleton {
 
     // pane: "" (last used) or a Settings window pane id ("dock", ...).
     signal openRequested(string pane)
+    // Open Settings with this typed in its search field.
+    signal searchRequested(string query)
 
     IpcHandler {
         target: "settings"
         function open(): void { root.openRequested(""); }
         function openPane(pane: string): void { root.openRequested(pane); }
+        // `hearth-ipc call settings search "night light"`
+        function search(query: string): void { root.searchRequested(query); }
         function set(key: string, json: string): string {
             let v;
             try { v = JSON.parse(json); } catch (e) { v = json; }

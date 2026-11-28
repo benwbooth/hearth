@@ -14,6 +14,94 @@ import ".."
 Scope {
     id: root
     property bool open: false
+    readonly property var navItems: [
+        { id: "users", label: "Users & Accounts", icon: "system-users" },
+        { id: "accounts", label: "Internet Accounts", icon: "applications-internet" },
+        { id: "passwords", label: "Passwords & Keys", icon: "dialog-password" },
+        { id: "appearance", label: "Appearance", icon: "preferences-desktop-theme-global" },
+        { id: "menubar", label: "Menu Bar", icon: "preferences-desktop" },
+        { id: "dock", label: "Desktop & Dock", icon: "preferences-system-windows" },
+        { id: "layout", label: "Layout", icon: "view-split-top-bottom" },
+        { id: "wallpaper", label: "Wallpaper", icon: "preferences-desktop-wallpaper" },
+        { id: "lockscreen", label: "Lock Screen", icon: "system-lock-screen" },
+        { id: "hotcorners", label: "Hot Corners", icon: "preferences-desktop-screensaver" },
+        { id: "bluetooth", label: "Bluetooth", icon: "preferences-system-bluetooth" },
+        { id: "displays", label: "Displays", icon: "preferences-desktop-display" },
+        { id: "printers", label: "Printers", icon: "printer" },
+        { id: "keyboard", label: "Keyboard", icon: "preferences-desktop-keyboard" },
+        { id: "shortcuts", label: "Keyboard Shortcuts", icon: "preferences-desktop-keyboard-shortcut" },
+        { id: "mouse", label: "Mouse & Touchpad", icon: "preferences-desktop-mouse" },
+        { id: "windowrules", label: "Window Rules", icon: "preferences-system-windows-actions" },
+        { id: "power", label: "Sleep & Power", icon: "preferences-system-power-management" },
+        { id: "night", label: "Night Light", icon: "redshift-status-on" },
+        { id: "sound", label: "Sound", icon: "audio-volume-high" },
+        { id: "notifications", label: "Notifications", icon: "preferences-desktop-notification" },
+        { id: "spotlight", label: "Search", icon: "search" },
+        { id: "ai", label: "AI", icon: Quickshell.shellDir + "/assets/ai.svg" },
+        { id: "voice", label: "Voice Assistant", icon: "audio-input-microphone" },
+        { id: "clipboard", label: "Clipboard", icon: "klipper-symbolic" },
+        { id: "screenshots", label: "Screenshots", icon: "camera-photo" }
+    ]
+
+    // ---- Search (the field at the top of the sidebar): pane names and every
+    // row's label and note, read from the panes' own files when Settings
+    // opens, so it never goes stale. A result opens its pane and flashes
+    // the row (ShellState.settingsHighlight, widgets/SettingsRow.qml).
+    property string searchText: ""
+    property var rowsByPane: ({})
+    function paneLabel(id) { const n = navItems.find(x => x.id === id); return n ? n.label : id; }
+    // `label: "…"` lines with the `note:` after them (options' labels are
+    // inline, `{ value: …, label: "…" }`, so they're left out).
+    function parseRows(text) {
+        const out = [];
+        const re = /^[ \t]+label:[ \t]*"([^"\n]+)"[ \t]*\n(?:[ \t]+note:[ \t]*(?:"([^"\n]*)"|`([^`]*)`))?/gm;
+        let m;
+        while ((m = re.exec(text)))
+            out.push({ label: m[1], note: (m[2] || m[3] || "").replace(/\$\{[^}]*\}/g, "").replace(/\s+/g, " ").trim() });
+        return out;
+    }
+    function indexFile(file, text) {
+        const by = Object.assign({}, rowsByPane);
+        if (file === "SettingsWindow.qml") {
+            // The panes written inline here: `Component { id: <pane>Pane`.
+            const parts = text.split(/Component \{\s*id: (\w+)Pane\b/);
+            for (let i = 1; i + 1 < parts.length; i += 2) by[parts[i]] = parseRows(parts[i + 1]);
+        } else {
+            for (const id in paneFiles) if (paneFiles[id] === "settings/" + file) by[id] = parseRows(text);
+        }
+        rowsByPane = by;
+    }
+    readonly property var searchResults: {
+        const words = searchText.toLowerCase().split(/\s+/).filter(w => w);
+        if (!words.length) return [];
+        const hits = [];
+        const has = s => words.every(w => s.indexOf(w) >= 0);
+        for (const n of navItems) {
+            if (has(n.label.toLowerCase())) hits.push({ pane: n.id, label: "", title: n.label, sub: "Settings pane", rank: 0 });
+            for (const r of rowsByPane[n.id] || []) {
+                const l = r.label.toLowerCase();
+                if (has(l + " " + n.label.toLowerCase())) hits.push({ pane: n.id, label: r.label, title: r.label, sub: n.label, rank: 1 });
+                else if (has((l + " " + r.note + " " + n.label).toLowerCase())) hits.push({ pane: n.id, label: r.label, title: r.label, sub: n.label + " · " + r.note, rank: 2 });
+            }
+        }
+        hits.sort((a, b) => a.rank - b.rank);
+        return hits.slice(0, 60);
+    }
+    function openResult(r) {
+        root.paneArg = "";
+        root.pane = r.pane;
+        ShellState.settingsHighlight = "";
+        if (r.label) ShellState.settingsHighlight = r.label;
+    }
+    Instantiator {
+        model: root.open ? Object.values(root.paneFiles).map(f => f.replace("settings/", "")).concat(["SettingsWindow.qml"]) : []
+        delegate: FileView {
+            required property string modelData
+            path: Quickshell.shellDir + "/popups/" + (modelData === "SettingsWindow.qml" ? "" : "settings/") + modelData
+            printErrors: false
+            onLoaded: root.indexFile(modelData, text())
+        }
+    }
     property string pane: "appearance"
     readonly property var paneFiles: ({
         hotcorners: "settings/HotCornersPane.qml", displays: "settings/DisplaysPane.qml",
@@ -32,6 +120,10 @@ Scope {
 
     Connections {
         target: Settings
+        function onSearchRequested(query) {
+            root.searchText = query;
+            root.open = true;
+        }
         function onOpenRequested(pane) {
             if (pane) {
                 const i = pane.indexOf(":");
@@ -80,35 +172,55 @@ Scope {
                         y: 14
                         width: parent.width - 20
                         spacing: 2
+                        TextBox {
+                            id: searchBox
+                            width: parent.width
+                            placeholder: "Search"
+                            text: root.searchText
+                            onTextChanged: root.searchText = text
+                            onAccepted: if (root.searchResults.length) root.openResult(root.searchResults[0])
+                            Keys.onEscapePressed: root.searchText = ""
+                        }
+                        Item { width: 1; height: 8 }
+                        Label {
+                            visible: root.searchText.trim() !== "" && root.searchResults.length === 0
+                            width: parent.width
+                            text: "No settings match."
+                            color: Theme.fgDim
+                            wrapMode: Text.Wrap
+                        }
+                        // Search results: a row's name and where it is.
                         Repeater {
-                            model: [
-                                { id: "users", label: "Users & Accounts", icon: "system-users" },
-                                { id: "accounts", label: "Internet Accounts", icon: "applications-internet" },
-                                { id: "passwords", label: "Passwords & Keys", icon: "dialog-password" },
-                                { id: "appearance", label: "Appearance", icon: "preferences-desktop-theme-global" },
-                                { id: "menubar", label: "Menu Bar", icon: "preferences-desktop" },
-                                { id: "dock", label: "Desktop & Dock", icon: "preferences-system-windows" },
-                                { id: "layout", label: "Layout", icon: "view-split-top-bottom" },
-                                { id: "wallpaper", label: "Wallpaper", icon: "preferences-desktop-wallpaper" },
-                                { id: "lockscreen", label: "Lock Screen", icon: "system-lock-screen" },
-                                { id: "hotcorners", label: "Hot Corners", icon: "preferences-desktop-screensaver" },
-                                { id: "bluetooth", label: "Bluetooth", icon: "preferences-system-bluetooth" },
-                                { id: "displays", label: "Displays", icon: "preferences-desktop-display" },
-                                { id: "printers", label: "Printers", icon: "printer" },
-                                { id: "keyboard", label: "Keyboard", icon: "preferences-desktop-keyboard" },
-                                { id: "shortcuts", label: "Keyboard Shortcuts", icon: "preferences-desktop-keyboard-shortcut" },
-                                { id: "mouse", label: "Mouse & Touchpad", icon: "preferences-desktop-mouse" },
-                                { id: "windowrules", label: "Window Rules", icon: "preferences-system-windows-actions" },
-                                { id: "power", label: "Sleep & Power", icon: "preferences-system-power-management" },
-                                { id: "night", label: "Night Light", icon: "redshift-status-on" },
-                                { id: "sound", label: "Sound", icon: "audio-volume-high" },
-                                { id: "notifications", label: "Notifications", icon: "preferences-desktop-notification" },
-                                { id: "spotlight", label: "Search", icon: "search" },
-                                { id: "ai", label: "AI", icon: Quickshell.shellDir + "/assets/ai.svg" },
-                                { id: "voice", label: "Voice Assistant", icon: "audio-input-microphone" },
-                                { id: "clipboard", label: "Clipboard", icon: "klipper-symbolic" },
-                                { id: "screenshots", label: "Screenshots", icon: "camera-photo" }
-                            ]
+                            model: root.searchResults
+                            MouseArea {
+                                id: hit
+                                required property var modelData
+                                width: parent.width
+                                height: hitCol.implicitHeight + 12
+                                hoverEnabled: true
+                                onClicked: root.openResult(modelData)
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: Theme.radius
+                                    color: hit.containsMouse ? Theme.hover : "transparent"
+                                }
+                                Column {
+                                    id: hitCol
+                                    x: 10
+                                    width: parent.width - 20
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    Label { width: parent.width; text: hit.modelData.title }
+                                    Label {
+                                        width: parent.width
+                                        text: hit.modelData.sub
+                                        color: Theme.fgDim
+                                        font.pointSize: Theme.smallFontSize
+                                    }
+                                }
+                            }
+                        }
+                        Repeater {
+                            model: root.searchText.trim() === "" ? root.navItems : []
                             MouseArea {
                                 id: navItem
                                 required property var modelData
@@ -471,11 +583,20 @@ Scope {
     Component {
         id: nightPane
         ColumnLayout {
+            id: night
             spacing: 14
+            // Settings > Night Light: a schedule (or none), like macOS's
+            // Night Shift (services/Brightness.qml).
+            readonly property var cfg: Settings.nightShift || ({})
+            readonly property bool custom: cfg.schedule === "custom"
+            readonly property var hours: Array.from({ length: 24 }, (_, h) => ({
+                value: h, label: (h < 10 ? "0" : "") + h + ":00" }))
             Group {
                 Row_ {
                     label: "Night Light"
-                    note: `Warmer colours in the evening: on automatically from ${Brightness.nightStartHour}:00 to ${Brightness.nightEndHour}:00. Switching it here lasts until the next scheduled change, even if the desktop restarts.`
+                    note: night.custom
+                        ? "Warmer colours now. Switching it here lasts until the schedule next changes, even if the desktop restarts."
+                        : "Warmer colours now, until tomorrow morning; then it turns off again."
                     Toggle {
                         checked: Brightness.nightLight
                         onToggled: c => Brightness.setNightLight(c)
@@ -483,7 +604,42 @@ Scope {
                 }
                 Divider {}
                 Row_ {
+                    label: "Schedule"
+                    note: "Off: it only comes on when you switch it on. Custom: every day between the hours below."
+                    Segmented {
+                        options: [{ value: "off", label: "Off" }, { value: "custom", label: "Custom" }]
+                        value: night.custom ? "custom" : "off"
+                        onPicked: v => Settings.set("nightShift.schedule", v)
+                    }
+                }
+                Divider {}
+                Row_ {
+                    label: "From"
+                    note: "When it turns on each evening."
+                    enabled: night.custom
+                    Dropdown {
+                        implicitWidth: 120
+                        options: night.hours
+                        value: night.cfg.from !== undefined ? night.cfg.from : 19
+                        onPicked: v => Settings.set("nightShift.from", v)
+                    }
+                }
+                Divider {}
+                Row_ {
+                    label: "To"
+                    note: "When it turns off each morning."
+                    enabled: night.custom
+                    Dropdown {
+                        implicitWidth: 120
+                        options: night.hours
+                        value: night.cfg.to !== undefined ? night.cfg.to : 7
+                        onPicked: v => Settings.set("nightShift.to", v)
+                    }
+                }
+                Divider {}
+                Row_ {
                     label: "Colour temperature"
+                    note: "Lower is warmer (more orange); higher is closer to normal."
                     ValueSlider {
                         implicitWidth: 300
                         from: Brightness.minTemperature

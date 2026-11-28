@@ -252,20 +252,43 @@ Singleton {
 
     // --- Night light -------------------------------------------------------
 
-    // Mirrors the schedule in hyprsunset.conf, for the switch's state.
-    readonly property int nightStartHour: 19
-    readonly property int nightEndHour: 7
+    // Settings > Displays > Night Shift: Off (only the switch turns it on)
+    // or a schedule from/to (hours). It used to be fixed at 19:00-07:00, so
+    // turning it off only lasted until the evening.
+    readonly property var cfg: Settings.nightShift || ({})
+    readonly property bool scheduleOn: cfg.schedule === "custom"
+    readonly property int nightStartHour: cfg.from !== undefined ? cfg.from : 19
+    readonly property int nightEndHour: cfg.to !== undefined ? cfg.to : 7
     function scheduledNight() {
+        if (!root.scheduleOn) return false;
         const h = new Date().getHours();
-        return h >= root.nightStartHour || h < root.nightEndHour;
+        return root.nightStartHour <= root.nightEndHour
+            ? h >= root.nightStartHour && h < root.nightEndHour
+            : h >= root.nightStartHour || h < root.nightEndHour;
     }
-    // When the schedule next switches (ms since the epoch).
+    // When a manual on/off ends (ms since the epoch): the schedule's next
+    // switch; with no schedule, switched on lasts until the next morning
+    // (the "to" hour), like macOS's "Turn On Until Tomorrow".
     function nextScheduleChange() {
         const d = new Date();
         d.setMinutes(0, 0, 0);
         do d.setHours(d.getHours() + 1);
-        while (d.getHours() !== root.nightStartHour && d.getHours() !== root.nightEndHour);
+        while (d.getHours() !== root.nightEndHour && !(root.scheduleOn && d.getHours() === root.nightStartHour));
         return d.getTime();
+    }
+    // The schedule changed in Settings: follow it (a manual choice ends).
+    onScheduleOnChanged: followSchedule()
+    onNightStartHourChanged: followSchedule()
+    onNightEndHourChanged: followSchedule()
+    function followSchedule() {
+        if (!root.stateRead) return;
+        root.overrideUntil = 0;
+        const now = root.scheduledNight();
+        if (now !== root.nightLight) {
+            root.nightLight = now;
+            root.applyNightLight();
+        }
+        root.saveState();
     }
     // A manual on/off lasts until then (0: following the schedule).
     property real overrideUntil: 0
@@ -304,6 +327,16 @@ Singleton {
         repeat: true
         property bool last: root.scheduledNight()
         onTriggered: {
+            // A manual choice runs out (with no schedule: off the next morning).
+            if (root.overrideUntil > 0 && Date.now() >= root.overrideUntil) {
+                root.overrideUntil = 0;
+                const s = root.scheduledNight();
+                if (s !== root.nightLight) {
+                    root.nightLight = s;
+                    if (Compositor.isArbor) root.applyNightLight();
+                }
+                root.saveState();
+            }
             const now = root.scheduledNight();
             if (now !== last) {
                 last = now;
