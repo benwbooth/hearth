@@ -239,7 +239,14 @@ def text_column(rows):
 
 def fix_key_token(t):
     """OCR's usual misreads in an F-key shortcut: 'F1Z2+R', 'F1Z+M',
-    'Fi0' -> F12+R, F12+M, F10 (Z for 2, l/I/i/| for 1, a doubled digit)."""
+    'Fi0' -> F12+R, F12+M, F10 (Z for 2, l/I/i/| for 1, a doubled digit);
+    'Ctri+Z', 'Ctr1+0' -> Ctrl+Z, Ctrl+O (a key after a modifier: 0 for O)."""
+    if "+" in t:
+        head, _, key = t.rpartition("+")
+        head = re.sub(r"\bCtr[il1I|]\b", "Ctrl", head)
+        if len(key) == 1 and key == "0" and re.search(r"Ctrl|Alt|Shift", head):
+            key = "O"  # Ctrl+0 is rare in a menu; Ctrl+O (Open) is everywhere
+        t = head + "+" + key
     m = re.match(r"^F([0-9IlZzi|]{1,4})((?:\+\S+)?)$", t)
     if not m:
         return t
@@ -248,6 +255,35 @@ def fix_key_token(t):
         if n.isdigit() and 1 <= int(n) <= 12:
             return "F" + n + m.group(2)
     return t
+
+
+def fill_shortcuts(png, rows, right):
+    """Shortcuts the first read missed (tesseract skips short "Ctrl+C"s
+    beside long labels: Pixelorama's Edit menu): the shortcut column read
+    again on its own, each key put on the line it lines up with."""
+    def is_key(t):
+        t = fix_key_token(t)
+        return bool(KEY_RE.match(t) or MOD_RE.match(t))
+    # Keys after a label (an item named "Delete" is a label, not a key).
+    xs = [d["x0"] for r in rows for d in r["words"][1:] if is_key(d["t"])]
+    if len(xs) < 2 or len(xs) == len(rows):
+        return rows
+    box = (max(0, int(min(xs)) - 4), max(0, int(min(r["y0"] for r in rows)) - 4),
+           int(right), int(max(r["y1"] for r in rows)) + 4)
+    if box[2] - box[0] < 12:
+        return rows
+    for c in ocr_rows(png, box):
+        keys = [d for d in c["words"] if is_key(d["t"])]
+        if not keys:
+            continue
+        cy = (c["y0"] + c["y1"]) / 2
+        for r in rows:
+            if r["y0"] - 3 <= cy <= r["y1"] + 3 and not any(is_key(d["t"]) for d in r["words"]):
+                r["words"] = sorted(r["words"] + keys, key=lambda d: d["x0"])
+                r["text"] = " ".join(d["t"] for d in r["words"])
+                r["x1"] = max(r["x1"], max(d["x1"] for d in keys))
+                break
+    return rows
 
 
 def items_of(rows):
@@ -337,6 +373,29 @@ def changed_box(a, b, pad=2, step=24):
     y0, y1 = _longest_run(band)
     if y0 < 0 or y1 - y0 < 10:
         return None
+    # Grow to the popup's edges over what changed only a little: a dark
+    # menu opened half over a dark toolbar, half over a bright canvas
+    # (Pixelorama) changes strongly only where it covers the canvas.
+    fine = max(6, step // 3)
+
+    def col_changed(x, ya, yb):
+        n = sum(1 for y in range(ya, yb) if abs(ra[y][x] - rb[y][x]) > fine)
+        return n > (yb - ya) * 0.3
+
+    def row_changed(y, xa, xb):
+        p, q = ra[y], rb[y]
+        n = sum(1 for x in range(xa, xb) if abs(p[x] - q[x]) > fine)
+        return n > (xb - xa) * 0.3
+
+    for _ in range(2):  # columns, then rows with the wider columns, again
+        while x0 > 0 and col_changed(x0 - 1, y0, y1):
+            x0 -= 1
+        while x1 < w and col_changed(x1, y0, y1):
+            x1 += 1
+        while y0 > 0 and row_changed(y0 - 1, x0, x1):
+            y0 -= 1
+        while y1 < h and row_changed(y1, x0, x1):
+            y1 += 1
     return (max(0, x0 - pad), max(0, y0 - pad), min(w, x1 + pad), min(h, y1 + pad))
 
 
@@ -519,6 +578,8 @@ class Session:
                 again = ocr_rows(p, box)
                 if len(again) >= len(rows):
                     rows = sorted(again, key=lambda r: r["y0"])
+            if rows:
+                rows = fill_shortcuts(p, rows, box[2] if box else w)
             return items_of(rows), (w, h)
         except (OSError, ValueError, zlib.error):
             return [], None
