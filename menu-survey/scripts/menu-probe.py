@@ -180,6 +180,11 @@ SESSION_ENV = {
     # audio device (Quadrapassel's OpenAL) get dummy ones.
     "ALSOFT_DRIVERS": "null",
     "SDL_AUDIODRIVER": "dummy",
+    # .NET's write-xor-execute double mapping sizes a memfd far past the
+    # probe's 1 GB file-size limit: SIGXFSZ killed every .NET app
+    # (OpenUtau, PixiEditor, ILSpy) before its window. A harness limit,
+    # not the session's: the feature off here only.
+    "DOTNET_EnableWriteXorExecute": "0",
     # Icon themes and other shared data, as in a session (GTK aborts on a
     # missing icon otherwise). Read-only system paths.
     "XDG_DATA_DIRS": "/run/current-system/sw/share:/etc/profiles/per-user/" + os.environ.get("USER", "ben") + "/share",
