@@ -345,26 +345,50 @@ STD_TITLES = {"file", "edit", "view", "help", "tools", "go", "window", "windows"
 
 
 def menu_bar(rows, k=1.0, top=70):
-    """A menu bar drawn in the window (SDL, FLTK: no accessibility): the
-    first row near the top of three to fourteen capitalised words (stray
-    one-letter icon reads left out), no sentence punctuation, one of them a
-    standard title (File, Edit, View, Help...). Not a line of text that
-    happens to hold "File" ("Drag Drop File onto desktop icon"), nor a
-    header bar's "View s X". [(title, (x, y))] in the capture's pixels."""
+    """A menu bar drawn in the window (SDL, FLTK, Godot, Tk: no accessible
+    menu bar): near the top, a row that starts with three or more titles,
+    one of them a standard one (File, Edit, View, Help...). Titles are the
+    row's words grouped by spacing (one space joins "Search options", a
+    menu bar's wider gap separates titles); the bar ends at the first group
+    that isn't a title (Pixelorama's "733 %" after Help, openboardview's
+    checkboxes) or a wide gap. A title starts with a capital, ends in no
+    sentence punctuation; an "(F)" mnemonic is dropped (AzPainter's
+    "File(F)"). Not a line of text that happens to hold "File" ("Drag Drop
+    File onto desktop icon"), nor a header bar's "View s X".
+    [(title, (x, y))] in the capture's pixels."""
     for r in sorted(rows, key=lambda r: r["y0"]):
         if r["y0"] > top * k:
             break
-        words = [d for d in r["words"] if len(d["t"].strip("&_")) >= 2]
-        if not 3 <= len(words) <= 14:
+        words = sorted((d for d in r["words"] if len(d["t"].strip("&_")) >= 2 or d["t"].isalnum()),
+                       key=lambda d: d["x0"])
+        if len(words) < 3:
             continue
-        texts = [d["t"].strip("&_") for d in words]
-        if any(not (t[0].isupper() or t[0].isdigit()) for t in texts):
+        hs = sorted(d["y1"] - d["y0"] for d in words)
+        em = max(hs[len(hs) // 2], 1)
+        groups = [[words[0]]]
+        for a, b in zip(words, words[1:]):
+            gap = b["x0"] - a["x1"]
+            if gap > em * 4:
+                groups.append(None)  # the bar's end
+                break
+            if gap < em * 0.6:
+                groups[-1].append(b)
+            else:
+                groups.append([b])
+        titles = []
+        for g in groups:
+            if g is None:
+                break
+            t = re.sub(r"\s*\(\w\)$", "", " ".join(d["t"] for d in g).replace("&", "").replace("_", "")).strip()
+            if len(t) < 2 or len(g) > 3 or not (t[0].isupper() or t[0].isdigit()) or t[-1] in ".:?!,%" \
+                    or any(c.isdigit() for c in t[1:]):
+                break
+            titles.append((t, ((g[0]["x0"] + g[-1]["x1"]) / 2, (min(d["y0"] for d in g) + max(d["y1"] for d in g)) / 2)))
+        if len(titles) < 3:
             continue
-        if any(t[-1] in ".:?!," for t in texts):
+        if not {t.lower() for t, _ in titles} & STD_TITLES:
             continue
-        if not {t.lower() for t in texts} & STD_TITLES:
-            continue
-        return [(d["t"], ((d["x0"] + d["x1"]) / 2, (d["y0"] + d["y1"]) / 2)) for d in words]
+        return titles
     return []
 
 
