@@ -136,7 +136,22 @@ PanelWindow {
         interval: 900
         onTriggered: { dockWin.minimizePeek = false; if (!hover.hovered) hideTimer.restart(); }
     }
-    onShownChanged: { if (shown) slideInTimer.restart(); else { slideInTimer.stop(); settled = false; } }
+    onShownChanged: { if (shown) slideInTimer.restart(); else { slideInTimer.stop(); settled = false; hiddenRedraw.restart(); } }
+    // A slide-out that stalled (arbor doesn't draw the dock's layer over a
+    // fullscreen window, and the half-hidden frame then stayed on screen: a
+    // strip of the dock's edge along the bottom, 2026-11-28) is drawn again
+    // once the slide should be over, and whenever the workspace changes.
+    Timer {
+        id: hiddenRedraw
+        interval: Math.max(0, Number(dockWin.cfg.animationMs) || 0) + 250
+        onTriggered: dockWin.redraw()
+    }
+    readonly property var activeWs: Compositor.focusedWorkspace ? Compositor.focusedWorkspace.id : -1
+    onActiveWsChanged: if (!shown) hiddenRedraw.restart()
+    function redraw() {
+        const w = body.Window.window;
+        if (w) w.update();
+    }
     Timer { id: slideInTimer; interval: Math.max(0, Number(dockWin.cfg.animationMs) || 0) + 20; onTriggered: dockWin.settled = true }
     Timer {
         id: hideTimer
