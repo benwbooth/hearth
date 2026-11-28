@@ -235,6 +235,9 @@ binds {
     Mod+Space hotkey-overlay-title="Search" { spawn "hearth-ipc" "call" "spotlight" "toggle"; }
     // Speak selected text, like macOS's Option+Esc (again: stop).
     Alt+Escape hotkey-overlay-title="Speak selected text" { spawn "hearth-ipc" "call" "voice" "speakSelection"; }
+    // The same on a spare key: F13, which arrives as XF86Tools (XKB's evdev
+    // rules). keystone programs a Kinesis Game Bank key to send it.
+    XF86Tools hotkey-overlay-title="Speak selected text (F13)" { spawn "hearth-ipc" "call" "voice" "speakSelection"; }
     F4 hotkey-overlay-title="Launchpad (all apps)" { spawn "hearth-ipc" "call" "launchpad" "toggle"; }
     Mod+Alt+Space hotkey-overlay-title="Voice assistant" { spawn "hearth-ipc" "call" "voice" "toggle"; }
     Alt+Space hotkey-overlay-title="Launcher" { spawn "vicinae" "toggle"; }
