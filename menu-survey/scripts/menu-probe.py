@@ -803,7 +803,7 @@ def attempt(attr, argv, variant, extra_env, extra_args, wait_win=50, wait_menu=1
     # Up to wait_win, longer (to 150 s) while the app is still running: a
     # .NET/Avalonia app's first start in a fresh home, at idle CPU beside
     # the other workers, took over 50 s (OpenUtau, PixiEditor, ILSpy).
-    while time.time() - t0 < wait_win or (proc.poll() is None and time.time() - t0 < 150):
+    while time.time() - t0 < wait_win or (time.time() - t0 < 150 and scope_busy()):
         if "flatpak" in " ".join(argv[:6]):
             throttle_flatpak_scopes()
         ws = [w for w in windows() if w["id"] not in before and w.get("app_id") != "org.quickshell"]
@@ -1008,6 +1008,17 @@ def open_placeholders(menus, dump, win_id=None):
             time.sleep(0.5)
     dump["opened"] = thin
     return dump, menus
+
+
+def scope_busy():
+    """The probed app's scope still holds processes (the launcher exits at
+    once; the app lives on in the scope)."""
+    try:
+        r = subprocess.run(["systemctl", "--user", "show", "-p", "ActiveState", "--value", SCOPE["unit"]],
+                           capture_output=True, text=True, timeout=5)
+        return r.stdout.strip() == "active"
+    except Exception:
+        return False
 
 
 def ocr_top(r):
