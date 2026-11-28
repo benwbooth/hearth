@@ -434,16 +434,25 @@ class AtspiMenu:
             # the screen (DOSBox-X, Nestopia).
             later(0.8, self.try_ocr_bar)
 
-    def try_ocr_bar(self):
+    OCR_RETRY = (3.0, 8.0)  # seconds after the first look
+
+    def try_ocr_bar(self, attempt=0):
+        # Again a little later while nothing shows: Godot apps (Pixelorama,
+        # Material Maker) draw their menu bar seconds after the window.
         if not self.alive or self.kind is not None:
             return
+        last = attempt >= len(self.OCR_RETRY)
         try:
             bar = OcrBar(self)
-            if bar.detect():
+            if bar.detect(remember=last):
                 self.ocrbar, self.kind = bar, "ocrbar"
                 self.emit()
+                return
         except Exception as e:
             err(f"ocr menu bar: {e}")
+        if not last:
+            later(self.OCR_RETRY[attempt] - (self.OCR_RETRY[attempt - 1] if attempt else 0.8),
+                  lambda: self.try_ocr_bar(attempt + 1))
 
     def apps(self, A):
         desk = A.get_desktop(0)
@@ -2066,7 +2075,7 @@ class OcrBar:
         self.titles = []  # [(title, (x, y))] in logical pixels
         self.items = {}   # title index -> [(label, shortcut, (x, y))]
 
-    def detect(self):
+    def detect(self, remember=True):
         import hearth_ocr_menu as om
         exe = self.o.exe()
         if exe and exe in OcrBar.NONE:
@@ -2077,7 +2086,7 @@ class OcrBar:
         finally:
             ses.close()
         self.titles = [(t, (x / k, y / k)) for t, (x, y) in bar]
-        if not self.titles and exe:
+        if not self.titles and exe and remember:
             OcrBar.NONE.add(exe)
         return bool(self.titles)
 
