@@ -52,9 +52,14 @@ Singleton {
             modifier: cfg.snap_mode !== "auto"
         } }, r => { if (r && r.Err !== undefined) console.warn("arbor SetZones:", r.Err); });
     }
-    // arbor restarted (the event stream reconnected): it forgot the zones.
-    readonly property bool streaming: active && Compositor.backend ? !!Compositor.backend.streaming : false
-    onStreamingChanged: if (streaming) push()
+    // arbor (re)started: a compositor that wasn't handed the zones has none.
+    // A swap doesn't reconnect the event stream (arbor's proxy carries it
+    // over), so this listens for the new compositor's first events instead.
+    Connections {
+        target: root.active ? Compositor : null
+        ignoreUnknownSignals: true
+        function onCompositorStarted() { root.push(); }
+    }
     Connections {
         target: Quickshell
         function onScreensChanged() { root.push(); }

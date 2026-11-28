@@ -16,6 +16,10 @@ Scope {
     property var wsList: []        // [niri Workspace JSON]
     property bool streaming: false
     property bool overviewOpen: false  // arbor's overview (Mission Control)
+    // A compositor began sending this stream (first connect, reconnect, or a
+    // swap carried over by the proxy): state it keeps only in memory, like
+    // the zones, has to be sent again.
+    signal compositorStarted()
 
     // wlr foreign-toplevel handles (thumbnails, minimize) matched to niri
     // windows by app id and title; niri doesn't share ids between the two.
@@ -122,6 +126,10 @@ Scope {
             const m = {};
             for (const w of d.windows) m[w.id] = w;
             root.winMap = m;
+            // Only sent in the burst that starts an event stream: a new
+            // compositor, also one that took over this connection through
+            // arbor's proxy after a swap (the stream never disconnects then).
+            root.compositorStarted();
             break;
         }
         case "WindowOpenedOrChanged": {
